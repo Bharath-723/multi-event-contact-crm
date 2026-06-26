@@ -250,11 +250,6 @@ export default function NotificationBell() {
                 })
               )}
             </div>
-
-            {/* Panel Footer */}
-            <div className="px-4 py-2 text-center bg-slate-950/80 border-t border-slate-900 text-[10px] text-slate-500 shrink-0 transition-colors">
-              Updates in real time via Supabase Realtime
-            </div>
           </motion.div>
         )}
       </AnimatePresence>

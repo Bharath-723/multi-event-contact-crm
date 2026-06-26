@@ -11,9 +11,15 @@ if (!supabaseUrl || !supabaseServiceKey) {
   console.warn('Warning: Server-side Supabase admin credentials are missing.');
 }
 
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
+// Guard: createClient throws if url is empty. During SSG builds the env vars
+// may be absent, so we fall back to a placeholder that is never actually used.
+export const supabaseAdmin = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseServiceKey || 'placeholder-key',
+  {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
   },
-});
+);

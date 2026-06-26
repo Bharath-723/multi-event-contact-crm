@@ -2,9 +2,8 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import QRCode from 'qrcode';
-import { X, Download, Printer, Copy, Check, Loader2, QrCode, AlertTriangle } from 'lucide-react';
+import { X, Download, Printer, Copy, Check, Loader2, QrCode } from 'lucide-react';
 import { motion } from 'framer-motion';
-import Image from 'next/image';
 
 interface QRModalProps {
   isOpen: boolean;
@@ -12,35 +11,27 @@ interface QRModalProps {
 }
 
 export default function QRModal({ isOpen, onClose }: QRModalProps) {
-  const [appUrlEnv, setAppUrlEnv] = useState<string>('');
-  const [currentUrlInput, setCurrentUrlInput] = useState<string>('');
+  const [qrUrl, setQrUrl] = useState<string>('');
   const [qrPngUrl, setQrPngUrl] = useState('');
   const [qrSvgString, setQrSvgString] = useState('');
   const [copied, setCopied] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [warningMsg, setWarningMsg] = useState<string | null>(null);
   const printFrameRef = useRef<HTMLIFrameElement>(null);
 
   const generateQRCodes = async (url: string) => {
-    if (!url) {
-      setQrPngUrl('');
-      setQrSvgString('');
-      return;
-    }
+    if (!url) return;
     try {
       setIsLoading(true);
-      // Generate PNG data URL
       const png = await QRCode.toDataURL(url, {
         width: 512,
         margin: 2,
         color: {
-          dark: '#1e1b4b', // Deep indigo
+          dark: '#1e1b4b',
           light: '#ffffff'
         }
       });
       setQrPngUrl(png);
 
-      // Generate SVG string
       const svg = await QRCode.toString(url, {
         type: 'svg',
         width: 512,
@@ -61,35 +52,17 @@ export default function QRModal({ isOpen, onClose }: QRModalProps) {
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (isOpen) {
-      const envUrl = process.env.NEXT_PUBLIC_APP_URL || '';
-      setAppUrlEnv(envUrl);
-      
-      if (!envUrl) {
-        setWarningMsg('Application URL is not configured.');
-        setQrPngUrl('');
-        setQrSvgString('');
-        setCurrentUrlInput('');
-      } else {
-        setWarningMsg(null);
-        setCurrentUrlInput(envUrl);
-        generateQRCodes(envUrl);
-      }
+      // Use the configured env URL, or fall back to the current browser origin
+      const url = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
+      setQrUrl(url);
+      generateQRCodes(url);
     }
   }, [isOpen]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  const handleGenerateQR = () => {
-    if (!currentUrlInput.trim()) {
-      alert('Please enter a valid URL.');
-      return;
-    }
-    setWarningMsg(null);
-    generateQRCodes(currentUrlInput.trim());
-  };
-
   const handleCopyLink = () => {
-    if (typeof navigator !== 'undefined' && currentUrlInput) {
-      navigator.clipboard.writeText(currentUrlInput);
+    if (typeof navigator !== 'undefined' && qrUrl) {
+      navigator.clipboard.writeText(qrUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
@@ -199,7 +172,7 @@ export default function QRModal({ isOpen, onClose }: QRModalProps) {
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="w-full max-w-md glass-card rounded-2xl p-4 sm:p-6 relative overflow-hidden max-h-[90vh] flex flex-col"
+        className="w-full max-w-sm glass-card rounded-2xl p-4 sm:p-6 relative overflow-hidden max-h-[90vh] flex flex-col"
       >
         <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-purple-500 to-transparent" />
         
@@ -217,116 +190,51 @@ export default function QRModal({ isOpen, onClose }: QRModalProps) {
           </button>
         </div>
 
-        {/* Scrollable Container inside modal to prevent viewport overflow */}
+        {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto pr-1 space-y-4">
-          {/* Warning Banner */}
-          {warningMsg && (
-            <div className="p-3 bg-yellow-950/40 border border-yellow-500/30 rounded-xl text-yellow-200 text-xs flex flex-col gap-1.5">
-              <span className="font-semibold flex items-center gap-1.5">
-                <AlertTriangle className="w-4 h-4 text-yellow-400" />
-                {warningMsg}
-              </span>
-              <p className="text-slate-400 leading-relaxed">
-                Configure <code className="bg-slate-950 px-1.5 py-0.5 rounded text-purple-300 font-mono text-[10px]">NEXT_PUBLIC_APP_URL</code> in environment configs, or type a custom URL below for local dev/testing.
-              </p>
-            </div>
-          )}
-
-          {/* QR Display Area */}
+          {/* QR Display */}
           <div className="bg-white p-4 rounded-xl flex items-center justify-center mx-auto w-full max-w-[220px] aspect-square border border-slate-200 shrink-0">
             {isLoading ? (
               <div className="flex flex-col items-center justify-center text-slate-400 text-xs gap-3">
-                <div className="relative w-[100px] h-[64px] overflow-hidden">
-                  <Image 
-                    src="/hkm-logo.png" 
-                    alt="Hare Krishna Movement" 
-                    width={100} 
-                    height={64} 
-                    priority
-                    className="object-contain animate-pulse"
-                  />
-                </div>
-                <div className="flex items-center gap-1.5 text-indigo-400">
-                  <Loader2 className="w-4 h-4 animate-spin text-purple-500" />
-                  <span className="font-semibold text-slate-600">Generating QR...</span>
-                </div>
+                <Loader2 className="w-8 h-8 animate-spin text-purple-500" />
+                <span className="font-semibold text-slate-600">Generating QR...</span>
               </div>
             ) : qrPngUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={qrPngUrl} className="w-full h-full object-contain" alt="Registration Portal QR Code" />
             ) : (
               <div className="flex flex-col items-center justify-center text-slate-400 text-xs text-center px-4">
-                <QrCode className="w-10 h-10 text-slate-300 mb-2 animate-pulse" />
-                <span className="text-slate-500 font-medium">Please enter a custom URL and click &quot;Generate QR&quot;</span>
+                <QrCode className="w-10 h-10 text-slate-300 mb-2" />
+                <span className="text-slate-500 font-medium">QR code unavailable</span>
               </div>
             )}
           </div>
 
-          {/* Configuration Details */}
-          <div className="space-y-3.5">
-            {/* Application URL (Env) */}
-            <div>
-              <label className="text-[10px] text-slate-450 font-bold uppercase tracking-wider block mb-1.5">
-                Application URL (Env Config)
-              </label>
-              <div className="px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-900 text-[11px] text-slate-300 break-all font-mono">
-                {appUrlEnv || <span className="text-slate-500 italic">Not Configured</span>}
-              </div>
-            </div>
+          {/* Actions */}
+          <div className="space-y-2">
+            {/* Copy Link */}
+            <button
+              onClick={handleCopyLink}
+              disabled={!qrUrl}
+              className="w-full py-2.5 px-3 rounded-xl bg-purple-950/40 text-purple-300 hover:text-slate-100 border border-purple-500/10 text-xs font-semibold cursor-pointer flex items-center justify-center gap-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {copied ? (
+                <>
+                  <Check className="w-3.5 h-3.5" /> Copied!
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5" /> Copy Link
+                </>
+              )}
+            </button>
 
-            {/* Current QR URL (Editable) */}
-            <div className="space-y-3">
-              <div>
-                <label className="text-[10px] text-slate-450 font-bold uppercase tracking-wider block mb-1.5">
-                  Current QR URL
-                </label>
-                <div className="flex rounded-xl bg-slate-900 border border-slate-800 p-1 focus-within:border-purple-500/30 transition-all">
-                  <input
-                    type="text"
-                    value={currentUrlInput}
-                    onChange={(e) => setCurrentUrlInput(e.target.value)}
-                    placeholder="https://abc123.ngrok-free.app"
-                    className="flex-1 bg-transparent px-3 py-1.5 text-xs text-slate-100 focus:outline-none min-w-0"
-                  />
-                </div>
-              </div>
-              
-              {/* Copy and Generate Buttons - Stacked on Mobile, side-by-side on desktop */}
-              <div className="flex flex-col sm:flex-row gap-2">
-                {currentUrlInput && (
-                  <button
-                    onClick={handleCopyLink}
-                    className="w-full sm:flex-1 py-2.5 px-3 rounded-xl bg-purple-950/40 text-purple-300 hover:text-slate-100 border border-purple-500/10 text-xs font-semibold cursor-pointer flex items-center justify-center gap-1.5 transition-colors shrink-0"
-                  >
-                    {copied ? (
-                      <>
-                        <Check className="w-3.5 h-3.5" /> Copied
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5" /> Copy Link
-                      </>
-                    )}
-                  </button>
-                )}
-                <button
-                  onClick={handleGenerateQR}
-                  className="w-full sm:flex-1 py-2.5 px-4 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all cursor-pointer shadow-[0_0_15px_rgba(139,92,246,0.2)] active:scale-95 text-center flex items-center justify-center shrink-0"
-                >
-                  Generate QR Code
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Actions Section */}
-          <div className="space-y-2 pt-2 border-t border-slate-900">
             {/* PNG and SVG side-by-side */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={downloadPNG}
                 disabled={isLoading || !qrPngUrl}
-                className="flex items-center justify-center gap-2 p-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-xs text-slate-300 hover:text-slate-100 rounded-xl transition-all cursor-pointer font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex items-center justify-center gap-2 p-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-xs text-slate-300 hover:text-slate-100 rounded-xl transition-all cursor-pointer font-medium disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Download className="w-4 h-4 text-purple-450" />
                 <span>PNG</span>
@@ -335,18 +243,18 @@ export default function QRModal({ isOpen, onClose }: QRModalProps) {
               <button
                 onClick={downloadSVG}
                 disabled={isLoading || !qrSvgString}
-                className="flex items-center justify-center gap-2 p-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-xs text-slate-300 hover:text-slate-100 rounded-xl transition-all cursor-pointer font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex items-center justify-center gap-2 p-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-xs text-slate-300 hover:text-slate-100 rounded-xl transition-all cursor-pointer font-medium disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Download className="w-4 h-4 text-purple-450" />
                 <span>SVG</span>
               </button>
             </div>
             
-            {/* Print QR button full width at the bottom */}
+            {/* Print */}
             <button
               onClick={handlePrint}
               disabled={isLoading || !qrPngUrl}
-              className="w-full flex items-center justify-center gap-2 p-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-xs text-slate-300 hover:text-slate-100 rounded-xl transition-all cursor-pointer font-medium disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+              className="w-full flex items-center justify-center gap-2 p-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-xs text-slate-300 hover:text-slate-100 rounded-xl transition-all cursor-pointer font-medium disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Printer className="w-4 h-4 text-purple-450" />
               <span>Print QR Code Card</span>
@@ -357,4 +265,3 @@ export default function QRModal({ isOpen, onClose }: QRModalProps) {
     </div>
   );
 }
-
