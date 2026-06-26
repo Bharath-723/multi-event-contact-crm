@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    "src/run-migration.js",
+    "src/run-tests.js",
+    "src/test-db.js",
+    "src/verify-rls.js",
+    "src/verify-rpc.js",
   ]),
 ]);
 

@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="purpleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f46e5" />
+      <stop offset="100%" stop-color="#9333ea" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="128" fill="url(#purpleGrad)" />
+  <!-- A stylish Lotus / Chariot Wheel combination representing Rathayatra & Volunteering -->
+  <g transform="translate(256, 256) scale(0.95)" stroke="#ffffff" stroke-width="12" stroke-linecap="round" fill="none">
+    <!-- Outer rim -->
+    <circle r="120" stroke-width="16" />
+    <!-- Center hub -->
+    <circle r="30" fill="#ffffff" />
+    <!-- Spokes -->
+    <line x1="0" y1="0" x2="0" y2="-120" />
+    <line x1="0" y1="0" x2="0" y2="120" />
+    <line x1="0" y1="0" x2="-120" y2="0" />
+    <line x1="0" y1="0" x2="120" y2="0" />
+    <line x1="0" y1="0" x2="-85" y2="-85" />
+    <line x1="0" y1="0" x2="85" y2="85" />
+    <line x1="0" y1="0" x2="-85" y2="85" />
+    <line x1="0" y1="0" x2="85" y2="-85" />
+  </g>
+</svg>

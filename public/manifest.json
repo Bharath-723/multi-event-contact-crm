@@ -1,0 +1,18 @@
+{
+  "name": "Volunteer Registration & Admin Management System",
+  "short_name": "Rathayatra Volunteer",
+  "description": "Volunteer Registration and Event Management System",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1e1b4b",
+  "theme_color": "#6366f1",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
