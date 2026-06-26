@@ -618,7 +618,7 @@ export default function RegistrationsPage() {
         <div className="flex flex-wrap gap-2.5">
           <button
             onClick={() => setQrOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-950/40 border border-purple-500/25 text-purple-300 hover:text-white transition-all cursor-pointer font-semibold text-sm shadow-[0_0_15px_rgba(139,92,246,0.1)]"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-950/40 border border-purple-500/25 text-purple-300 hover:text-slate-100 transition-all cursor-pointer font-semibold text-sm shadow-[0_0_15px_rgba(139,92,246,0.1)]"
           >
             <QrCode className="w-4.5 h-4.5" /> Configure QR Code
           </button>
@@ -628,7 +628,7 @@ export default function RegistrationsPage() {
           <button
             onClick={handleExportCSV}
             disabled={filteredRegistrations.length === 0}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white transition-all cursor-pointer text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-slate-100 transition-all cursor-pointer text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Download className="w-4 h-4" /> Export CSV
           </button>
@@ -636,7 +636,7 @@ export default function RegistrationsPage() {
           <button
             onClick={handlePrintTable}
             disabled={filteredRegistrations.length === 0}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white transition-all cursor-pointer text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-slate-100 transition-all cursor-pointer text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Printer className="w-4 h-4" /> Print PDF Table
           </button>
@@ -670,12 +670,12 @@ export default function RegistrationsPage() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Global Search (Name, Area, Company)"
-              className="w-full pl-9 pr-10 py-2.5 rounded-xl bg-slate-900/60 border border-slate-850 focus:border-purple-500/50 text-white placeholder-slate-500 text-sm focus:outline-none"
+              className="w-full pl-9 pr-10 py-2.5 rounded-xl bg-slate-900/60 border border-slate-850 focus:border-purple-500/50 text-slate-100 placeholder-slate-500 text-sm focus:outline-none"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-white cursor-pointer"
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-slate-100 cursor-pointer"
                 title="Clear query"
               >
                 <X className="w-4 h-4" />
@@ -692,12 +692,12 @@ export default function RegistrationsPage() {
               value={searchPhone}
               onChange={(e) => setSearchPhone(e.target.value)}
               placeholder="Filter by Phone"
-              className="w-full pl-9 pr-10 py-2.5 rounded-xl bg-slate-900/60 border border-slate-850 focus:border-purple-500/50 text-white placeholder-slate-500 text-sm focus:outline-none"
+              className="w-full pl-9 pr-10 py-2.5 rounded-xl bg-slate-900/60 border border-slate-850 focus:border-purple-500/50 text-slate-100 placeholder-slate-500 text-sm focus:outline-none"
             />
             {searchPhone && (
               <button
                 onClick={() => setSearchPhone('')}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-white cursor-pointer"
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-slate-100 cursor-pointer"
                 title="Clear phone filter"
               >
                 <X className="w-4 h-4" />
@@ -844,7 +844,7 @@ export default function RegistrationsPage() {
                   <tr key={reg.id} className="hover:bg-slate-900/40 transition-colors">
                     {/* Name */}
                     <td className="px-5 py-4">
-                      <div className="font-bold text-white leading-snug">
+                      <div className="font-bold text-slate-100 leading-snug">
                         {highlightText(reg.full_name, searchQuery)}
                       </div>
                       <div className="text-[10px] text-slate-500 mt-0.5">Reg: {formatDate(reg.created_at).split(',')[0]}</div>
@@ -937,7 +937,7 @@ export default function RegistrationsPage() {
                         <button
                           onClick={() => handleOpenView(reg)}
                           aria-label="View registration details"
-                          className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white cursor-pointer transition-all"
+                          className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-100 cursor-pointer transition-all"
                         >
                           <Eye className="w-4 h-4" />
                         </button>
@@ -945,7 +945,7 @@ export default function RegistrationsPage() {
                         <button
                           onClick={() => handleOpenEdit(reg)}
                           aria-label="Edit registration"
-                          className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white cursor-pointer transition-all"
+                          className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-100 cursor-pointer transition-all"
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
@@ -976,17 +976,17 @@ export default function RegistrationsPage() {
               <button
                 onClick={() => handlePageChange(currentPage - 1)}
                 disabled={currentPage === 1}
-                className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
-              <span className="font-bold text-white px-2.5 py-1 bg-slate-900 border border-slate-800 rounded-md">
+              <span className="font-bold text-slate-100 px-2.5 py-1 bg-slate-900 border border-slate-800 rounded-md">
                 Page {currentPage} of {totalPages}
               </span>
               <button
                 onClick={() => handlePageChange(currentPage + 1)}
                 disabled={currentPage === totalPages}
-                className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
@@ -1011,10 +1011,10 @@ export default function RegistrationsPage() {
               <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-purple-500 to-transparent" />
               
               <div className="px-6 py-4 border-b border-slate-900 flex justify-between items-center bg-slate-950/60">
-                <h3 className="font-bold text-lg text-white">Registration Details</h3>
+                <h3 className="font-bold text-lg text-slate-100">Registration Details</h3>
                 <button
                   onClick={() => { setViewModalOpen(false); setSelectedReg(null); }}
-                  className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white cursor-pointer"
+                  className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-100 cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -1024,7 +1024,7 @@ export default function RegistrationsPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Full Name</span>
-                    <span className="font-bold text-white text-base mt-0.5 block">{selectedReg.full_name}</span>
+                    <span className="font-bold text-slate-100 text-base mt-0.5 block">{selectedReg.full_name}</span>
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Phone Number</span>
@@ -1035,26 +1035,26 @@ export default function RegistrationsPage() {
                 <div className="grid grid-cols-3 gap-4 border-t border-slate-900 pt-3">
                   <div>
                     <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Age</span>
-                    <span className="font-bold text-white mt-0.5 block">{selectedReg.age} yrs</span>
+                    <span className="font-bold text-slate-100 mt-0.5 block">{selectedReg.age} yrs</span>
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Gender</span>
-                    <span className="font-bold text-white mt-0.5 block">{selectedReg.gender}</span>
+                    <span className="font-bold text-slate-100 mt-0.5 block">{selectedReg.gender}</span>
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Area of Stay</span>
-                    <span className="font-bold text-white mt-0.5 block truncate">{selectedReg.area_of_stay || 'N/A'}</span>
+                    <span className="font-bold text-slate-100 mt-0.5 block truncate">{selectedReg.area_of_stay || 'N/A'}</span>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 border-t border-slate-900 pt-3">
                   <div>
                     <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Company / College</span>
-                    <span className="font-semibold text-white mt-0.5 block truncate">{selectedReg.company_college}</span>
+                    <span className="font-semibold text-slate-100 mt-0.5 block truncate">{selectedReg.company_college}</span>
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">PG Name (if any)</span>
-                    <span className="font-semibold text-white mt-0.5 block truncate">{selectedReg.pg_name || 'N/A'}</span>
+                    <span className="font-semibold text-slate-100 mt-0.5 block truncate">{selectedReg.pg_name || 'N/A'}</span>
                   </div>
                 </div>
 
@@ -1076,7 +1076,7 @@ export default function RegistrationsPage() {
                 <div className="grid grid-cols-2 gap-4 border-t border-slate-900 pt-3">
                   <div>
                     <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Volunteering Schedule</span>
-                    <span className="font-semibold text-white mt-0.5 block">
+                    <span className="font-semibold text-slate-100 mt-0.5 block">
                       {selectedReg.interested_to_volunteer 
                         ? `Yes (${selectedReg.volunteer_slots?.slot_time || 'N/A'})` 
                         : 'No'}
@@ -1085,7 +1085,7 @@ export default function RegistrationsPage() {
                   
                   <div>
                     <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Dinner Prasadam</span>
-                    <span className="font-semibold text-white mt-0.5 block">
+                    <span className="font-semibold text-slate-100 mt-0.5 block">
                       {selectedReg.interested_to_dinner ? 'Yes' : 'No'}
                     </span>
                   </div>
@@ -1094,14 +1094,14 @@ export default function RegistrationsPage() {
                 <div className="grid grid-cols-2 gap-4 border-t border-slate-900 pt-3">
                   <div>
                     <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Opted to Donate</span>
-                    <span className="font-semibold text-white mt-0.5 block">
+                    <span className="font-semibold text-slate-100 mt-0.5 block">
                       {selectedReg.wants_to_donate ? 'Yes' : 'No'}
                     </span>
                   </div>
                   
                   <div>
                     <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Donation Status</span>
-                    <span className="font-semibold text-white mt-0.5 block">
+                    <span className="font-semibold text-slate-100 mt-0.5 block">
                       {selectedReg.wants_to_donate ? selectedReg.donation_status : 'N/A'}
                     </span>
                   </div>
@@ -1130,10 +1130,10 @@ export default function RegistrationsPage() {
               <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-purple-500 to-transparent" />
               
               <div className="px-6 py-4 border-b border-slate-900 flex justify-between items-center bg-slate-950/60 shrink-0">
-                <h3 className="font-bold text-lg text-white">Edit Registration</h3>
+                <h3 className="font-bold text-lg text-slate-100">Edit Registration</h3>
                 <button
                   onClick={() => { setEditModalOpen(false); setSelectedReg(null); }}
-                  className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white cursor-pointer"
+                  className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-100 cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -1157,7 +1157,7 @@ export default function RegistrationsPage() {
                       type="text"
                       value={editFullName}
                       onChange={(e) => setEditFullName(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-white text-sm focus:outline-none"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none"
                     />
                   </div>
                   {/* Phone */}
@@ -1168,7 +1168,7 @@ export default function RegistrationsPage() {
                       maxLength={10}
                       value={editPhone}
                       onChange={(e) => setEditPhone(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-white text-sm focus:outline-none"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none"
                     />
                   </div>
                 </div>
@@ -1181,7 +1181,7 @@ export default function RegistrationsPage() {
                       type="number"
                       value={editAge}
                       onChange={(e) => setEditAge(Number(e.target.value))}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-white text-sm focus:outline-none"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none"
                     />
                   </div>
 
@@ -1195,7 +1195,7 @@ export default function RegistrationsPage() {
                         setEditGender(val);
                         if (val !== 'Male') setEditArea('');
                       }}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-white text-sm focus:outline-none cursor-pointer"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none cursor-pointer"
                     >
                       <option value="Male">Male</option>
                       <option value="Female">Female</option>
@@ -1212,7 +1212,7 @@ export default function RegistrationsPage() {
                       onChange={(e) => setEditArea(e.target.value)}
                       disabled={editGender !== 'Male'}
                       placeholder="Type or select Area of Stay"
-                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-white text-sm focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
                     />
                     <datalist id="edit-areas-list">
                       <option value="Kokapet" />
@@ -1232,7 +1232,7 @@ export default function RegistrationsPage() {
                       type="text"
                       value={editCompany}
                       onChange={(e) => setEditCompany(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-white text-sm focus:outline-none"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none"
                     />
                   </div>
                   {/* PG */}
@@ -1242,7 +1242,7 @@ export default function RegistrationsPage() {
                       type="text"
                       value={editPgName}
                       onChange={(e) => setEditPgName(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-white text-sm focus:outline-none"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none"
                     />
                   </div>
                 </div>
@@ -1308,7 +1308,7 @@ export default function RegistrationsPage() {
                       value={editSlotId}
                       onChange={(e) => setEditSlotId(e.target.value)}
                       disabled={!editVolunteer}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-white text-sm focus:outline-none disabled:opacity-40"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none disabled:opacity-40"
                     >
                       <option value="">Select Slot</option>
                       {slots.map(s => (
@@ -1385,7 +1385,7 @@ export default function RegistrationsPage() {
                       value={editDonationStatus}
                       onChange={(e) => setEditDonationStatus(e.target.value as Registration['donation_status'])}
                       disabled={!editWantsDonate}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-white text-xs focus:outline-none disabled:opacity-40"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 text-xs focus:outline-none disabled:opacity-40"
                     >
                       <option value="Pending">Pending</option>
                       <option value="User Opted to Donate">Opted to Donate</option>
@@ -1402,7 +1402,7 @@ export default function RegistrationsPage() {
                 <button
                   type="button"
                   onClick={() => { setEditModalOpen(false); setSelectedReg(null); }}
-                  className="px-4 py-2 text-xs font-semibold rounded-xl bg-slate-900 border border-slate-850 hover:border-slate-700 text-slate-300 hover:text-white transition-all cursor-pointer"
+                  className="px-4 py-2 text-xs font-semibold rounded-xl bg-slate-900 border border-slate-850 hover:border-slate-700 text-slate-300 hover:text-slate-100 transition-all cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -1438,7 +1438,7 @@ export default function RegistrationsPage() {
             >
               <div className="absolute top-0 left-0 right-0 h-[2px] bg-red-500" />
               
-              <h3 className="font-bold text-base text-white mb-2 flex items-center gap-2">
+              <h3 className="font-bold text-base text-slate-100 mb-2 flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-red-500" />
                 Confirm Delete Record
               </h3>
@@ -1451,7 +1451,7 @@ export default function RegistrationsPage() {
                 <button
                   type="button"
                   onClick={() => setDeleteRegId(null)}
-                  className="px-4 py-2 text-xs font-semibold rounded-xl bg-slate-900 border border-slate-850 hover:border-slate-700 text-slate-300 hover:text-white transition-all cursor-pointer"
+                  className="px-4 py-2 text-xs font-semibold rounded-xl bg-slate-900 border border-slate-850 hover:border-slate-700 text-slate-300 hover:text-slate-100 transition-all cursor-pointer"
                 >
                   Cancel
                 </button>

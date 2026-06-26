@@ -140,13 +140,25 @@ export default function NotificationBell() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Prevent body scrolling on mobile when open
+  useEffect(() => {
+    if (isOpen && window.innerWidth < 768) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
   return (
     <div className="relative" ref={panelRef}>
       {/* Bell Button */}
       <button
         onClick={handleTogglePanel}
         aria-label="Toggle notifications panel"
-        className="relative p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 hover:border-slate-700 transition-all cursor-pointer flex items-center justify-center"
+        className="relative p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-500 hover:text-slate-100 border border-slate-850 hover:border-slate-700 transition-all cursor-pointer flex items-center justify-center"
       >
         <Bell className="w-5 h-5" />
         
@@ -157,6 +169,14 @@ export default function NotificationBell() {
         )}
       </button>
 
+      {/* Backdrop overlay for mobile to tap outside and dismiss */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 bg-slate-950/40 md:bg-transparent z-40" 
+          onClick={() => setIsOpen(false)} 
+        />
+      )}
+
       {/* Notification Panel */}
       <AnimatePresence>
         {isOpen && (
@@ -165,36 +185,39 @@ export default function NotificationBell() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.95 }}
             transition={{ duration: 0.15 }}
-            className="absolute right-0 mt-2.5 w-80 sm:w-96 glass-card rounded-2xl shadow-2xl z-50 overflow-hidden"
+            className="fixed md:absolute top-[70px] md:top-full left-1/2 md:left-auto md:right-0 -translate-x-1/2 md:translate-x-0 w-[90vw] sm:w-[420px] max-h-[70vh] glass-card rounded-2xl shadow-2xl z-50 overflow-hidden flex flex-col mt-2.5"
           >
             {/* Panel Header */}
-            <div className="px-4 py-3.5 border-b border-slate-850 flex justify-between items-center bg-slate-950/80">
-              <span className="font-bold text-sm text-white flex items-center gap-1.5">
+            <div className="px-4 py-3.5 border-b border-slate-900 flex justify-between items-center bg-slate-950/80 shrink-0 transition-colors">
+              <span className="font-bold text-sm text-slate-100 flex items-center gap-1.5">
                 Notifications
               </span>
               <button 
                 onClick={() => setIsOpen(false)}
-                className="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-900 cursor-pointer"
+                className="text-slate-500 hover:text-slate-100 p-1 rounded hover:bg-slate-900 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Panel Content */}
-            <div className="max-h-[350px] overflow-y-auto divide-y divide-slate-900/60">
+            <div className="flex-1 overflow-y-auto divide-y divide-slate-900/60">
               {isLoading && notifications.length === 0 ? (
                 <div className="py-12 flex flex-col items-center justify-center text-slate-500 text-xs">
                   <Loader2 className="w-6 h-6 animate-spin text-purple-500 mb-2" />
                   <span>Loading alerts...</span>
                 </div>
               ) : notifications.length === 0 ? (
-                <div className="py-16 text-center text-slate-500 text-xs space-y-1">
+                <div className="py-16 text-center text-slate-500 text-xs space-y-1 bg-slate-950/20">
                   <p className="font-semibold text-slate-400">No notifications available.</p>
                   <p>All caught up!</p>
                 </div>
               ) : (
                 notifications.map((notification) => {
                   const reg = notification.registrations;
+                  const formattedDate = notification.created_at
+                    ? formatDate(notification.created_at).replace(',', ' •').replace(/\s(am|pm)$/i, (m) => m.toUpperCase())
+                    : null;
                   return (
                     <div
                       key={notification.id}
@@ -208,20 +231,19 @@ export default function NotificationBell() {
                         <UserCheck className="w-4 h-4" />
                       </div>
                       <div className="flex-1 min-w-0 text-left">
-                        <div className="flex justify-between items-start gap-1">
-                          <p className="text-sm font-semibold text-white truncate">
-                            {reg?.full_name || 'New Registration'}
+                        <p className="text-sm font-semibold text-slate-100 truncate">
+                          {reg?.full_name || 'New Registration'}
+                        </p>
+                        {reg?.phone && (
+                          <p className="text-xs text-slate-450 mt-1 truncate">
+                            Phone: {reg.phone}
                           </p>
-                          <span className="text-[10px] text-slate-500 shrink-0 mt-0.5">
-                            {formatDate(notification.created_at).split(',')[0]}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-400 mt-0.5 truncate">
-                          Phone: {reg?.phone || 'N/A'}
-                        </p>
-                        <p className="text-[10px] text-purple-400 mt-1.5">
-                          Registered at {formatDate(notification.created_at).split('at')[1] || 'N/A'}
-                        </p>
+                        )}
+                        {formattedDate && (
+                          <p className="text-[10px] text-purple-450 mt-2 font-medium">
+                            {formattedDate}
+                          </p>
+                        )}
                       </div>
                     </div>
                   );
@@ -230,7 +252,7 @@ export default function NotificationBell() {
             </div>
 
             {/* Panel Footer */}
-            <div className="px-4 py-2 text-center bg-slate-950/80 border-t border-slate-900 text-[10px] text-slate-500">
+            <div className="px-4 py-2 text-center bg-slate-950/80 border-t border-slate-900 text-[10px] text-slate-500 shrink-0 transition-colors">
               Updates in real time via Supabase Realtime
             </div>
           </motion.div>

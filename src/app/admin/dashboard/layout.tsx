@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import NotificationBell from '@/components/notification-bell';
+import ThemeToggle from '@/components/theme-toggle';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function AdminDashboardLayout({
@@ -86,9 +87,9 @@ export default function AdminDashboardLayout({
   // Render loading state while checking authorization
   if (isAdmin === null) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 text-indigo-400">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background text-indigo-400">
         <Loader2 className="w-10 h-10 animate-spin mb-4" />
-        <p className="text-slate-400 text-sm">Verifying administrator authorization...</p>
+        <p className="text-slate-500 text-sm">Verifying administrator authorization...</p>
       </div>
     );
   }
@@ -96,10 +97,10 @@ export default function AdminDashboardLayout({
   // Render error/unauthorized state briefly before redirect
   if (isAdmin === false) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 text-red-400 p-6 text-center">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background text-red-400 p-6 text-center">
         <ShieldAlert className="w-12 h-12 mb-4" />
-        <h2 className="text-xl font-bold text-white mb-2">Access Denied</h2>
-        <p className="text-slate-400 text-sm max-w-xs">
+        <h2 className="text-xl font-bold text-foreground mb-2">Access Denied</h2>
+        <p className="text-slate-500 text-sm max-w-xs">
           You do not have administrative privileges. Redirecting to admin login...
         </p>
       </div>
@@ -112,20 +113,20 @@ export default function AdminDashboardLayout({
   ];
 
   return (
-    <div className="min-h-screen flex bg-slate-950 text-slate-100 relative">
+    <div className="min-h-screen flex bg-background text-foreground relative">
       {/* BACKGROUND DECORATIONS */}
       <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-purple-900/5 rounded-full blur-[120px] pointer-events-none -z-10" />
       <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-indigo-900/5 rounded-full blur-[120px] pointer-events-none -z-10" />
 
       {/* --- DESKTOP SIDEBAR --- */}
-      <aside className="hidden md:flex flex-col w-64 border-r border-slate-900 bg-slate-950/60 backdrop-blur-md shrink-0">
+      <aside className="hidden md:flex flex-col w-64 border-r border-slate-900 bg-slate-950/60 backdrop-blur-md shrink-0 transition-colors">
         {/* Brand Header */}
         <div className="h-16 px-6 border-b border-slate-900 flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-purple-500 to-indigo-500 flex items-center justify-center text-white">
             <ShieldCheck className="w-5 h-5" />
           </div>
           <div>
-            <span className="font-extrabold text-sm tracking-tight text-white block">Rathayatra Admin</span>
+            <span className="font-extrabold text-sm tracking-tight text-slate-100 block">Rathayatra Admin</span>
             <span className="text-[10px] text-purple-400 font-semibold block -mt-0.5">Control Center</span>
           </div>
         </div>
@@ -139,8 +140,8 @@ export default function AdminDashboardLayout({
               <Link key={link.path} href={link.path}>
                 <span className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
                   isActive 
-                    ? 'bg-purple-950/40 border border-purple-500/25 text-white shadow-[0_0_15px_rgba(139,92,246,0.1)]'
-                    : 'text-slate-400 border border-transparent hover:bg-slate-900/50 hover:text-white'
+                    ? 'bg-purple-950/40 border border-purple-500/25 text-slate-100 shadow-[0_0_15px_rgba(139,92,246,0.1)]'
+                    : 'text-slate-500 border border-transparent hover:bg-slate-900/50 hover:text-slate-100'
                 }`}>
                   <Icon className="w-5 h-5" />
                   {link.name}
@@ -151,14 +152,14 @@ export default function AdminDashboardLayout({
         </nav>
 
         {/* User Info & Logout */}
-        <div className="p-4 border-t border-slate-900 bg-slate-950/40">
+        <div className="p-4 border-t border-slate-900 bg-slate-950/40 transition-colors">
           <div className="px-3 py-2 rounded-xl bg-slate-900/30 border border-slate-800/40 mb-3 truncate">
             <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">Signed in as</p>
             <p className="text-xs text-slate-300 font-medium truncate">{adminEmail}</p>
           </div>
           <button
             onClick={handleSignOut}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-red-500/20 text-red-400 hover:text-white hover:bg-red-950/20 hover:border-red-500/40 text-sm font-bold transition-all cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-red-500/20 text-red-400 hover:text-slate-100 hover:bg-red-950/20 hover:border-red-500/40 text-sm font-bold transition-all cursor-pointer"
           >
             <LogOut className="w-4.5 h-4.5" />
             Sign Out
@@ -184,7 +185,7 @@ export default function AdminDashboardLayout({
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed inset-y-0 left-0 w-64 bg-slate-950 border-r border-slate-900 z-50 p-6 flex flex-col justify-between md:hidden"
+              className="fixed inset-y-0 left-0 w-64 bg-slate-950 border-r border-slate-900 z-50 p-6 flex flex-col justify-between md:hidden transition-colors"
             >
               <div className="space-y-8">
                 {/* Close and Brand Header */}
@@ -193,7 +194,7 @@ export default function AdminDashboardLayout({
                     <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-purple-500 to-indigo-500 flex items-center justify-center text-white">
                       <ShieldCheck className="w-5 h-5" />
                     </div>
-                    <span className="font-extrabold text-sm tracking-tight text-white">Rathayatra Admin</span>
+                    <span className="font-extrabold text-sm tracking-tight text-slate-100">Rathayatra Admin</span>
                   </div>
                   <button 
                     onClick={() => setMobileMenuOpen(false)}
@@ -212,8 +213,8 @@ export default function AdminDashboardLayout({
                       <Link key={link.path} href={link.path} onClick={() => setMobileMenuOpen(false)}>
                         <span className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
                           isActive 
-                            ? 'bg-purple-950/40 border border-purple-500/25 text-white'
-                            : 'text-slate-400 hover:bg-slate-900/50 hover:text-white'
+                            ? 'bg-purple-950/40 border border-purple-500/25 text-slate-100'
+                            : 'text-slate-500 hover:bg-slate-900/50 hover:text-slate-100'
                         }`}>
                           <Icon className="w-5 h-5" />
                           {link.name}
@@ -232,7 +233,7 @@ export default function AdminDashboardLayout({
                 </div>
                 <button
                   onClick={handleSignOut}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-red-500/20 text-red-400 hover:text-white hover:bg-red-950/20 text-sm font-bold transition-all cursor-pointer"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-red-500/20 text-red-400 hover:text-slate-100 hover:bg-red-950/20 text-sm font-bold transition-all cursor-pointer"
                 >
                   <LogOut className="w-4.5 h-4.5" />
                   Sign Out
@@ -246,23 +247,24 @@ export default function AdminDashboardLayout({
       {/* --- MAIN PAGE WRAPPER --- */}
       <div className="flex-1 flex flex-col min-w-0 min-h-screen">
         {/* Header Bar */}
-        <header className="h-16 px-4 sm:px-6 border-b border-slate-900 flex justify-between items-center bg-slate-950/40 backdrop-blur-md sticky top-0 z-30">
+        <header className="h-16 px-4 sm:px-6 border-b border-slate-900 flex justify-between items-center bg-slate-950/40 backdrop-blur-md sticky top-0 z-30 transition-colors">
           {/* Mobile hamburger */}
           <div className="flex items-center gap-3">
             <button
               onClick={() => setMobileMenuOpen(true)}
-              className="p-2 rounded-xl bg-slate-900 text-slate-400 hover:text-white border border-slate-800 md:hidden cursor-pointer"
+              className="p-2 rounded-xl bg-slate-900 text-slate-500 hover:text-slate-100 border border-slate-800 md:hidden cursor-pointer"
               aria-label="Open sidebar menu"
             >
               <Menu className="w-5 h-5" />
             </button>
-            <h2 className="font-extrabold text-lg text-white capitalize hidden sm:block">
+            <h2 className="font-extrabold text-lg text-slate-100 capitalize hidden sm:block">
               {pathname.split('/').pop()}
             </h2>
           </div>
 
           {/* Action Tools */}
           <div className="flex items-center gap-4">
+            <ThemeToggle />
             <NotificationBell />
             
             <div className="flex items-center gap-2.5 pl-3 border-l border-slate-900">

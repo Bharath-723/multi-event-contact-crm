@@ -21,7 +21,7 @@ export default function DashboardCharts({ dailyData, skillData, slotData, gender
       
       {/* 1. Daily Registrations Trend */}
       <div className="glass-card rounded-2xl p-5 sm:p-6">
-        <h3 className="text-base font-bold text-white mb-4">Daily Registration Trend</h3>
+        <h3 className="text-base font-bold text-slate-100 mb-4">Daily Registration Trend</h3>
         <div className="h-64 w-full">
           {dailyData.length === 0 ? (
             <div className="h-full flex items-center justify-center text-slate-500 text-sm">
@@ -56,7 +56,7 @@ export default function DashboardCharts({ dailyData, skillData, slotData, gender
 
       {/* 2. Skills Analytics */}
       <div className="glass-card rounded-2xl p-5 sm:p-6">
-        <h3 className="text-base font-bold text-white mb-4">Skills Distribution</h3>
+        <h3 className="text-base font-bold text-slate-100 mb-4">Skills Distribution</h3>
         <div className="h-64 w-full flex flex-col sm:flex-row items-center justify-center">
           {skillData.every(d => d.value === 0) ? (
             <div className="text-slate-500 text-sm">No skills tracked yet</div>
@@ -98,7 +98,7 @@ export default function DashboardCharts({ dailyData, skillData, slotData, gender
                       <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: PURPLE_COLORS[index % PURPLE_COLORS.length] }} />
                       <span className="text-slate-300 font-medium">{item.name}</span>
                     </div>
-                    <span className="font-bold text-white">{item.value}</span>
+                    <span className="font-bold text-slate-100">{item.value}</span>
                   </div>
                 ))}
               </div>
@@ -109,7 +109,7 @@ export default function DashboardCharts({ dailyData, skillData, slotData, gender
 
       {/* 3. Volunteer Slots Distribution */}
       <div className="glass-card rounded-2xl p-5 sm:p-6">
-        <h3 className="text-base font-bold text-white mb-4">Volunteer Slots Allocation</h3>
+        <h3 className="text-base font-bold text-slate-100 mb-4">Volunteer Slots Allocation</h3>
         <div className="h-64 w-full">
           {slotData.length === 0 ? (
             <div className="h-full flex items-center justify-center text-slate-500 text-sm">
@@ -142,7 +142,7 @@ export default function DashboardCharts({ dailyData, skillData, slotData, gender
 
       {/* 4. Gender Ratio */}
       <div className="glass-card rounded-2xl p-5 sm:p-6">
-        <h3 className="text-base font-bold text-white mb-4">Gender Ratio</h3>
+        <h3 className="text-base font-bold text-slate-100 mb-4">Gender Ratio</h3>
         <div className="h-64 w-full flex flex-col sm:flex-row items-center justify-center">
           {genderData.every(d => d.value === 0) ? (
             <div className="text-slate-500 text-sm">No data available</div>
@@ -183,7 +183,7 @@ export default function DashboardCharts({ dailyData, skillData, slotData, gender
                       <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: index === 0 ? '#a855f7' : '#ec4899' }} />
                       <span className="text-slate-300 font-medium">{item.name}</span>
                     </div>
-                    <span className="font-bold text-white">{item.value}</span>
+                    <span className="font-bold text-slate-100">{item.value}</span>
                   </div>
                 ))}
               </div>

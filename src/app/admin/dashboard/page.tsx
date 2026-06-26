@@ -226,12 +226,14 @@ export default function AdminDashboardPage() {
         </div>
 
         {/* Skeleton cards grid (5 cards) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6">
           {[...Array(5)].map((_, i) => (
-            <div key={i} className="glass-card rounded-2xl p-6 relative overflow-hidden">
-              <div className="h-3.5 w-24 bg-slate-850 rounded-full mb-3" />
-              <div className="h-8 w-16 bg-slate-850 rounded-lg mb-4" />
-              <div className="h-2.5 w-28 bg-slate-850 rounded-full" />
+            <div key={i} className="glass-card rounded-2xl p-5 md:p-6 relative overflow-hidden flex flex-col justify-between h-full min-h-[140px]">
+              <div>
+                <div className="h-3.5 w-24 bg-slate-850 rounded-full mb-3" />
+                <div className="h-8 w-16 bg-slate-850 rounded-lg" />
+              </div>
+              <div className="h-2.5 w-28 bg-slate-850 rounded-full mt-4" />
             </div>
           ))}
         </div>
@@ -252,11 +254,11 @@ export default function AdminDashboardPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 md:space-y-8">
       {/* Heading Header */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-white">Dashboard Overview</h1>
+          <h1 className="text-2xl font-extrabold text-slate-100">Dashboard Overview</h1>
           <p className="text-slate-400 text-sm mt-0.5">Real-time statistics & activity logs</p>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-center">
@@ -275,81 +277,81 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* 1. Statistics Cards Section */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6">
         
         {/* Total Registrations */}
         <div 
           onClick={() => setActiveModal('total')}
-          className="glass-card rounded-2xl p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden"
+          className="glass-card rounded-2xl p-5 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[140px]"
         >
-          <div className="absolute top-0 right-0 p-3 text-slate-700 group-hover:text-purple-400/80 transition-colors">
-            <Users className="w-14 h-14 opacity-15 absolute -right-1 -top-1" />
+          <div>
+            <span className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider block">Total Registrations</span>
+            <span className="text-2xl md:text-3xl font-extrabold text-slate-100 mt-2 block">{totalCount}</span>
           </div>
-          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Total Registrations</span>
-          <span className="text-3xl font-extrabold text-white mt-2 block">{totalCount}</span>
-          <span className="text-[10px] text-purple-400 font-bold mt-4 flex items-center gap-1">
+          <span className="text-[9px] md:text-[10px] text-purple-400 font-bold mt-4 flex items-center gap-1">
             Click to view list <ExternalLink className="w-3 h-3" />
           </span>
+          <Users className="w-12 h-12 md:w-14 md:h-14 opacity-15 absolute -right-1 -top-1 text-slate-700 group-hover:text-purple-400/80 transition-colors" />
         </div>
 
         {/* Total Volunteers */}
         <div 
           onClick={() => setActiveModal('volunteers')}
-          className="glass-card rounded-2xl p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden"
+          className="glass-card rounded-2xl p-5 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[140px]"
         >
-          <div className="absolute top-0 right-0 p-3 text-slate-700 group-hover:text-purple-400/80 transition-colors">
-            <Clock className="w-14 h-14 opacity-15 absolute -right-1 -top-1" />
+          <div>
+            <span className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider block">Total Volunteers</span>
+            <span className="text-2xl md:text-3xl font-extrabold text-slate-100 mt-2 block">{volunteersCount}</span>
           </div>
-          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Total Volunteers</span>
-          <span className="text-3xl font-extrabold text-white mt-2 block">{volunteersCount}</span>
-          <span className="text-[10px] text-purple-400 font-bold mt-4 flex items-center gap-1">
+          <span className="text-[9px] md:text-[10px] text-purple-400 font-bold mt-4 flex items-center gap-1">
             Grouped by time slot <ExternalLink className="w-3 h-3" />
           </span>
+          <Clock className="w-12 h-12 md:w-14 md:h-14 opacity-15 absolute -right-1 -top-1 text-slate-700 group-hover:text-purple-400/80 transition-colors" />
         </div>
 
         {/* Total Donors */}
         <div 
           onClick={() => setActiveModal('donors')}
-          className="glass-card rounded-2xl p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden"
+          className="glass-card rounded-2xl p-5 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[140px]"
         >
-          <div className="absolute top-0 right-0 p-3 text-slate-700 group-hover:text-purple-400/80 transition-colors">
-            <Heart className="w-14 h-14 opacity-15 absolute -right-1 -top-1" />
+          <div>
+            <span className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider block">Total Donors</span>
+            <span className="text-2xl md:text-3xl font-extrabold text-slate-100 mt-2 block">{donorsCount}</span>
           </div>
-          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Total Donors</span>
-          <span className="text-3xl font-extrabold text-white mt-2 block">{donorsCount}</span>
-          <span className="text-[10px] text-purple-400 font-bold mt-4 flex items-center gap-1">
+          <span className="text-[9px] md:text-[10px] text-purple-400 font-bold mt-4 flex items-center gap-1">
             Click to view list <ExternalLink className="w-3 h-3" />
           </span>
+          <Heart className="w-12 h-12 md:w-14 md:h-14 opacity-15 absolute -right-1 -top-1 text-slate-700 group-hover:text-purple-400/80 transition-colors" />
         </div>
 
         {/* Dinner Prasadam */}
         <div 
           onClick={() => setActiveModal('prasadam')}
-          className="glass-card rounded-2xl p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden"
+          className="glass-card rounded-2xl p-5 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[140px]"
         >
-          <div className="absolute top-0 right-0 p-3 text-slate-700 group-hover:text-purple-400/80 transition-colors">
-            <Soup className="w-14 h-14 opacity-15 absolute -right-1 -top-1" />
+          <div>
+            <span className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider block">Dinner Prasadam</span>
+            <span className="text-2xl md:text-3xl font-extrabold text-slate-100 mt-2 block">{dinnerCount}</span>
           </div>
-          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Dinner Prasadam</span>
-          <span className="text-3xl font-extrabold text-white mt-2 block">{dinnerCount}</span>
-          <span className="text-[10px] text-purple-400 font-bold mt-4 flex items-center gap-1">
+          <span className="text-[9px] md:text-[10px] text-purple-400 font-bold mt-4 flex items-center gap-1">
             Click to view list <ExternalLink className="w-3 h-3" />
           </span>
+          <Soup className="w-12 h-12 md:w-14 md:h-14 opacity-15 absolute -right-1 -top-1 text-slate-700 group-hover:text-purple-400/80 transition-colors" />
         </div>
 
         {/* Today's Registrations */}
         <div 
           onClick={() => setActiveModal('todays')}
-          className="glass-card rounded-2xl p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden"
+          className="glass-card rounded-2xl p-5 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[140px]"
         >
-          <div className="absolute top-0 right-0 p-3 text-slate-700 group-hover:text-purple-400/80 transition-colors">
-            <Calendar className="w-14 h-14 opacity-15 absolute -right-1 -top-1" />
+          <div>
+            <span className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider block">Today&apos;s Registrations</span>
+            <span className="text-2xl md:text-3xl font-extrabold text-slate-100 mt-2 block">{todaysCount}</span>
           </div>
-          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Today&apos;s Registrations</span>
-          <span className="text-3xl font-extrabold text-white mt-2 block">{todaysCount}</span>
-          <span className="text-[10px] text-purple-400 font-bold mt-4 flex items-center gap-1">
+          <span className="text-[9px] md:text-[10px] text-purple-400 font-bold mt-4 flex items-center gap-1">
             Click to view list <ExternalLink className="w-3 h-3" />
           </span>
+          <Calendar className="w-12 h-12 md:w-14 md:h-14 opacity-15 absolute -right-1 -top-1 text-slate-700 group-hover:text-purple-400/80 transition-colors" />
         </div>
 
       </section>
@@ -371,7 +373,7 @@ export default function AdminDashboardPage() {
               registrations.slice(0, 10).map((reg) => (
                 <div key={reg.id} className="py-2.5 flex justify-between items-center text-xs">
                   <div>
-                    <p className="font-semibold text-white text-sm flex items-center gap-1.5">
+                    <p className="font-semibold text-slate-100 text-sm flex items-center gap-1.5">
                       <User className="w-3.5 h-3.5 text-purple-400" /> {reg.full_name}
                       <span className="text-[9px] text-slate-500 font-medium px-1.5 py-0.5 rounded border border-slate-800">Age: {reg.age}</span>
                     </p>
@@ -460,7 +462,7 @@ export default function AdminDashboardPage() {
 
               {/* Modal Header */}
               <div className="px-6 py-4 border-b border-slate-900 flex justify-between items-center bg-slate-950/60">
-                <h3 className="font-bold text-lg text-white">
+                <h3 className="font-bold text-lg text-slate-100">
                   {activeModal === 'total' && 'All Registrations'}
                   {activeModal === 'donors' && 'Interested Donors'}
                   {activeModal === 'prasadam' && 'Dinner Prasadam List'}
@@ -469,7 +471,7 @@ export default function AdminDashboardPage() {
                 </h3>
                 <button
                   onClick={() => setActiveModal(null)}
-                  className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white cursor-pointer"
+                  className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-100 cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -485,7 +487,7 @@ export default function AdminDashboardPage() {
                       registrations.map(reg => (
                         <div key={reg.id} className="py-3 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                           <div>
-                            <p className="font-semibold text-white text-sm flex items-center gap-1.5">
+                            <p className="font-semibold text-slate-100 text-sm flex items-center gap-1.5">
                               <User className="w-4 h-4 text-purple-400" /> {reg.full_name} 
                               <span className="text-[10px] text-slate-500 font-medium px-2 py-0.5 rounded-full border border-slate-800">Age: {reg.age}</span>
                             </p>
@@ -511,7 +513,7 @@ export default function AdminDashboardPage() {
                       todaysList.map(reg => (
                         <div key={reg.id} className="py-3 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                           <div>
-                            <p className="font-semibold text-white text-sm flex items-center gap-1.5">
+                            <p className="font-semibold text-slate-100 text-sm flex items-center gap-1.5">
                               <User className="w-4 h-4 text-purple-400" /> {reg.full_name} 
                               <span className="text-[10px] text-slate-500 font-medium px-2 py-0.5 rounded-full border border-slate-800">Age: {reg.age}</span>
                             </p>
@@ -537,7 +539,7 @@ export default function AdminDashboardPage() {
                       donorsList.map(reg => (
                         <div key={reg.id} className="py-3 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                           <div>
-                            <p className="font-semibold text-white text-sm flex items-center gap-1.5">
+                            <p className="font-semibold text-slate-100 text-sm flex items-center gap-1.5">
                               <User className="w-4 h-4 text-purple-400" /> {reg.full_name}
                             </p>
                             <p className="text-xs text-slate-400 mt-1 flex items-center gap-1.5">
@@ -565,7 +567,7 @@ export default function AdminDashboardPage() {
                       dinnerList.map(reg => (
                         <div key={reg.id} className="py-3 flex justify-between items-center">
                           <div>
-                            <p className="font-semibold text-white text-sm flex items-center gap-1.5">
+                            <p className="font-semibold text-slate-100 text-sm flex items-center gap-1.5">
                               <User className="w-4 h-4 text-purple-400" /> {reg.full_name}
                             </p>
                             <p className="text-xs text-slate-400 mt-1 flex items-center gap-1.5">
@@ -601,7 +603,7 @@ export default function AdminDashboardPage() {
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-2">
                               {group.volunteers.map(v => (
                                 <div key={v.id} className="p-3 rounded-xl bg-slate-900/40 border border-slate-850 flex flex-col gap-1">
-                                  <span className="font-semibold text-white text-sm flex items-center gap-1.5">
+                                  <span className="font-semibold text-slate-100 text-sm flex items-center gap-1.5">
                                     <User className="w-3.5 h-3.5 text-purple-400" /> {v.full_name}
                                   </span>
                                   <span className="text-xs text-slate-400 flex items-center gap-1.5">
