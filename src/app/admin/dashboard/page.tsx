@@ -282,76 +282,76 @@ export default function AdminDashboardPage() {
         {/* Total Registrations */}
         <div 
           onClick={() => setActiveModal('total')}
-          className="glass-card rounded-2xl p-5 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[140px]"
+          className="glass-card rounded-2xl p-4 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[110px] md:min-h-[140px]"
         >
           <div>
-            <span className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider block">Total Registrations</span>
-            <span className="text-2xl md:text-3xl font-extrabold text-slate-100 mt-2 block">{totalCount}</span>
+            <span className="text-[9px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider block">Total Registrations</span>
+            <span className="text-xl md:text-3xl font-extrabold text-slate-100 mt-2 block">{totalCount}</span>
           </div>
-          <span className="text-[9px] md:text-[10px] text-purple-400 font-bold mt-4 flex items-center gap-1">
+          <span className="text-[9px] md:text-[10px] text-purple-400 font-bold mt-3 md:mt-4 flex items-center gap-1">
             Click to view list <ExternalLink className="w-3 h-3" />
           </span>
-          <Users className="w-12 h-12 md:w-14 md:h-14 opacity-15 absolute -right-1 -top-1 text-slate-700 group-hover:text-purple-400/80 transition-colors" />
+          <Users className="w-10 h-10 md:w-14 md:h-14 opacity-15 absolute -right-1 -top-1 text-slate-700 group-hover:text-purple-400/80 transition-colors" />
         </div>
 
         {/* Total Volunteers */}
         <div 
           onClick={() => setActiveModal('volunteers')}
-          className="glass-card rounded-2xl p-5 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[140px]"
+          className="glass-card rounded-2xl p-4 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[110px] md:min-h-[140px]"
         >
           <div>
-            <span className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider block">Total Volunteers</span>
-            <span className="text-2xl md:text-3xl font-extrabold text-slate-100 mt-2 block">{volunteersCount}</span>
+            <span className="text-[9px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider block">Total Volunteers</span>
+            <span className="text-xl md:text-3xl font-extrabold text-slate-100 mt-2 block">{volunteersCount}</span>
           </div>
-          <span className="text-[9px] md:text-[10px] text-purple-400 font-bold mt-4 flex items-center gap-1">
+          <span className="text-[9px] md:text-[10px] text-purple-400 font-bold mt-3 md:mt-4 flex items-center gap-1">
             Grouped by time slot <ExternalLink className="w-3 h-3" />
           </span>
-          <Clock className="w-12 h-12 md:w-14 md:h-14 opacity-15 absolute -right-1 -top-1 text-slate-700 group-hover:text-purple-400/80 transition-colors" />
+          <Clock className="w-10 h-10 md:w-14 md:h-14 opacity-15 absolute -right-1 -top-1 text-slate-700 group-hover:text-purple-400/80 transition-colors" />
         </div>
 
         {/* Total Donors */}
         <div 
           onClick={() => setActiveModal('donors')}
-          className="glass-card rounded-2xl p-5 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[140px]"
+          className="glass-card rounded-2xl p-4 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[110px] md:min-h-[140px]"
         >
           <div>
-            <span className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider block">Total Donors</span>
-            <span className="text-2xl md:text-3xl font-extrabold text-slate-100 mt-2 block">{donorsCount}</span>
+            <span className="text-[9px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider block">Total Donors</span>
+            <span className="text-xl md:text-3xl font-extrabold text-slate-100 mt-2 block">{donorsCount}</span>
           </div>
-          <span className="text-[9px] md:text-[10px] text-purple-400 font-bold mt-4 flex items-center gap-1">
+          <span className="text-[9px] md:text-[10px] text-purple-400 font-bold mt-3 md:mt-4 flex items-center gap-1">
             Click to view list <ExternalLink className="w-3 h-3" />
           </span>
-          <Heart className="w-12 h-12 md:w-14 md:h-14 opacity-15 absolute -right-1 -top-1 text-slate-700 group-hover:text-purple-400/80 transition-colors" />
+          <Heart className="w-10 h-10 md:w-14 md:h-14 opacity-15 absolute -right-1 -top-1 text-slate-700 group-hover:text-purple-400/80 transition-colors" />
         </div>
 
         {/* Dinner Prasadam */}
         <div 
           onClick={() => setActiveModal('prasadam')}
-          className="glass-card rounded-2xl p-5 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[140px]"
+          className="glass-card rounded-2xl p-4 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[110px] md:min-h-[140px]"
         >
           <div>
-            <span className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider block">Dinner Prasadam</span>
-            <span className="text-2xl md:text-3xl font-extrabold text-slate-100 mt-2 block">{dinnerCount}</span>
+            <span className="text-[9px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider block">Dinner Prasadam</span>
+            <span className="text-xl md:text-3xl font-extrabold text-slate-100 mt-2 block">{dinnerCount}</span>
           </div>
-          <span className="text-[9px] md:text-[10px] text-purple-400 font-bold mt-4 flex items-center gap-1">
+          <span className="text-[9px] md:text-[10px] text-purple-400 font-bold mt-3 md:mt-4 flex items-center gap-1">
             Click to view list <ExternalLink className="w-3 h-3" />
           </span>
-          <Soup className="w-12 h-12 md:w-14 md:h-14 opacity-15 absolute -right-1 -top-1 text-slate-700 group-hover:text-purple-400/80 transition-colors" />
+          <Soup className="w-10 h-10 md:w-14 md:h-14 opacity-15 absolute -right-1 -top-1 text-slate-700 group-hover:text-purple-400/80 transition-colors" />
         </div>
 
         {/* Today's Registrations */}
         <div 
           onClick={() => setActiveModal('todays')}
-          className="glass-card rounded-2xl p-5 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[140px]"
+          className="glass-card rounded-2xl p-4 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[110px] md:min-h-[140px]"
         >
           <div>
-            <span className="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider block">Today&apos;s Registrations</span>
-            <span className="text-2xl md:text-3xl font-extrabold text-slate-100 mt-2 block">{todaysCount}</span>
+            <span className="text-[9px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider block">Today&apos;s Registrations</span>
+            <span className="text-xl md:text-3xl font-extrabold text-slate-100 mt-2 block">{todaysCount}</span>
           </div>
-          <span className="text-[9px] md:text-[10px] text-purple-400 font-bold mt-4 flex items-center gap-1">
+          <span className="text-[9px] md:text-[10px] text-purple-400 font-bold mt-3 md:mt-4 flex items-center gap-1">
             Click to view list <ExternalLink className="w-3 h-3" />
           </span>
-          <Calendar className="w-12 h-12 md:w-14 md:h-14 opacity-15 absolute -right-1 -top-1 text-slate-700 group-hover:text-purple-400/80 transition-colors" />
+          <Calendar className="w-10 h-10 md:w-14 md:h-14 opacity-15 absolute -right-1 -top-1 text-slate-700 group-hover:text-purple-400/80 transition-colors" />
         </div>
 
       </section>
@@ -455,13 +455,13 @@ export default function AdminDashboardPage() {
               initial={{ scale: 0.95, y: 15 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, y: 15 }}
-              className="w-full max-w-3xl max-h-[85vh] glass-card rounded-2xl overflow-hidden flex flex-col relative"
+              className="w-full max-w-3xl max-h-[90vh] md:max-h-[85vh] glass-card rounded-2xl overflow-hidden flex flex-col relative"
             >
               {/* Top border decor */}
               <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-purple-500 to-transparent" />
 
               {/* Modal Header */}
-              <div className="px-6 py-4 border-b border-slate-900 flex justify-between items-center bg-slate-950/60">
+              <div className="px-4 md:px-6 py-3.5 md:py-4 border-b border-slate-900 flex justify-between items-center bg-slate-950/60">
                 <h3 className="font-bold text-lg text-slate-100">
                   {activeModal === 'total' && 'All Registrations'}
                   {activeModal === 'donors' && 'Interested Donors'}
@@ -478,7 +478,7 @@ export default function AdminDashboardPage() {
               </div>
 
               {/* Modal Content Scrollbox */}
-              <div className="p-6 overflow-y-auto flex-1 divide-y divide-slate-900 bg-slate-950/40">
+              <div className="p-4 md:p-6 overflow-y-auto flex-1 divide-y divide-slate-900 bg-slate-950/40">
                 {activeModal === 'total' && (
                   <div className="space-y-4">
                     {registrations.length === 0 ? (
@@ -630,7 +630,7 @@ export default function AdminDashboardPage() {
               </div>
 
               {/* Modal Footer */}
-              <div className="px-6 py-3 border-t border-slate-900 bg-slate-950/60 flex justify-end text-[10px] text-slate-500">
+              <div className="px-4 md:px-6 py-2.5 md:py-3 border-t border-slate-900 bg-slate-950/60 flex justify-end text-[10px] text-slate-500">
                 Updating live through Supabase Realtime
               </div>
             </motion.div>

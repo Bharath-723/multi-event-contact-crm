@@ -32,6 +32,7 @@ export default function RegistrationForm() {
   const router = useRouter();
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDonationReturned, setIsDonationReturned] = useState(false);
   const [areaSearch, setAreaSearch] = useState('');
   const [showAreaDropdown, setShowAreaDropdown] = useState(false);
   const areaDropdownRef = useRef<HTMLDivElement>(null);
@@ -93,25 +94,49 @@ export default function RegistrationForm() {
   // Watch key fields to handle conditional rendering and local storage persistence
   const watchedFields = useWatch({ control });
 
-  // 3. Load Draft from Local Storage on Mount
+  // 3. Load Draft from Local Storage on Mount and detect donation success callback
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const isDonationSuccess = params.get('donation') === 'success';
       const savedDraft = localStorage.getItem(LOCAL_STORAGE_KEY);
+
       if (savedDraft) {
         try {
           const parsed = JSON.parse(savedDraft);
-          // Standardize age and nested fields
+          if (isDonationSuccess) {
+            parsed.wantsToDonate = 'Yes';
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(parsed));
+            localStorage.setItem(REDIRECT_FLAG_KEY, 'true');
+            setIsDonationReturned(true);
+          }
           reset(parsed);
           if (parsed.areaOfStay) {
-            // eslint-disable-next-line react-hooks/set-state-in-effect
             setAreaSearch(parsed.areaOfStay);
           }
         } catch (e) {
           console.error('Failed to parse draft registration', e);
         }
+      } else if (isDonationSuccess) {
+        setValue('wantsToDonate', 'Yes');
+        localStorage.setItem(REDIRECT_FLAG_KEY, 'true');
+        setIsDonationReturned(true);
+      }
+
+      if (isDonationSuccess) {
+        // Clean query parameter from address bar
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, '', newUrl);
+      } else {
+        const alreadyRedirected = localStorage.getItem(REDIRECT_FLAG_KEY) === 'true';
+        if (alreadyRedirected) {
+          setIsDonationReturned(true);
+        }
       }
     }
-  }, [reset]);
+  }, [reset, setValue]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // 4. Save draft to local storage on change
   useEffect(() => {
@@ -135,7 +160,10 @@ export default function RegistrationForm() {
         // Brief visual delay for user feedback, then redirect
         const timer = setTimeout(() => {
           localStorage.setItem(REDIRECT_FLAG_KEY, 'true');
-          window.location.href = DONATION_URL;
+          const origin = window.location.origin;
+          const returnUrl = encodeURIComponent(`${origin}/?donation=success`);
+          const targetUrl = `${DONATION_URL}&redirect_url=${returnUrl}&return_url=${returnUrl}&return=${returnUrl}`;
+          window.location.href = targetUrl;
         }, 1800);
         return () => clearTimeout(timer);
       }
@@ -143,6 +171,7 @@ export default function RegistrationForm() {
       // Clear redirect flag if they manually switch to No
       localStorage.removeItem(REDIRECT_FLAG_KEY);
       setIsRedirectingToDonate(false);
+      setIsDonationReturned(false);
     }
   }, [wantsToDonateValue, getValues]);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -311,10 +340,21 @@ export default function RegistrationForm() {
               <p className="text-white/90 text-sm mb-6 max-w-xs">
                 Thank you for supporting Rathayatra Festival 2026.
               </p>
-              <div className="relative w-12 h-12">
+              <div className="relative w-12 h-12 mb-6">
                 <div className="absolute inset-0 rounded-full border-4 border-white/20" />
                 <div className="absolute inset-0 rounded-full border-4 border-t-[#f1a817] animate-spin" />
               </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setValue('wantsToDonate', 'No');
+                  setIsRedirectingToDonate(false);
+                  setIsDonationReturned(false);
+                }}
+                className="px-6 py-2.5 rounded-xl border border-white/20 text-white/80 hover:text-white hover:bg-white/10 text-xs font-semibold transition-all cursor-pointer"
+              >
+                Cancel Redirect
+              </button>
             </div>
           </motion.div>
         )}
@@ -356,7 +396,7 @@ export default function RegistrationForm() {
         )}
       </AnimatePresence>
 
-      <div className="glass-card rounded-3xl p-6 sm:p-8 relative overflow-hidden">
+      <div className="glass-card rounded-3xl p-4 sm:p-8 relative overflow-hidden">
         {/* Decorative Top Glow */}
         <div className="absolute top-0 left-1/4 right-1/4 h-[2px] bg-gradient-to-r from-transparent via-purple-500 to-transparent" />
         <div className="absolute -top-24 -left-24 w-48 h-48 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -379,7 +419,7 @@ export default function RegistrationForm() {
         </div>
 
         {/* Header */}
-        <div className="text-center mb-8">
+        <div className="text-center mb-6 sm:mb-8">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-950/50 border border-purple-500/20 text-purple-300 text-xs font-medium mb-3">
             <Sparkles className="w-3.5 h-3.5" /> Rathayatra 2026
           </div>
@@ -788,12 +828,37 @@ export default function RegistrationForm() {
             )}
             
             {watchedFields.wantsToDonate === 'Yes' && (
-              <div className="p-3 bg-indigo-950/30 border border-indigo-500/20 rounded-xl flex gap-2 text-xs text-indigo-200">
-                <Info className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
-                <p>
-                  You will be redirected to the secure donation portal. Rest assured, your registration details are saved and you will resume here upon completion.
-                </p>
-              </div>
+              isDonationReturned ? (
+                <div className="p-3.5 bg-green-950/30 border border-green-500/30 rounded-xl flex flex-col gap-2 text-xs text-green-200 transition-colors">
+                  <div className="flex gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0 mt-0.5 animate-pulse" />
+                    <div>
+                      <p className="font-semibold text-green-300">Welcome Back!</p>
+                      <p className="mt-0.5 text-slate-300">
+                        Your details have been successfully restored. If you have completed your donation, please click <strong>Submit Registration</strong> below to complete your volunteer registration.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      localStorage.removeItem(REDIRECT_FLAG_KEY);
+                      setValue('wantsToDonate', 'No');
+                      setTimeout(() => setValue('wantsToDonate', 'Yes'), 50);
+                    }}
+                    className="self-start text-[10px] text-purple-400 hover:text-purple-300 font-semibold underline underline-offset-2 transition-colors cursor-pointer mt-1"
+                  >
+                    Did the donation portal fail to load? Click here to retry redirect.
+                  </button>
+                </div>
+              ) : (
+                <div className="p-3 bg-indigo-950/30 border border-indigo-500/20 rounded-xl flex gap-2 text-xs text-indigo-200">
+                  <Info className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+                  <p>
+                    You will be redirected to the secure donation portal. Rest assured, your registration details are saved and you will resume here upon completion.
+                  </p>
+                </div>
+              )
             )}
           </div>
 

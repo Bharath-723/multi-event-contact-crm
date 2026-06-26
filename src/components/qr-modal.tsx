@@ -199,7 +199,7 @@ export default function QRModal({ isOpen, onClose }: QRModalProps) {
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="w-full max-w-md glass-card rounded-2xl p-5 sm:p-6 relative overflow-hidden max-h-[90vh] flex flex-col"
+        className="w-full max-w-md glass-card rounded-2xl p-4 sm:p-6 relative overflow-hidden max-h-[90vh] flex flex-col"
       >
         <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-purple-500 to-transparent" />
         
