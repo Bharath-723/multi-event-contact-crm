@@ -802,6 +802,32 @@ export default function RegistrationForm() {
             <h3 className="text-sm font-semibold tracking-wider text-purple-400 uppercase">
               5. Donation Contribution
             </h3>
+            {/* Informational Donation Contribution Cards */}
+            <div className="pt-1">
+              <span className="text-xs text-slate-400 block mb-3 font-semibold uppercase tracking-wider">Donation Impact Reference</span>
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { count: '10 People', amount: '₹500', desc: 'Prasadam Sponsorship' },
+                  { count: '20 People', amount: '₹1,000', desc: 'Prasadam Sponsorship' },
+                  { count: '50 People', amount: '₹2,500', desc: 'Festival Seva' },
+                  { count: '100 People', amount: '₹5,000', desc: 'Grand Festival Seva' },
+                ].map((card, i) => (
+                  <div 
+                    key={i} 
+                    className="glass-card p-3 rounded-xl flex flex-col justify-between border border-purple-500/10 bg-purple-950/10 relative overflow-hidden pointer-events-none min-h-[90px]"
+                  >
+                    {/* Top corner color dot */}
+                    <div className="absolute top-2.5 right-2.5 w-1.5 h-1.5 rounded-full bg-purple-500/60 animate-pulse" />
+                    <div>
+                      <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">{card.count}</span>
+                      <span className="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-indigo-400 block mt-1.5">{card.amount}</span>
+                    </div>
+                    <span className="text-[9px] text-slate-500 font-medium block mt-1">{card.desc}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <span className="text-sm text-slate-300 block">Would you like to Donate? *</span>
             <div className="flex gap-4">
               {['Yes', 'No'].map((opt) => (
@@ -826,32 +852,6 @@ export default function RegistrationForm() {
             {errors.wantsToDonate && (
               <p className="text-red-400 text-xs mt-1">{errors.wantsToDonate.message}</p>
             )}
-
-            {/* Informational Donation Contribution Cards */}
-            <div className="mt-4 pt-2">
-              <span className="text-xs text-slate-400 block mb-3 font-semibold uppercase tracking-wider">Donation Impact Reference</span>
-              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                {[
-                  { count: '10 People', amount: '₹500', desc: 'Prasadam Sponsorship' },
-                  { count: '20 People', amount: '₹1,000', desc: 'Prasadam Sponsorship' },
-                  { count: '50 People', amount: '₹2,500', desc: 'Festival Seva' },
-                  { count: '100 People', amount: '₹5,000', desc: 'Grand Festival Seva' },
-                ].map((card, i) => (
-                  <div 
-                    key={i} 
-                    className="glass-card p-3 rounded-xl flex flex-col justify-between border border-purple-500/10 bg-purple-950/10 relative overflow-hidden pointer-events-none min-h-[90px]"
-                  >
-                    {/* Top corner color dot */}
-                    <div className="absolute top-2.5 right-2.5 w-1.5 h-1.5 rounded-full bg-purple-500/60 animate-pulse" />
-                    <div>
-                      <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">{card.count}</span>
-                      <span className="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-indigo-400 block mt-1.5">{card.amount}</span>
-                    </div>
-                    <span className="text-[9px] text-slate-500 font-medium block mt-1">{card.desc}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
             
             {watchedFields.wantsToDonate === 'Yes' && (
               isDonationReturned ? (
