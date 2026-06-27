@@ -826,10 +826,38 @@ export default function RegistrationForm() {
             {errors.wantsToDonate && (
               <p className="text-red-400 text-xs mt-1">{errors.wantsToDonate.message}</p>
             )}
+
+            {/* Informational Donation Contribution Cards */}
+            <div className="mt-4 pt-2">
+              <span className="text-xs text-slate-400 block mb-3 font-semibold uppercase tracking-wider">Donation Impact Reference</span>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {[
+                  { count: '10 People', amount: '₹500', desc: 'Prasadam Sponsorship' },
+                  { count: '20 People', amount: '₹1,000', desc: 'Prasadam Sponsorship' },
+                  { count: '50 People', amount: '₹2,500', desc: 'Festival Seva' },
+                  { count: '100 People', amount: '₹5,000', desc: 'Grand Festival Seva' },
+                ].map((card, i) => (
+                  <div 
+                    key={i} 
+                    className={`glass-card p-3 rounded-xl flex flex-col justify-between border border-purple-500/10 bg-purple-950/10 relative overflow-hidden pointer-events-none min-h-[90px] ${
+                      i === 3 ? 'col-span-2 md:col-span-1' : ''
+                    }`}
+                  >
+                    {/* Top corner color dot */}
+                    <div className="absolute top-2.5 right-2.5 w-1.5 h-1.5 rounded-full bg-purple-500/60 animate-pulse" />
+                    <div>
+                      <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">{card.count}</span>
+                      <span className="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-indigo-400 block mt-1.5">{card.amount}</span>
+                    </div>
+                    <span className="text-[9px] text-slate-500 font-medium block mt-1">{card.desc}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
             
             {watchedFields.wantsToDonate === 'Yes' && (
               isDonationReturned ? (
-                <div className="p-3.5 bg-green-950/30 border border-green-500/30 rounded-xl flex flex-col gap-2 text-xs text-green-200 transition-colors">
+                <div className="p-3.5 bg-green-950/30 border border-green-500/30 rounded-xl flex flex-col gap-2 text-xs text-green-200 transition-colors mt-3">
                   <div className="flex gap-2">
                     <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0 mt-0.5 animate-pulse" />
                     <div>
@@ -852,7 +880,7 @@ export default function RegistrationForm() {
                   </button>
                 </div>
               ) : (
-                <div className="p-3 bg-indigo-950/30 border border-indigo-500/20 rounded-xl flex gap-2 text-xs text-indigo-200">
+                <div className="p-3 bg-indigo-950/30 border border-indigo-500/20 rounded-xl flex gap-2 text-xs text-indigo-200 mt-3">
                   <Info className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
                   <p>
                     You will be redirected to the secure donation portal. Rest assured, your registration details are saved and you will resume here upon completion.

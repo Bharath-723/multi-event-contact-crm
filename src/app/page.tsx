@@ -7,8 +7,8 @@ export const metadata = {
 
 export default function RegisterPage() {
   return (
-    <div className="dark min-h-screen bg-[#030014] text-slate-100">
-      <main className="relative min-h-screen flex items-center justify-center py-12 px-4 bg-gradient-purple">
+    <div className="dark min-h-screen bg-[#030014] text-slate-100 overflow-x-hidden">
+      <main className="relative min-h-screen flex items-center justify-center py-12 px-4 bg-gradient-purple overflow-hidden">
         {/* Visual background decorations - absolute positioned glow rings */}
         <div className="absolute top-1/4 left-10 w-96 h-96 bg-purple-600/10 rounded-full blur-[100px] pointer-events-none" />
         <div className="absolute bottom-1/4 right-10 w-96 h-96 bg-indigo-600/10 rounded-full blur-[100px] pointer-events-none" />

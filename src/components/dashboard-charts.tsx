@@ -156,12 +156,20 @@ export default function DashboardCharts({ dailyData, skillData, slotData, gender
                       cx="50%"
                       cy="50%"
                       outerRadius={75}
+                      innerRadius={45}
+                      paddingAngle={3}
                       dataKey="value"
-                      label={({ name, percent }) => `${name} ${percent !== undefined ? (percent * 100).toFixed(0) : 0}%`}
-                      labelLine={false}
                     >
-                      <Cell fill="#a855f7" /> {/* Male - Purple */}
-                      <Cell fill="#ec4899" /> {/* Female - Pink */}
+                      {genderData.map((entry, index) => {
+                        const colors: Record<string, string> = {
+                          Male: '#8b5cf6',
+                          Female: '#ec4899',
+                          Other: '#3b82f6'
+                        };
+                        return (
+                          <Cell key={`cell-${index}`} fill={colors[entry.name] || '#64748b'} />
+                        );
+                      })}
                     </Pie>
                     <Tooltip
                       contentStyle={{
@@ -177,15 +185,24 @@ export default function DashboardCharts({ dailyData, skillData, slotData, gender
               </div>
 
               <div className="mt-4 sm:mt-0 sm:ml-6 flex flex-col gap-2 w-full max-w-[150px]">
-                {genderData.map((item, index) => (
-                  <div key={item.name} className="flex justify-between items-center text-xs">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: index === 0 ? '#a855f7' : '#ec4899' }} />
-                      <span className="text-slate-300 font-medium">{item.name}</span>
+                {genderData.map((item) => {
+                  const colors: Record<string, string> = {
+                    Male: '#8b5cf6',
+                    Female: '#ec4899',
+                    Other: '#3b82f6'
+                  };
+                  const total = genderData.reduce((acc, curr) => acc + curr.value, 0);
+                  const percentage = total > 0 ? Math.round((item.value / total) * 100) : 0;
+                  return (
+                    <div key={item.name} className="flex justify-between items-center text-xs">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colors[item.name] || '#64748b' }} />
+                        <span className="text-slate-350 dark:text-slate-300 font-medium">{item.name}</span>
+                      </div>
+                      <span className="font-bold text-slate-800 dark:text-slate-100">{item.value} ({percentage}%)</span>
                     </div>
-                    <span className="font-bold text-slate-100">{item.value}</span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </>
           )}

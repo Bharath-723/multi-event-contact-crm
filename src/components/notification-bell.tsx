@@ -221,26 +221,26 @@ export default function NotificationBell() {
                   return (
                     <div
                       key={notification.id}
-                      className={`p-4 flex gap-3 transition-colors ${
+                      className={`p-3.5 flex gap-3 transition-colors ${
                         !notification.is_read
-                          ? 'bg-purple-950/15 hover:bg-purple-950/25'
-                          : 'hover:bg-slate-900/40'
+                          ? 'bg-purple-50 dark:bg-purple-950/15 hover:bg-purple-100/80 dark:hover:bg-purple-950/25'
+                          : 'hover:bg-slate-100 dark:hover:bg-slate-900/40'
                       }`}
                     >
-                      <div className="w-8 h-8 rounded-full bg-purple-900/30 border border-purple-500/20 text-purple-400 flex items-center justify-center shrink-0 mt-0.5">
+                      <div className="w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0 mt-0.5">
                         <UserCheck className="w-4 h-4" />
                       </div>
                       <div className="flex-1 min-w-0 text-left">
-                        <p className="text-sm font-semibold text-slate-100 truncate">
+                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
                           {reg?.full_name || 'New Registration'}
                         </p>
                         {reg?.phone && (
-                          <p className="text-xs text-slate-450 mt-1 truncate">
+                          <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 truncate">
                             Phone: {reg.phone}
                           </p>
                         )}
                         {formattedDate && (
-                          <p className="text-[10px] text-purple-450 mt-2 font-medium">
+                          <p className="text-[10px] text-purple-700 dark:text-purple-400 mt-1.5 font-semibold">
                             {formattedDate}
                           </p>
                         )}

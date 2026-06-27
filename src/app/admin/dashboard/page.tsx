@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { Registration, VolunteerSlot } from '@/lib/types';
 import { 
   Users, Heart, Soup, Clock, Loader2, X, Phone, 
-  User, CheckCircle, ExternalLink, Calendar
+  User, CheckCircle, ExternalLink, Calendar, Building
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -277,81 +277,81 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* 1. Statistics Cards Section */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6">
+      <section className="grid grid-cols-2 lg:grid-cols-5 gap-3.5 md:gap-6">
         
         {/* Total Registrations */}
         <div 
           onClick={() => setActiveModal('total')}
-          className="glass-card rounded-2xl p-4 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[110px] md:min-h-[140px]"
+          className="glass-card rounded-2xl p-3.5 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[105px] md:min-h-[140px]"
         >
           <div>
-            <span className="text-[9px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider block">Total Registrations</span>
-            <span className="text-xl md:text-3xl font-extrabold text-slate-100 mt-2 block">{totalCount}</span>
+            <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Total Registrations</span>
+            <span className="text-lg md:text-3xl font-extrabold text-slate-900 dark:text-slate-100 mt-1 md:mt-2 block">{totalCount}</span>
           </div>
-          <span className="text-[9px] md:text-[10px] text-purple-400 font-bold mt-3 md:mt-4 flex items-center gap-1">
+          <span className="text-[9px] md:text-[10px] text-purple-600 dark:text-purple-400 font-bold mt-2 md:mt-4 flex items-center gap-1">
             Click to view list <ExternalLink className="w-3 h-3" />
           </span>
-          <Users className="w-10 h-10 md:w-14 md:h-14 opacity-15 absolute -right-1 -top-1 text-slate-700 group-hover:text-purple-400/80 transition-colors" />
+          <Users className="w-9 h-9 md:w-16 md:h-16 opacity-8 md:opacity-12 absolute right-2 top-2 text-slate-400 dark:text-slate-700 group-hover:text-purple-400/80 transition-colors" />
         </div>
 
         {/* Total Volunteers */}
         <div 
           onClick={() => setActiveModal('volunteers')}
-          className="glass-card rounded-2xl p-4 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[110px] md:min-h-[140px]"
+          className="glass-card rounded-2xl p-3.5 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[105px] md:min-h-[140px]"
         >
           <div>
-            <span className="text-[9px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider block">Total Volunteers</span>
-            <span className="text-xl md:text-3xl font-extrabold text-slate-100 mt-2 block">{volunteersCount}</span>
+            <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Total Volunteers</span>
+            <span className="text-lg md:text-3xl font-extrabold text-slate-900 dark:text-slate-100 mt-1 md:mt-2 block">{volunteersCount}</span>
           </div>
-          <span className="text-[9px] md:text-[10px] text-purple-400 font-bold mt-3 md:mt-4 flex items-center gap-1">
-            Grouped by time slot <ExternalLink className="w-3 h-3" />
+          <span className="text-[9px] md:text-[10px] text-purple-600 dark:text-purple-400 font-bold mt-2 md:mt-4 flex items-center gap-1">
+            Grouped by slot <ExternalLink className="w-3 h-3" />
           </span>
-          <Clock className="w-10 h-10 md:w-14 md:h-14 opacity-15 absolute -right-1 -top-1 text-slate-700 group-hover:text-purple-400/80 transition-colors" />
+          <Clock className="w-9 h-9 md:w-16 md:h-16 opacity-8 md:opacity-12 absolute right-2 top-2 text-slate-400 dark:text-slate-700 group-hover:text-purple-400/80 transition-colors" />
         </div>
 
         {/* Total Donors */}
         <div 
           onClick={() => setActiveModal('donors')}
-          className="glass-card rounded-2xl p-4 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[110px] md:min-h-[140px]"
+          className="glass-card rounded-2xl p-3.5 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[105px] md:min-h-[140px]"
         >
           <div>
-            <span className="text-[9px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider block">Total Donors</span>
-            <span className="text-xl md:text-3xl font-extrabold text-slate-100 mt-2 block">{donorsCount}</span>
+            <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Total Donors</span>
+            <span className="text-lg md:text-3xl font-extrabold text-slate-900 dark:text-slate-100 mt-1 md:mt-2 block">{donorsCount}</span>
           </div>
-          <span className="text-[9px] md:text-[10px] text-purple-400 font-bold mt-3 md:mt-4 flex items-center gap-1">
+          <span className="text-[9px] md:text-[10px] text-purple-600 dark:text-purple-400 font-bold mt-2 md:mt-4 flex items-center gap-1">
             Click to view list <ExternalLink className="w-3 h-3" />
           </span>
-          <Heart className="w-10 h-10 md:w-14 md:h-14 opacity-15 absolute -right-1 -top-1 text-slate-700 group-hover:text-purple-400/80 transition-colors" />
+          <Heart className="w-9 h-9 md:w-16 md:h-16 opacity-8 md:opacity-12 absolute right-2 top-2 text-slate-400 dark:text-slate-700 group-hover:text-purple-400/80 transition-colors" />
         </div>
 
         {/* Dinner Prasadam */}
         <div 
           onClick={() => setActiveModal('prasadam')}
-          className="glass-card rounded-2xl p-4 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[110px] md:min-h-[140px]"
+          className="glass-card rounded-2xl p-3.5 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[105px] md:min-h-[140px]"
         >
           <div>
-            <span className="text-[9px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider block">Dinner Prasadam</span>
-            <span className="text-xl md:text-3xl font-extrabold text-slate-100 mt-2 block">{dinnerCount}</span>
+            <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Dinner Prasadam</span>
+            <span className="text-lg md:text-3xl font-extrabold text-slate-900 dark:text-slate-100 mt-1 md:mt-2 block">{dinnerCount}</span>
           </div>
-          <span className="text-[9px] md:text-[10px] text-purple-400 font-bold mt-3 md:mt-4 flex items-center gap-1">
+          <span className="text-[9px] md:text-[10px] text-purple-600 dark:text-purple-400 font-bold mt-2 md:mt-4 flex items-center gap-1">
             Click to view list <ExternalLink className="w-3 h-3" />
           </span>
-          <Soup className="w-10 h-10 md:w-14 md:h-14 opacity-15 absolute -right-1 -top-1 text-slate-700 group-hover:text-purple-400/80 transition-colors" />
+          <Soup className="w-9 h-9 md:w-16 md:h-16 opacity-8 md:opacity-12 absolute right-2 top-2 text-slate-400 dark:text-slate-700 group-hover:text-purple-400/80 transition-colors" />
         </div>
 
         {/* Today's Registrations */}
         <div 
           onClick={() => setActiveModal('todays')}
-          className="glass-card rounded-2xl p-4 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[110px] md:min-h-[140px]"
+          className="glass-card rounded-2xl p-3.5 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[105px] md:min-h-[140px] col-span-2 lg:col-span-1"
         >
           <div>
-            <span className="text-[9px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider block">Today&apos;s Registrations</span>
-            <span className="text-xl md:text-3xl font-extrabold text-slate-100 mt-2 block">{todaysCount}</span>
+            <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Today&apos;s Registrations</span>
+            <span className="text-lg md:text-3xl font-extrabold text-slate-900 dark:text-slate-100 mt-1 md:mt-2 block">{todaysCount}</span>
           </div>
-          <span className="text-[9px] md:text-[10px] text-purple-400 font-bold mt-3 md:mt-4 flex items-center gap-1">
+          <span className="text-[9px] md:text-[10px] text-purple-600 dark:text-purple-400 font-bold mt-2 md:mt-4 flex items-center gap-1">
             Click to view list <ExternalLink className="w-3 h-3" />
           </span>
-          <Calendar className="w-10 h-10 md:w-14 md:h-14 opacity-15 absolute -right-1 -top-1 text-slate-700 group-hover:text-purple-400/80 transition-colors" />
+          <Calendar className="w-9 h-9 md:w-16 md:h-16 opacity-8 md:opacity-12 absolute right-2 top-2 text-slate-400 dark:text-slate-700 group-hover:text-purple-400/80 transition-colors" />
         </div>
 
       </section>
@@ -371,20 +371,38 @@ export default function AdminDashboardPage() {
               </div>
             ) : (
               registrations.slice(0, 10).map((reg) => (
-                <div key={reg.id} className="py-2.5 flex justify-between items-center text-xs">
-                  <div>
-                    <p className="font-semibold text-slate-100 text-sm flex items-center gap-1.5">
-                      <User className="w-3.5 h-3.5 text-purple-400" /> {reg.full_name}
-                      <span className="text-[9px] text-slate-500 font-medium px-1.5 py-0.5 rounded border border-slate-800">Age: {reg.age}</span>
+                <div key={reg.id} className="py-3 flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2.5 sm:gap-2">
+                  <div className="space-y-1 sm:space-y-0.5">
+                    {/* Name */}
+                    <p className="font-semibold text-slate-900 dark:text-slate-100 text-sm flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" /> 
+                      <span className="truncate max-w-[200px] sm:max-w-xs">{reg.full_name}</span>
                     </p>
-                    <p className="text-slate-400 mt-1 flex items-center gap-1.5 font-mono text-[10px]">
-                      <Phone className="w-3 h-3 text-slate-500" /> {reg.phone}
-                      {reg.company_college && <span className="text-[9px] text-slate-500">| {reg.company_college}</span>}
+                    {/* Phone */}
+                    <p className="text-slate-500 dark:text-slate-400 flex items-center gap-1.5 font-mono text-[11px]">
+                      <Phone className="w-3 h-3 text-slate-450 dark:text-slate-550 shrink-0" /> 
+                      <span>{reg.phone}</span>
                     </p>
+                    {/* Company */}
+                    {reg.company_college && (
+                      <p className="text-slate-500 dark:text-slate-400 flex items-center gap-1.5 text-[11px]">
+                        <Building className="w-3 h-3 text-slate-450 dark:text-slate-550 shrink-0" />
+                        <span className="truncate max-w-[200px] sm:max-w-xs">{reg.company_college}</span>
+                      </p>
+                    )}
+                    {/* Age Badge */}
+                    <div className="pt-0.5 sm:pt-0 sm:inline-block">
+                      <span className="text-[9px] text-slate-600 dark:text-slate-300 font-bold px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900/60 inline-block">
+                        Age: {reg.age}
+                      </span>
+                    </div>
                   </div>
-                  <span className="text-[10px] text-slate-500 font-medium bg-slate-900 px-2 py-0.5 rounded-md">
-                    {formatDate(reg.created_at).split(',')[0]}
-                  </span>
+                  {/* Date */}
+                  <div className="self-start sm:self-center">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold bg-slate-100 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-850 px-2 py-0.5 rounded-md inline-block">
+                      {formatDate(reg.created_at).split(',')[0]}
+                    </span>
+                  </div>
                 </div>
               ))
             )}
@@ -455,14 +473,14 @@ export default function AdminDashboardPage() {
               initial={{ scale: 0.95, y: 15 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, y: 15 }}
-              className="w-full max-w-3xl max-h-[90vh] md:max-h-[85vh] glass-card rounded-2xl overflow-hidden flex flex-col relative"
+              className="w-[calc(100vw-20px)] sm:w-full max-w-[420px] sm:max-w-[700px] max-h-[80vh] glass-card rounded-2xl overflow-hidden flex flex-col relative"
             >
               {/* Top border decor */}
               <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-purple-500 to-transparent" />
-
+ 
               {/* Modal Header */}
-              <div className="px-4 md:px-6 py-3.5 md:py-4 border-b border-slate-900 flex justify-between items-center bg-slate-950/60">
-                <h3 className="font-bold text-lg text-slate-100">
+              <div className="px-4 md:px-6 py-3 border-b border-slate-900 flex justify-between items-center bg-slate-950/60 shrink-0">
+                <h3 className="font-bold text-base sm:text-lg text-slate-100">
                   {activeModal === 'total' && 'All Registrations'}
                   {activeModal === 'donors' && 'Interested Donors'}
                   {activeModal === 'prasadam' && 'Dinner Prasadam List'}
@@ -473,30 +491,30 @@ export default function AdminDashboardPage() {
                   onClick={() => setActiveModal(null)}
                   className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-100 cursor-pointer"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
               </div>
-
+ 
               {/* Modal Content Scrollbox */}
-              <div className="p-4 md:p-6 overflow-y-auto flex-1 divide-y divide-slate-900 bg-slate-950/40">
+              <div className="p-3 sm:p-6 overflow-y-auto flex-1 divide-y divide-slate-900/60 bg-slate-950/40">
                 {activeModal === 'total' && (
-                  <div className="space-y-4">
+                  <div className="space-y-3.5">
                     {registrations.length === 0 ? (
                       <p className="text-slate-500 text-sm text-center py-8">No registrations found.</p>
                     ) : (
                       registrations.map(reg => (
-                        <div key={reg.id} className="py-3 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+                        <div key={reg.id} className="py-2.5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                           <div>
-                            <p className="font-semibold text-slate-100 text-sm flex items-center gap-1.5">
-                              <User className="w-4 h-4 text-purple-400" /> {reg.full_name} 
-                              <span className="text-[10px] text-slate-500 font-medium px-2 py-0.5 rounded-full border border-slate-800">Age: {reg.age}</span>
+                            <p className="font-semibold text-slate-900 dark:text-slate-100 text-sm flex items-center gap-1.5 flex-wrap">
+                              <User className="w-4 h-4 text-purple-600 dark:text-purple-400" /> {reg.full_name} 
+                              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-850 bg-slate-100 dark:bg-slate-900">Age: {reg.age}</span>
                             </p>
-                            <p className="text-xs text-slate-400 mt-1 flex items-center gap-1.5">
-                              <Phone className="w-3.5 h-3.5 text-slate-500" /> {reg.phone}
-                              {reg.company_college && <span className="text-[10px] text-slate-500">| {reg.company_college}</span>}
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1.5 flex-wrap">
+                              <Phone className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" /> {reg.phone}
+                              {reg.company_college && <span className="text-[10px] text-slate-400 dark:text-slate-500">| {reg.company_college}</span>}
                             </p>
                           </div>
-                          <span className="text-[10px] text-slate-500 self-start sm:self-center font-medium bg-slate-900 px-2.5 py-1 rounded-md">
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400 self-start sm:self-center font-medium bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-2 py-0.5 rounded-md">
                             {formatDate(reg.created_at)}
                           </span>
                         </div>
@@ -504,25 +522,25 @@ export default function AdminDashboardPage() {
                     )}
                   </div>
                 )}
-
+ 
                 {activeModal === 'todays' && (
-                  <div className="space-y-4">
+                  <div className="space-y-3.5">
                     {todaysList.length === 0 ? (
                       <p className="text-slate-500 text-sm text-center py-8">No registrations found.</p>
                     ) : (
                       todaysList.map(reg => (
-                        <div key={reg.id} className="py-3 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+                        <div key={reg.id} className="py-2.5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                           <div>
-                            <p className="font-semibold text-slate-100 text-sm flex items-center gap-1.5">
-                              <User className="w-4 h-4 text-purple-400" /> {reg.full_name} 
-                              <span className="text-[10px] text-slate-500 font-medium px-2 py-0.5 rounded-full border border-slate-800">Age: {reg.age}</span>
+                            <p className="font-semibold text-slate-900 dark:text-slate-100 text-sm flex items-center gap-1.5 flex-wrap">
+                              <User className="w-4 h-4 text-purple-600 dark:text-purple-400" /> {reg.full_name} 
+                              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-850 bg-slate-100 dark:bg-slate-900">Age: {reg.age}</span>
                             </p>
-                            <p className="text-xs text-slate-400 mt-1 flex items-center gap-1.5">
-                              <Phone className="w-3.5 h-3.5 text-slate-500" /> {reg.phone}
-                              {reg.company_college && <span className="text-[10px] text-slate-500">| {reg.company_college}</span>}
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1.5 flex-wrap">
+                              <Phone className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" /> {reg.phone}
+                              {reg.company_college && <span className="text-[10px] text-slate-400 dark:text-slate-500">| {reg.company_college}</span>}
                             </p>
                           </div>
-                          <span className="text-[10px] text-slate-500 self-start sm:self-center font-medium bg-slate-900 px-2.5 py-1 rounded-md">
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400 self-start sm:self-center font-medium bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-2 py-0.5 rounded-md">
                             {formatDate(reg.created_at)}
                           </span>
                         </div>
@@ -530,26 +548,26 @@ export default function AdminDashboardPage() {
                     )}
                   </div>
                 )}
-
+ 
                 {activeModal === 'donors' && (
-                  <div className="space-y-4">
+                  <div className="space-y-3.5">
                     {donorsList.length === 0 ? (
                       <p className="text-slate-500 text-sm text-center py-8">No donations received yet.</p>
                     ) : (
                       donorsList.map(reg => (
-                        <div key={reg.id} className="py-3 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+                        <div key={reg.id} className="py-2.5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                           <div>
-                            <p className="font-semibold text-slate-100 text-sm flex items-center gap-1.5">
-                              <User className="w-4 h-4 text-purple-400" /> {reg.full_name}
+                            <p className="font-semibold text-slate-900 dark:text-slate-100 text-sm flex items-center gap-1.5">
+                              <User className="w-4 h-4 text-purple-600 dark:text-purple-400" /> {reg.full_name}
                             </p>
-                            <p className="text-xs text-slate-400 mt-1 flex items-center gap-1.5">
-                              <Phone className="w-3.5 h-3.5 text-slate-500" /> {reg.phone}
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1.5">
+                              <Phone className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" /> {reg.phone}
                             </p>
                           </div>
                           <span className={`text-[10px] font-bold px-3 py-1 rounded-full border self-start sm:self-center ${
                             reg.donation_status === 'Completed'
-                              ? 'bg-green-950/20 border-green-500/30 text-green-400'
-                              : 'bg-yellow-950/20 border-yellow-500/30 text-yellow-400'
+                              ? 'bg-green-100 dark:bg-green-950/20 border-green-500/30 text-green-600 dark:text-green-400'
+                              : 'bg-yellow-100 dark:bg-yellow-950/20 border-yellow-500/30 text-yellow-650 dark:text-yellow-400'
                           }`}>
                             {reg.donation_status}
                           </span>
@@ -558,61 +576,61 @@ export default function AdminDashboardPage() {
                     )}
                   </div>
                 )}
-
+ 
                 {activeModal === 'prasadam' && (
-                  <div className="space-y-4">
+                  <div className="space-y-3.5">
                     {dinnerList.length === 0 ? (
                       <p className="text-slate-500 text-sm text-center py-8">No prasadam requests.</p>
                     ) : (
                       dinnerList.map(reg => (
-                        <div key={reg.id} className="py-3 flex justify-between items-center">
+                        <div key={reg.id} className="py-2.5 flex justify-between items-center">
                           <div>
-                            <p className="font-semibold text-slate-100 text-sm flex items-center gap-1.5">
-                              <User className="w-4 h-4 text-purple-400" /> {reg.full_name}
+                            <p className="font-semibold text-slate-900 dark:text-slate-100 text-sm flex items-center gap-1.5">
+                              <User className="w-4 h-4 text-purple-600 dark:text-purple-400" /> {reg.full_name}
                             </p>
-                            <p className="text-xs text-slate-400 mt-1 flex items-center gap-1.5">
-                              <Phone className="w-3.5 h-3.5 text-slate-500" /> {reg.phone}
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1.5">
+                              <Phone className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" /> {reg.phone}
                             </p>
                           </div>
-                          <span className="text-[10px] font-semibold text-green-400 bg-green-950/20 border border-green-500/30 px-2.5 py-1 rounded-full flex items-center gap-1">
-                            <CheckCircle className="w-3 h-3" /> Dinner Prasadam Opted
+                          <span className="text-[10px] font-semibold text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-950/20 border border-green-500/30 px-2.5 py-1 rounded-full flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3 animate-pulse" /> Dinner Opted
                           </span>
                         </div>
                       ))
                     )}
                   </div>
                 )}
-
+ 
                 {activeModal === 'volunteers' && (
-                  <div className="space-y-6">
+                  <div className="space-y-5">
                     {volunteersCount === 0 ? (
                       <p className="text-slate-500 text-sm text-center py-8">No volunteers registered yet.</p>
                     ) : (
                       volunteersBySlot.map(group => (
-                        <div key={group.slotName} className="space-y-3 pt-2 first:pt-0">
-                          <h4 className="text-sm font-bold text-purple-400 flex items-center justify-between bg-purple-950/20 border-l-2 border-purple-500 px-3 py-1.5 rounded-r-md">
+                        <div key={group.slotName} className="space-y-2.5 pt-2 first:pt-0">
+                          <h4 className="text-xs sm:text-sm font-bold text-purple-600 dark:text-purple-400 flex items-center justify-between bg-purple-100 dark:bg-purple-950/20 border-l-2 border-purple-500 px-3 py-1.5 rounded-r-md">
                             <span>{group.slotName}</span>
-                            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-900 text-slate-300">
+                            <span className="text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-900 text-slate-650 dark:text-slate-300">
                               {group.count} {group.count === 1 ? 'Volunteer' : 'Volunteers'}
                             </span>
                           </h4>
                           
                           {group.volunteers.length === 0 ? (
-                            <p className="text-xs text-slate-500 pl-4 py-1 italic">No volunteers for this slot.</p>
+                            <p className="text-[11px] text-slate-500 pl-4 py-1 italic">No volunteers for this slot.</p>
                           ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-2">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pl-2">
                               {group.volunteers.map(v => (
-                                <div key={v.id} className="p-3 rounded-xl bg-slate-900/40 border border-slate-850 flex flex-col gap-1">
-                                  <span className="font-semibold text-slate-100 text-sm flex items-center gap-1.5">
-                                    <User className="w-3.5 h-3.5 text-purple-400" /> {v.full_name}
+                                <div key={v.id} className="p-2.5 rounded-xl bg-slate-100/50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-850 flex flex-col gap-1">
+                                  <span className="font-semibold text-slate-900 dark:text-slate-100 text-xs sm:text-sm flex items-center gap-1.5">
+                                    <User className="w-3.5 h-3.5 text-purple-500" /> {v.full_name}
                                   </span>
-                                  <span className="text-xs text-slate-400 flex items-center gap-1.5">
-                                    <Phone className="w-3 h-3 text-slate-500" /> {v.phone}
+                                  <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5 font-mono">
+                                    <Phone className="w-3 h-3 text-slate-400 dark:text-slate-500" /> {v.phone}
                                   </span>
                                   {v.skills && v.skills.length > 0 && (
-                                    <div className="flex flex-wrap gap-1 mt-1.5">
+                                    <div className="flex flex-wrap gap-1 mt-1">
                                       {v.skills.map(s => (
-                                        <span key={s.id} className="text-[9px] font-medium bg-purple-950/40 text-purple-300 px-2 py-0.5 rounded border border-purple-500/10">
+                                        <span key={s.id} className="text-[9px] font-medium bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded border border-purple-200 dark:border-purple-500/10">
                                           {s.name}
                                         </span>
                                       ))}
@@ -628,10 +646,10 @@ export default function AdminDashboardPage() {
                   </div>
                 )}
               </div>
-
-              {/* Modal Footer */}
-              <div className="px-4 md:px-6 py-2.5 md:py-3 border-t border-slate-900 bg-slate-950/60 flex justify-end text-[10px] text-slate-500">
-                Updating live through Supabase Realtime
+ 
+              {/* Modal Footer - Fixed */}
+              <div className="px-4 md:px-6 py-2.5 bg-slate-950/60 border-t border-slate-900 shrink-0 text-right text-[10px] text-slate-500 font-medium">
+                Live Data Feed
               </div>
             </motion.div>
           </motion.div>
