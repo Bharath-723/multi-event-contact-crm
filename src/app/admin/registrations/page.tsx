@@ -659,8 +659,8 @@ export default function RegistrationsPage() {
           )}
         </div>
 
-        {/* Search bars */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Search bars — hidden on mobile */}
+        <div className="hidden sm:grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="relative">
             <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
               <Search className="w-4.5 h-4.5" />
@@ -706,9 +706,9 @@ export default function RegistrationsPage() {
           </div>
         </div>
 
-        {/* Dropdown filters grid */}
+        {/* Dropdown filters grid — Mobile: Gender, Volunteer, Slot only */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3.5 pt-2">
-          {/* Gender */}
+          {/* Gender — always visible */}
           <select
             value={filterGender}
             onChange={(e) => setFilterGender(e.target.value)}
@@ -719,7 +719,7 @@ export default function RegistrationsPage() {
             <option value="Female">Female</option>
           </select>
 
-          {/* Volunteer Status */}
+          {/* Volunteer Status — always visible */}
           <select
             value={filterVolunteer}
             onChange={(e) => setFilterVolunteer(e.target.value)}
@@ -730,7 +730,7 @@ export default function RegistrationsPage() {
             <option value="No">Non-Volunteers Only</option>
           </select>
 
-          {/* Volunteer Slot */}
+          {/* Volunteer Slot — always visible */}
           <select
             value={filterSlot}
             onChange={(e) => setFilterSlot(e.target.value)}
@@ -743,22 +743,22 @@ export default function RegistrationsPage() {
             ))}
           </select>
 
-          {/* Dinner Prasadam */}
+          {/* Dinner Prasadam — hidden on mobile */}
           <select
             value={filterPrasadam}
             onChange={(e) => setFilterPrasadam(e.target.value)}
-            className="px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-800 text-slate-300 focus:outline-none cursor-pointer"
+            className="hidden sm:block px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-800 text-slate-300 focus:outline-none cursor-pointer"
           >
             <option value="">Dinner Prasadam (All)</option>
             <option value="Yes">Yes</option>
             <option value="No">No</option>
           </select>
 
-          {/* Donation Status */}
+          {/* Donation Status — hidden on mobile */}
           <select
             value={filterDonation}
             onChange={(e) => setFilterDonation(e.target.value)}
-            className="px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-800 text-slate-300 focus:outline-none cursor-pointer"
+            className="hidden sm:block px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-800 text-slate-300 focus:outline-none cursor-pointer"
           >
             <option value="">Donation (All)</option>
             <option value="Yes">Interested Donors</option>
@@ -768,11 +768,11 @@ export default function RegistrationsPage() {
             <option value="Completed">Status: Completed</option>
           </select>
 
-          {/* Area filter */}
+          {/* Area filter — hidden on mobile */}
           <select
             value={filterArea}
             onChange={(e) => setFilterArea(e.target.value)}
-            className="px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-800 text-slate-300 focus:outline-none cursor-pointer"
+            className="hidden sm:block px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-800 text-slate-300 focus:outline-none cursor-pointer"
           >
             <option value="">Area of Stay (All)</option>
             {uniqueAreas.map(a => (
@@ -780,11 +780,11 @@ export default function RegistrationsPage() {
             ))}
           </select>
 
-          {/* Company filter */}
+          {/* Company filter — hidden on mobile */}
           <select
             value={filterCompany}
             onChange={(e) => setFilterCompany(e.target.value)}
-            className="px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-800 text-slate-300 focus:outline-none cursor-pointer"
+            className="hidden sm:block px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-800 text-slate-300 focus:outline-none cursor-pointer"
           >
             <option value="">Company/College (All)</option>
             {uniqueCompanies.map(c => (
@@ -792,11 +792,11 @@ export default function RegistrationsPage() {
             ))}
           </select>
 
-          {/* Skill Filter */}
+          {/* Skill Filter — hidden on mobile */}
           <select
             value={filterSkill}
             onChange={(e) => setFilterSkill(e.target.value)}
-            className="px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-800 text-slate-300 focus:outline-none cursor-pointer"
+            className="hidden sm:block px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-800 text-slate-300 focus:outline-none cursor-pointer"
           >
             <option value="">Skill (All)</option>
             {skills.map(s => (
@@ -804,12 +804,12 @@ export default function RegistrationsPage() {
             ))}
           </select>
 
-          {/* Date Picker */}
+          {/* Date Picker — hidden on mobile */}
           <input
             type="date"
             value={filterDate}
             onChange={(e) => setFilterDate(e.target.value)}
-            className="px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-800 text-slate-300 focus:outline-none cursor-pointer"
+            className="hidden sm:block px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-800 text-slate-300 focus:outline-none cursor-pointer"
           />
         </div>
       </div>

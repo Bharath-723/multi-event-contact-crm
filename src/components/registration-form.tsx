@@ -320,11 +320,11 @@ export default function RegistrationForm() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#0b66a5] text-center p-6"
+            className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#0b66a5] text-center p-4 pb-[env(safe-area-inset-bottom,16px)]"
           >
-            <div className="relative max-w-sm flex flex-col items-center p-8 bg-[#0b66a5] rounded-3xl">
+            <div className="w-full max-w-sm flex flex-col items-center px-4">
               {/* Logo */}
-              <div className="mb-6 relative w-[200px] h-[129px] overflow-hidden">
+              <div className="mb-4 relative w-[160px] h-[103px] sm:w-[200px] sm:h-[129px] overflow-hidden shrink-0">
                 <Image 
                   src="/hkm-logo.png" 
                   alt="Hare Krishna Movement" 
@@ -334,13 +334,13 @@ export default function RegistrationForm() {
                   className="object-contain animate-pulse"
                 />
               </div>
-              <h2 className="text-xl font-bold text-white mb-2 tracking-wide">
+              <h2 className="text-lg sm:text-xl font-bold text-white mb-2 tracking-wide">
                 Redirecting to Secure Donation Portal...
               </h2>
-              <p className="text-white/90 text-sm mb-6 max-w-xs">
+              <p className="text-white/90 text-sm mb-5 max-w-xs">
                 Thank you for supporting Rathayatra Festival 2026.
               </p>
-              <div className="relative w-12 h-12 mb-6">
+              <div className="relative w-12 h-12 mb-5 shrink-0">
                 <div className="absolute inset-0 rounded-full border-4 border-white/20" />
                 <div className="absolute inset-0 rounded-full border-4 border-t-[#f1a817] animate-spin" />
               </div>
@@ -351,7 +351,7 @@ export default function RegistrationForm() {
                   setIsRedirectingToDonate(false);
                   setIsDonationReturned(false);
                 }}
-                className="px-6 py-2.5 rounded-xl border border-white/20 text-white/80 hover:text-white hover:bg-white/10 text-xs font-semibold transition-all cursor-pointer"
+                className="w-full max-w-xs min-h-[44px] px-6 py-3 rounded-xl border border-white/30 text-white hover:bg-white/10 text-sm font-semibold transition-all cursor-pointer"
               >
                 Cancel Redirect
               </button>
@@ -830,7 +830,7 @@ export default function RegistrationForm() {
             {/* Informational Donation Contribution Cards */}
             <div className="mt-4 pt-2">
               <span className="text-xs text-slate-400 block mb-3 font-semibold uppercase tracking-wider">Donation Impact Reference</span>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3">
                 {[
                   { count: '10 People', amount: '₹500', desc: 'Prasadam Sponsorship' },
                   { count: '20 People', amount: '₹1,000', desc: 'Prasadam Sponsorship' },
@@ -839,9 +839,7 @@ export default function RegistrationForm() {
                 ].map((card, i) => (
                   <div 
                     key={i} 
-                    className={`glass-card p-3 rounded-xl flex flex-col justify-between border border-purple-500/10 bg-purple-950/10 relative overflow-hidden pointer-events-none min-h-[90px] ${
-                      i === 3 ? 'col-span-2 md:col-span-1' : ''
-                    }`}
+                    className="glass-card p-3 rounded-xl flex flex-col justify-between border border-purple-500/10 bg-purple-950/10 relative overflow-hidden pointer-events-none min-h-[90px]"
                   >
                     {/* Top corner color dot */}
                     <div className="absolute top-2.5 right-2.5 w-1.5 h-1.5 rounded-full bg-purple-500/60 animate-pulse" />
