@@ -231,7 +231,7 @@ export default function NotificationBell() {
                         <UserCheck className="w-4 h-4" />
                       </div>
                       <div className="flex-1 min-w-0 text-left">
-                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+                        <p className="text-sm font-semibold text-slate-100 truncate">
                           {reg?.full_name || 'New Registration'}
                         </p>
                         {reg?.phone && (

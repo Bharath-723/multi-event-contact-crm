@@ -286,7 +286,7 @@ export default function AdminDashboardPage() {
         >
           <div>
             <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Total Registrations</span>
-            <span className="text-lg md:text-3xl font-extrabold text-slate-900 dark:text-slate-100 mt-1 md:mt-2 block">{totalCount}</span>
+            <span className="text-lg md:text-3xl font-extrabold text-slate-100 mt-1 md:mt-2 block">{totalCount}</span>
           </div>
           <span className="text-[9px] md:text-[10px] text-purple-600 dark:text-purple-400 font-bold mt-2 md:mt-4 flex items-center gap-1">
             Click to view list <ExternalLink className="w-3 h-3" />
@@ -301,7 +301,7 @@ export default function AdminDashboardPage() {
         >
           <div>
             <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Total Volunteers</span>
-            <span className="text-lg md:text-3xl font-extrabold text-slate-900 dark:text-slate-100 mt-1 md:mt-2 block">{volunteersCount}</span>
+            <span className="text-lg md:text-3xl font-extrabold text-slate-100 mt-1 md:mt-2 block">{volunteersCount}</span>
           </div>
           <span className="text-[9px] md:text-[10px] text-purple-600 dark:text-purple-400 font-bold mt-2 md:mt-4 flex items-center gap-1">
             Grouped by slot <ExternalLink className="w-3 h-3" />
@@ -316,7 +316,7 @@ export default function AdminDashboardPage() {
         >
           <div>
             <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Total Donors</span>
-            <span className="text-lg md:text-3xl font-extrabold text-slate-900 dark:text-slate-100 mt-1 md:mt-2 block">{donorsCount}</span>
+            <span className="text-lg md:text-3xl font-extrabold text-slate-100 mt-1 md:mt-2 block">{donorsCount}</span>
           </div>
           <span className="text-[9px] md:text-[10px] text-purple-600 dark:text-purple-400 font-bold mt-2 md:mt-4 flex items-center gap-1">
             Click to view list <ExternalLink className="w-3 h-3" />
@@ -331,7 +331,7 @@ export default function AdminDashboardPage() {
         >
           <div>
             <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Dinner Prasadam</span>
-            <span className="text-lg md:text-3xl font-extrabold text-slate-900 dark:text-slate-100 mt-1 md:mt-2 block">{dinnerCount}</span>
+            <span className="text-lg md:text-3xl font-extrabold text-slate-100 mt-1 md:mt-2 block">{dinnerCount}</span>
           </div>
           <span className="text-[9px] md:text-[10px] text-purple-600 dark:text-purple-400 font-bold mt-2 md:mt-4 flex items-center gap-1">
             Click to view list <ExternalLink className="w-3 h-3" />
@@ -346,7 +346,7 @@ export default function AdminDashboardPage() {
         >
           <div>
             <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Today&apos;s Registrations</span>
-            <span className="text-lg md:text-3xl font-extrabold text-slate-900 dark:text-slate-100 mt-1 md:mt-2 block">{todaysCount}</span>
+            <span className="text-lg md:text-3xl font-extrabold text-slate-100 mt-1 md:mt-2 block">{todaysCount}</span>
           </div>
           <span className="text-[9px] md:text-[10px] text-purple-600 dark:text-purple-400 font-bold mt-2 md:mt-4 flex items-center gap-1">
             Click to view list <ExternalLink className="w-3 h-3" />
@@ -374,7 +374,7 @@ export default function AdminDashboardPage() {
                 <div key={reg.id} className="py-3 flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2.5 sm:gap-2">
                   <div className="space-y-1 sm:space-y-0.5">
                     {/* Name */}
-                    <p className="font-semibold text-slate-900 dark:text-slate-100 text-sm flex items-center gap-1.5">
+                    <p className="font-semibold text-slate-100 text-sm flex items-center gap-1.5">
                       <User className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" /> 
                       <span className="truncate max-w-[200px] sm:max-w-xs">{reg.full_name}</span>
                     </p>
@@ -505,7 +505,7 @@ export default function AdminDashboardPage() {
                       registrations.map(reg => (
                         <div key={reg.id} className="py-2.5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                           <div>
-                            <p className="font-semibold text-slate-900 dark:text-slate-100 text-sm flex items-center gap-1.5 flex-wrap">
+                            <p className="font-semibold text-slate-100 text-sm flex items-center gap-1.5 flex-wrap">
                               <User className="w-4 h-4 text-purple-600 dark:text-purple-400" /> {reg.full_name} 
                               <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-850 bg-slate-100 dark:bg-slate-900">Age: {reg.age}</span>
                             </p>
@@ -531,7 +531,7 @@ export default function AdminDashboardPage() {
                       todaysList.map(reg => (
                         <div key={reg.id} className="py-2.5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                           <div>
-                            <p className="font-semibold text-slate-900 dark:text-slate-100 text-sm flex items-center gap-1.5 flex-wrap">
+                            <p className="font-semibold text-slate-100 text-sm flex items-center gap-1.5 flex-wrap">
                               <User className="w-4 h-4 text-purple-600 dark:text-purple-400" /> {reg.full_name} 
                               <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-850 bg-slate-100 dark:bg-slate-900">Age: {reg.age}</span>
                             </p>
@@ -557,7 +557,7 @@ export default function AdminDashboardPage() {
                       donorsList.map(reg => (
                         <div key={reg.id} className="py-2.5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                           <div>
-                            <p className="font-semibold text-slate-900 dark:text-slate-100 text-sm flex items-center gap-1.5">
+                            <p className="font-semibold text-slate-100 text-sm flex items-center gap-1.5">
                               <User className="w-4 h-4 text-purple-600 dark:text-purple-400" /> {reg.full_name}
                             </p>
                             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1.5">
@@ -585,7 +585,7 @@ export default function AdminDashboardPage() {
                       dinnerList.map(reg => (
                         <div key={reg.id} className="py-2.5 flex justify-between items-center">
                           <div>
-                            <p className="font-semibold text-slate-900 dark:text-slate-100 text-sm flex items-center gap-1.5">
+                            <p className="font-semibold text-slate-100 text-sm flex items-center gap-1.5">
                               <User className="w-4 h-4 text-purple-600 dark:text-purple-400" /> {reg.full_name}
                             </p>
                             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1.5">
@@ -621,7 +621,7 @@ export default function AdminDashboardPage() {
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pl-2">
                               {group.volunteers.map(v => (
                                 <div key={v.id} className="p-2.5 rounded-xl bg-slate-100/50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-850 flex flex-col gap-1">
-                                  <span className="font-semibold text-slate-900 dark:text-slate-100 text-xs sm:text-sm flex items-center gap-1.5">
+                                  <span className="font-semibold text-slate-100 text-xs sm:text-sm flex items-center gap-1.5">
                                     <User className="w-3.5 h-3.5 text-purple-500" /> {v.full_name}
                                   </span>
                                   <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5 font-mono">

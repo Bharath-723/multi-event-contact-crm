@@ -19,12 +19,14 @@ export default function AdminDashboardLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(pathname === '/admin' ? true : null);
   const [adminEmail, setAdminEmail] = useState<string>('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // 1. Session verification & gatekeeper check
   useEffect(() => {
+    if (pathname === '/admin') return;
+
     async function verifyAdminAuth() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -63,6 +65,7 @@ export default function AdminDashboardLayout({
 
     // Set up auth state change listener to catch signouts
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (pathname === '/admin') return;
       if (event === 'SIGNED_OUT') {
         setIsAdmin(false);
         router.push('/admin');
@@ -72,7 +75,7 @@ export default function AdminDashboardLayout({
     return () => {
       subscription.unsubscribe();
     };
-  }, [router]);
+  }, [pathname, router]);
 
   // 2. Sign Out Handler
   const handleSignOut = async () => {
@@ -111,6 +114,10 @@ export default function AdminDashboardLayout({
     { name: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
     { name: 'Registrations', path: '/admin/registrations', icon: Users },
   ];
+
+  if (pathname === '/admin') {
+    return <>{children}</>;
+  }
 
   return (
     <div className="min-h-screen flex bg-background text-foreground relative">
