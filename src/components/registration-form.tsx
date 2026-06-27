@@ -804,7 +804,7 @@ export default function RegistrationForm() {
             </h3>
             {/* Informational Donation Contribution Cards */}
             <div className="pt-1">
-              <span className="text-xs text-slate-400 block mb-3 font-semibold uppercase tracking-wider">Donation Impact Reference</span>
+              <span className="text-xs text-slate-400 block mb-3 font-semibold uppercase tracking-wider">Anna-Daan Seva Amount</span>
               <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3">
                 {[
                   { count: '10 People', amount: '₹500', desc: 'Prasadam Sponsorship' },
