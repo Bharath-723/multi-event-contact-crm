@@ -61,6 +61,7 @@ export async function POST(request: NextRequest) {
       phone,
       age,
       gender,
+      occupation,
       areaOfStay,
       companyCollege,
       pgName,
@@ -86,6 +87,7 @@ export async function POST(request: NextRequest) {
       p_wants_to_donate: wantsToDonate === 'Yes',
       p_donation_status: wantsToDonate === 'Yes' ? 'User Opted to Donate' : 'Pending',
       p_skill_ids: skills,
+      p_occupation: occupation || null,
     });
 
     if (error) {

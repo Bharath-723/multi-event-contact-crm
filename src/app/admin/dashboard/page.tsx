@@ -6,12 +6,15 @@ import { supabase } from '@/lib/supabase';
 import { Registration, VolunteerSlot } from '@/lib/types';
 import { 
   Users, Heart, Soup, Clock, Loader2, X, Phone, 
-  User, CheckCircle, ExternalLink, Calendar, Building
+  User, CheckCircle, ExternalLink, Calendar, Building, Briefcase
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatDate } from '@/lib/utils';
 import Image from 'next/image';
+import {
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell
+} from 'recharts';
 
 // Dynamically import Recharts to avoid SSR hydration mismatches
 const DashboardCharts = dynamic(() => import('@/components/dashboard-charts'), {
@@ -24,9 +27,11 @@ const DashboardCharts = dynamic(() => import('@/components/dashboard-charts'), {
   ),
 });
 
+const PURPLE_COLORS = ['#8b5cf6', '#6366f1', '#ec4899', '#3b82f6', '#14b8a6', '#f59e0b'];
+
 export default function AdminDashboardPage() {
   const queryClient = useQueryClient();
-  const [activeModal, setActiveModal] = useState<'total' | 'donors' | 'prasadam' | 'volunteers' | 'todays' | null>(null);
+  const [activeModal, setActiveModal] = useState<'total' | 'donors' | 'prasadam' | 'volunteers' | 'todays' | 'occupation' | null>(null);
   const [realtimeStatus, setRealtimeStatus] = useState<string>('SUBSCRIBED');
 
   // 1. Query all registrations with joint data
@@ -130,6 +135,10 @@ export default function AdminDashboardPage() {
   });
   const todaysCount = todaysList.length;
 
+  const studentsCount = registrations.filter(r => r.occupation === 'Student').length;
+  const employeesCount = registrations.filter(r => r.occupation === 'Employee').length;
+  const othersCount = totalCount - studentsCount - employeesCount;
+
   // Group Volunteers by Slot for the details modal
   const volunteersBySlot = slots.map(slot => {
     const list = volunteersList.filter(v => v.volunteer_slot_id === slot.id);
@@ -201,6 +210,45 @@ export default function AdminDashboardPage() {
     return [
       { name: 'Male', value: male },
       { name: 'Female', value: female }
+    ];
+  };
+
+  // E. Occupation analytics
+  const getOccupationCountsList = () => {
+    const counts: Record<string, number> = {};
+    let othersCountSum = 0;
+
+    registrations.forEach(r => {
+      const occ = r.occupation?.trim() || '';
+      if (!occ || occ === 'Other' || occ === 'Others') {
+        othersCountSum++;
+      } else {
+        counts[occ] = (counts[occ] || 0) + 1;
+      }
+    });
+
+    const predefinedList = [
+      { label: 'Students', count: counts['Student'] || 0 },
+      { label: 'Employees', count: counts['Employee'] || 0 },
+      { label: 'Business', count: counts['Business'] || 0 },
+      { label: 'Self Employed', count: counts['Self Employed'] || counts['Self Emp'] || 0 },
+      { label: 'Government Employee', count: counts['Government Employee'] || 0 },
+      { label: 'Professional', count: counts['Professional'] || 0 },
+      { label: 'Homemaker', count: counts['Homemaker'] || 0 },
+      { label: 'Retired', count: counts['Retired'] || 0 },
+    ];
+
+    const predefinedKeys = ['Student', 'Employee', 'Business', 'Self Employed', 'Self Emp', 'Government Employee', 'Professional', 'Homemaker', 'Retired'];
+
+    const customList = Object.entries(counts)
+      .filter(([key]) => !predefinedKeys.includes(key))
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([label, count]) => ({ label, count }));
+
+    return [
+      ...predefinedList,
+      ...customList,
+      { label: 'Others', count: othersCountSum }
     ];
   };
 
@@ -277,7 +325,7 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* 1. Statistics Cards Section */}
-      <section className="grid grid-cols-2 lg:grid-cols-5 gap-3.5 md:gap-6">
+      <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 md:gap-6">
         
         {/* Total Registrations */}
         <div 
@@ -342,7 +390,7 @@ export default function AdminDashboardPage() {
         {/* Today's Registrations */}
         <div 
           onClick={() => setActiveModal('todays')}
-          className="glass-card rounded-2xl p-3.5 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[105px] md:min-h-[140px] col-span-2 lg:col-span-1"
+          className="glass-card rounded-2xl p-3.5 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[105px] md:min-h-[140px]"
         >
           <div>
             <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Today&apos;s Registrations</span>
@@ -354,9 +402,66 @@ export default function AdminDashboardPage() {
           <Calendar className="w-9 h-9 md:w-16 md:h-16 opacity-8 md:opacity-12 absolute right-2 top-2 text-slate-400 dark:text-slate-700 group-hover:text-purple-400/80 transition-colors" />
         </div>
 
+        {/* Occupation Summary */}
+        <div 
+          onClick={() => setActiveModal('occupation')}
+          className="glass-card rounded-2xl p-3.5 md:p-4 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[150px] md:min-h-[160px]"
+        >
+          <div>
+            <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Occupation Summary</span>
+            <div className="mt-2 text-xs md:text-[13px] text-slate-300 space-y-1 font-medium">
+              <div className="flex justify-between items-center">
+                <span>👨🎓 Students</span>
+                <span className="font-bold text-slate-100">{studentsCount}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span>👨💼 Employees</span>
+                <span className="font-bold text-slate-100">{employeesCount}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span>👥 Others</span>
+                <span className="font-bold text-slate-100">{othersCount}</span>
+              </div>
+            </div>
+            
+            <div className="border-t border-slate-900/60 my-2 pt-1.5 flex justify-between items-center text-[10px] md:text-xs text-slate-400 font-semibold">
+              <span>Total</span>
+              <span className="text-slate-100 font-bold">{totalCount}</span>
+            </div>
+
+            {/* Compact Horizontal Bar Chart */}
+            <div className="h-2 w-full mt-2 bg-slate-950/40 rounded-full overflow-hidden flex p-[1px] border border-slate-900/60">
+              {totalCount > 0 ? (
+                <>
+                  <div 
+                    style={{ width: `${(studentsCount / totalCount) * 100}%` }} 
+                    className="h-full bg-purple-500 rounded-l-full" 
+                    title={`Students: ${studentsCount}`}
+                  />
+                  <div 
+                    style={{ width: `${(employeesCount / totalCount) * 100}%` }} 
+                    className="h-full bg-pink-500" 
+                    title={`Employees: ${employeesCount}`}
+                  />
+                  <div 
+                    style={{ width: `${(othersCount / totalCount) * 100}%` }} 
+                    className="h-full bg-indigo-500 rounded-r-full" 
+                    title={`Others: ${othersCount}`}
+                  />
+                </>
+              ) : (
+                <div className="w-full h-full bg-slate-900" />
+              )}
+            </div>
+          </div>
+          <span className="text-[9px] md:text-[10px] text-purple-650 dark:text-purple-400 font-bold mt-2 flex items-center gap-0.5 shrink-0">
+            View details <ExternalLink className="w-2.5 h-2.5" />
+          </span>
+          <Briefcase className="w-9 h-9 md:w-16 md:h-16 opacity-5 absolute right-2 top-2 text-slate-400 dark:text-slate-700 group-hover:text-purple-400/80 transition-colors pointer-events-none" />
+        </div>
+
       </section>
 
-      {/* 2. Side-by-Side Activity Grid */}
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent 10 Registrations */}
         <div className="glass-card rounded-2xl p-6 flex flex-col h-[400px]">
@@ -378,6 +483,12 @@ export default function AdminDashboardPage() {
                       <User className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" /> 
                       <span className="truncate max-w-[200px] sm:max-w-xs">{reg.full_name}</span>
                     </p>
+                    {/* Occupation */}
+                    {reg.occupation && (
+                      <p className="text-[10px] text-purple-500 dark:text-purple-400 font-bold pl-5 leading-none mb-1">
+                        {reg.occupation}
+                      </p>
+                    )}
                     {/* Phone */}
                     <p className="text-slate-500 dark:text-slate-400 flex items-center gap-1.5 font-mono text-[11px]">
                       <Phone className="w-3 h-3 text-slate-450 dark:text-slate-550 shrink-0" /> 
@@ -457,6 +568,9 @@ export default function AdminDashboardPage() {
           skillData={getSkillsDistributionData()}
           slotData={getSlotsDistributionData()}
           genderData={getGenderRatioData()}
+          occupationData={getOccupationCountsList()
+            .filter(item => item.count > 0)
+            .map(item => ({ name: item.label, value: item.count }))}
         />
       </section>
 
@@ -486,6 +600,7 @@ export default function AdminDashboardPage() {
                   {activeModal === 'prasadam' && 'Dinner Prasadam List'}
                   {activeModal === 'volunteers' && 'Volunteers Grouped By Time Slot'}
                   {activeModal === 'todays' && "Today's Registrations"}
+                  {activeModal === 'occupation' && 'Occupation Summary & Details'}
                 </h3>
                 <button
                   onClick={() => setActiveModal(null)}
@@ -643,6 +758,66 @@ export default function AdminDashboardPage() {
                         </div>
                       ))
                     )}
+                  </div>
+                )}
+
+                {activeModal === 'occupation' && (
+                  <div className="space-y-5">
+                    {/* List counts grouped by occupation */}
+                    <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                      {getOccupationCountsList().map((item) => {
+                        // Calculate dot filler length dynamically
+                        const dotLen = Math.max(3, 40 - item.label.length);
+                        const dots = '.'.repeat(dotLen);
+                        return (
+                          <div key={item.label} className="flex justify-between items-center text-xs sm:text-sm font-mono py-0.5">
+                            <span className="text-slate-350 dark:text-slate-300 truncate max-w-[240px]">{item.label}</span>
+                            <span className="text-slate-650 flex-1 mx-2 overflow-hidden truncate">{dots}</span>
+                            <span className="font-bold text-slate-100">{item.count}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="border-t border-slate-900/60 pt-3 flex justify-between items-center text-xs font-bold text-slate-400 uppercase tracking-wider">
+                      <span>Total Registrations</span>
+                      <span className="text-slate-100 text-sm font-mono">{totalCount}</span>
+                    </div>
+
+                    {/* Horizontal Bar Chart of Occupation Distribution */}
+                    <div className="border-t border-slate-900/60 pt-4">
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-3">Occupation Distribution</span>
+                      <div className="h-48 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            layout="vertical"
+                            data={getOccupationCountsList()
+                              .filter(item => item.count > 0)
+                              .map(item => ({ name: item.label, value: item.count }))}
+                            margin={{ top: 5, right: 20, left: 10, bottom: 5 }}
+                          >
+                            <XAxis type="number" stroke="#64748b" fontSize={10} tickLine={false} />
+                            <YAxis type="category" dataKey="name" stroke="#64748b" fontSize={10} tickLine={false} width={80} />
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: '#0f172a',
+                                borderColor: '#334155',
+                                borderRadius: '12px',
+                                color: '#f8fafc',
+                                fontSize: '11px',
+                              }}
+                            />
+                            <Bar dataKey="value" fill="#8b5cf6" radius={[0, 4, 4, 0]} name="Count">
+                              {getOccupationCountsList()
+                                .filter(item => item.count > 0)
+                                .map((_, index) => (
+                                  <Cell key={`cell-${index}`} fill={PURPLE_COLORS[index % PURPLE_COLORS.length]} />
+                                ))}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>

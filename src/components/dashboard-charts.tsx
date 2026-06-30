@@ -11,11 +11,12 @@ interface ChartProps {
   skillData: { name: string; value: number }[];
   slotData: { name: string; value: number }[];
   genderData: { name: string; value: number }[];
+  occupationData: { name: string; value: number }[];
 }
 
 const PURPLE_COLORS = ['#8b5cf6', '#6366f1', '#ec4899', '#3b82f6', '#14b8a6', '#f59e0b'];
 
-export default function DashboardCharts({ dailyData, skillData, slotData, genderData }: ChartProps) {
+export default function DashboardCharts({ dailyData, skillData, slotData, genderData, occupationData }: ChartProps) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       
@@ -205,6 +206,42 @@ export default function DashboardCharts({ dailyData, skillData, slotData, gender
                 })}
               </div>
             </>
+          )}
+        </div>
+      </div>
+
+      {/* 5. Occupation Distribution */}
+      <div className="glass-card rounded-2xl p-5 sm:p-6 lg:col-span-2">
+        <h3 className="text-base font-bold text-slate-100 mb-4">Occupation Distribution</h3>
+        <div className="h-64 w-full">
+          {occupationData.length === 0 ? (
+            <div className="h-full flex items-center justify-center text-slate-500 text-sm">
+              No occupation data available
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={occupationData}
+                margin={{ top: 10, right: 20, left: -10, bottom: 0 }}
+              >
+                <XAxis dataKey="name" stroke="#64748b" fontSize={11} tickLine={false} />
+                <YAxis stroke="#64748b" fontSize={11} tickLine={false} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#0f172a',
+                    borderColor: '#334155',
+                    borderRadius: '12px',
+                    color: '#f8fafc',
+                    fontSize: '12px',
+                  }}
+                />
+                <Bar dataKey="value" fill="#8b5cf6" radius={[4, 4, 0, 0]} name="Registrants">
+                  {occupationData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={PURPLE_COLORS[index % PURPLE_COLORS.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           )}
         </div>
       </div>

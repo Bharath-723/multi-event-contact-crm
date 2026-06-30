@@ -24,6 +24,7 @@ export const registrationSchema = z.object({
   gender: z.enum(['Male', 'Female'], {
     message: 'Please select a gender',
   }),
+  occupation: z.string().optional().or(z.literal('')),
   areaOfStay: z.string().optional().or(z.literal('')),
   companyCollege: z.string()
     .min(2, 'Company/College name must be at least 2 characters')

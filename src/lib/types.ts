@@ -15,6 +15,7 @@ export interface Registration {
   phone: string;
   age: number;
   gender: 'Male' | 'Female';
+  occupation?: string | null;
   area_of_stay?: string | null;
   company_college: string;
   pg_name?: string | null;

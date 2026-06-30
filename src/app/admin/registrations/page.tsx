@@ -22,6 +22,7 @@ export default function RegistrationsPage() {
   const [filterGender, setFilterGender] = useState('');
   const [filterVolunteer, setFilterVolunteer] = useState('');
   const [filterSlot, setFilterSlot] = useState('');
+  const [filterOccupation, setFilterOccupation] = useState('');
   const [filterDonation, setFilterDonation] = useState('');
   const [filterPrasadam, setFilterPrasadam] = useState('');
   const [filterArea, setFilterArea] = useState('');
@@ -153,18 +154,20 @@ export default function RegistrationsPage() {
       const g = sessionStorage.getItem('regs_filterGender');
       const v = sessionStorage.getItem('regs_filterVolunteer');
       const sl = sessionStorage.getItem('regs_filterSlot');
+      const occ = sessionStorage.getItem('regs_filterOccupation');
       const d = sessionStorage.getItem('regs_filterDonation');
       const pr = sessionStorage.getItem('regs_filterPrasadam');
       const a = sessionStorage.getItem('regs_filterArea');
       const c = sessionStorage.getItem('regs_filterCompany');
       const sk = sessionStorage.getItem('regs_filterSkill');
       const dt = sessionStorage.getItem('regs_filterDate');
-
+ 
       if (q) setSearchQuery(q);
       if (p) setSearchPhone(p);
       if (g) setFilterGender(g);
       if (v) setFilterVolunteer(v);
       if (sl) setFilterSlot(sl);
+      if (occ) setFilterOccupation(occ);
       if (d) setFilterDonation(d);
       if (pr) setFilterPrasadam(pr);
       if (a) setFilterArea(a);
@@ -174,13 +177,14 @@ export default function RegistrationsPage() {
     }
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
-
+ 
   // Save search filters to sessionStorage on change
   useEffect(() => { sessionStorage.setItem('regs_searchQuery', searchQuery); }, [searchQuery]);
   useEffect(() => { sessionStorage.setItem('regs_searchPhone', searchPhone); }, [searchPhone]);
   useEffect(() => { sessionStorage.setItem('regs_filterGender', filterGender); }, [filterGender]);
   useEffect(() => { sessionStorage.setItem('regs_filterVolunteer', filterVolunteer); }, [filterVolunteer]);
   useEffect(() => { sessionStorage.setItem('regs_filterSlot', filterSlot); }, [filterSlot]);
+  useEffect(() => { sessionStorage.setItem('regs_filterOccupation', filterOccupation); }, [filterOccupation]);
   useEffect(() => { sessionStorage.setItem('regs_filterDonation', filterDonation); }, [filterDonation]);
   useEffect(() => { sessionStorage.setItem('regs_filterPrasadam', filterPrasadam); }, [filterPrasadam]);
   useEffect(() => { sessionStorage.setItem('regs_filterArea', filterArea); }, [filterArea]);
@@ -210,6 +214,19 @@ export default function RegistrationsPage() {
   const uniqueAreas = Array.from(new Set(registrations.map(r => r.area_of_stay).filter(Boolean))) as string[];
   const uniqueCompanies = Array.from(new Set(registrations.map(r => r.company_college).filter(Boolean))) as string[];
 
+  const predefinedOccupations = [
+    'Student', 'Employee', 'Business', 'Self Employed',
+    'Government Employee', 'Professional', 'Homemaker', 'Retired'
+  ];
+
+  const customOccupations = Array.from(
+    new Set(
+      registrations
+        .map(r => r.occupation?.trim())
+        .filter(o => o && !predefinedOccupations.includes(o))
+    )
+  ).sort() as string[];
+
   // --- FILTERING LOGIC ---
   const filteredRegistrations = registrations.filter(reg => {
     // 1. Global / Name search
@@ -218,7 +235,8 @@ export default function RegistrationsPage() {
       const matchName = reg.full_name.toLowerCase().includes(query);
       const matchCompany = reg.company_college.toLowerCase().includes(query);
       const matchArea = reg.area_of_stay?.toLowerCase().includes(query) || false;
-      if (!matchName && !matchCompany && !matchArea) return false;
+      const matchOccupation = reg.occupation?.toLowerCase().includes(query) || false;
+      if (!matchName && !matchCompany && !matchArea && !matchOccupation) return false;
     }
 
     // 2. Phone specific search
@@ -272,6 +290,16 @@ export default function RegistrationsPage() {
       if (regDate !== matchDate) return false;
     }
 
+    // 12. Occupation filter
+    if (filterOccupation) {
+      if (filterOccupation === 'Other') {
+        const predefined = ['Student', 'Employee', 'Business', 'Self Employed', 'Government Employee', 'Professional', 'Homemaker', 'Retired'];
+        if (!reg.occupation || predefined.includes(reg.occupation)) return false;
+      } else {
+        if (reg.occupation !== filterOccupation) return false;
+      }
+    }
+
     return true;
   });
 
@@ -292,7 +320,7 @@ export default function RegistrationsPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setCurrentPage(1);
   }, [
-    searchQuery, searchPhone, filterGender, filterVolunteer, filterSlot, 
+    searchQuery, searchPhone, filterGender, filterVolunteer, filterSlot, filterOccupation,
     filterDonation, filterPrasadam, filterArea, filterCompany, filterSkill, filterDate
   ]);
 
@@ -450,7 +478,7 @@ export default function RegistrationsPage() {
     const headers = [
       'Name', 'Phone', 'Age', 'Gender', 'Area', 'Company', 'PG', 
       'Skills', 'Volunteer', 'Volunteer Slot', 'Dinner Prasadam', 
-      'Donation Status', 'Registered Date'
+      'Donation Status', 'Registered Date', 'Occupation'
     ];
 
     const rows = filteredRegistrations.map(r => [
@@ -466,7 +494,8 @@ export default function RegistrationsPage() {
       r.volunteer_slots?.slot_time || 'N/A',
       r.interested_to_dinner ? 'Yes' : 'No',
       r.donation_status,
-      formatDate(r.created_at)
+      formatDate(r.created_at),
+      `"${(r.occupation || '').replace(/"/g, '""')}"`
     ]);
 
     const csvContent = "data:text/csv;charset=utf-8," 
@@ -560,6 +589,7 @@ export default function RegistrationsPage() {
     setFilterGender('');
     setFilterVolunteer('');
     setFilterSlot('');
+    setFilterOccupation('');
     setFilterDonation('');
     setFilterPrasadam('');
     setFilterArea('');
@@ -741,6 +771,22 @@ export default function RegistrationsPage() {
             {slots.map(s => (
               <option key={s.id} value={s.id}>{s.slot_time}</option>
             ))}
+          </select>
+
+          {/* Occupation Filter — always visible */}
+          <select
+            value={filterOccupation}
+            onChange={(e) => setFilterOccupation(e.target.value)}
+            className="px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-800 text-slate-300 focus:outline-none cursor-pointer"
+          >
+            <option value="">Occupation (All)</option>
+            {predefinedOccupations.map(occ => (
+              <option key={occ} value={occ}>{occ}</option>
+            ))}
+            {customOccupations.map(occ => (
+              <option key={occ} value={occ}>{occ}</option>
+            ))}
+            <option value="Other">Other</option>
           </select>
 
           {/* Dinner Prasadam — hidden on mobile */}
@@ -1044,6 +1090,13 @@ export default function RegistrationsPage() {
                   <div>
                     <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Area of Stay</span>
                     <span className="font-bold text-slate-100 mt-0.5 block truncate">{selectedReg.area_of_stay || 'N/A'}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 border-t border-slate-900 pt-3">
+                  <div>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Occupation</span>
+                    <span className="font-bold text-slate-100 mt-0.5 block">{selectedReg.occupation || 'N/A'}</span>
                   </div>
                 </div>
 
