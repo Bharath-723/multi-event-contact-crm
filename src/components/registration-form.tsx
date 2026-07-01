@@ -260,6 +260,17 @@ export default function RegistrationForm() {
       setIsSubmitting(false);
       return;
     }
+
+    // Check if offline before attempting request
+    if (typeof window !== 'undefined' && !navigator.onLine) {
+      setSubmissionError(
+        "You are currently offline.\nYour information is saved locally.\nReconnect to the internet and submit."
+      );
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      setIsSubmitting(false);
+      return;
+    }
+
     setIsSubmitting(true);
     setSubmissionError(null);
 
@@ -303,7 +314,16 @@ export default function RegistrationForm() {
 
     } catch (err) {
       console.error('Submission error:', err);
-      const message = err instanceof Error ? err.message : 'An unexpected connection error occurred.';
+      let message = 'An unexpected connection error occurred.';
+      if (typeof window !== 'undefined' && !navigator.onLine) {
+        message = "You are currently offline.\nYour information is saved locally.\nReconnect to the internet and submit.";
+      } else if (err instanceof Error) {
+        if (err.message.includes('fetch') || err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+          message = "You are currently offline.\nYour information is saved locally.\nReconnect to the internet and submit.";
+        } else {
+          message = err.message;
+        }
+      }
       setSubmissionError(message);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {

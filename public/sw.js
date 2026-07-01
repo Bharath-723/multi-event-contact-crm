@@ -1,39 +1,37 @@
-// CACHE_NAME version - easy to update for every release
-const CACHE_NAME = 'rathayatra-v1.0.0';
+// ONLINE-FIRST Cache Versioning
+const CACHE_NAME = 'rathayatra-online-v1.0.0';
 
-// Core assets to pre-cache on install
+// Core assets to pre-cache (excluding root '/' and HTML to force online-first layout checks)
 const ASSETS_TO_CACHE = [
-  '/',
   '/manifest.json',
   '/icon.svg',
+  '/hkm-logo.png',
 ];
 
-// 1. Install Event: Cache core assets and optionally skip waiting for first-time setup
+// 1. Install Event: Cache only the static configuration files (NO HTML cached)
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[Service Worker] Pre-caching core assets...');
+      console.log('[SW] Pre-caching static config assets...');
       return cache.addAll(ASSETS_TO_CACHE);
     })
   );
   
-  // Call self.skipWaiting() to force the installing service worker to become active immediately
-  // if this is the initial load (no active controller). For updates, we let the user click "Update Now"
-  // to trigger it via message.
+  // Skip waiting only on initial install (no active controller). 
+  // For updates, the worker waits until the user clicks "Update Now".
   if (!self.registration.active) {
     self.skipWaiting();
   }
 });
 
-// 2. Activate Event: Claim clients immediately and clean up old cache versions
+// 2. Activate Event: Claim control immediately and aggressively delete ALL old cache keys
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cache) => {
-          // Delete all caches except the current versioned cache name
           if (cache !== CACHE_NAME) {
-            console.log('[Service Worker] Deleting old cache:', cache);
+            console.log('[SW] Deleting obsolete cache:', cache);
             return caches.delete(cache);
           }
         })
@@ -41,71 +39,59 @@ self.addEventListener('activate', (event) => {
     })
   );
   
-  // Claim clients immediately so the service worker controls the page without reload
+  // Make sure new SW takes control of all pages immediately
   self.clients.claim();
 });
 
-// 3. Message Listener: Handle skipWaiting manual trigger from the UI update banner
+// 3. Message Listener: Support skipWaiting manual activation signals
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
-    console.log('[Service Worker] Received SKIP_WAITING signal, activating new version.');
+    console.log('[SW] Skipping waiting state and activating immediately.');
     self.skipWaiting();
   }
 });
 
-// 4. Fetch Event: Implement caching strategies based on request type
+// 4. Fetch Event: Implement Online-First Caching Strategy
 self.addEventListener('fetch', (event) => {
+  // Only intercept GET requests
   if (event.request.method !== 'GET') return;
   
   const url = new URL(event.request.url);
   
-  // Avoid caching third-party API calls (e.g., Supabase DB, auth, external CDN)
+  // Avoid intercepting third-party API calls (e.g. Supabase, external APIs)
   if (url.origin !== self.location.origin) return;
 
-  // Bypass Next.js hot module reloading & webpack dev server files in development
+  // Bypass webpack dev server HMR files
   if (url.pathname.startsWith('/_next/webpack-hmr') || url.pathname.includes('hot-update')) return;
 
-  // Bypass API routes completely - never cache API requests
+  // --- API & Database Routes (Network Only) ---
   if (url.pathname.startsWith('/api/')) {
+    event.respondWith(fetch(event.request));
     return;
   }
 
-  // --- STRATEGY 1: Network First for Navigation Requests (HTML / Page Routes) ---
-  // This ensures users always get the latest layout and Next.js app pages from the server,
-  // falling back to cache if offline. HTML files are never cached permanently.
-  if (event.request.mode === 'navigate' || event.request.headers.get('accept')?.includes('text/html')) {
+  // --- HTML Pages & Navigation Requests (Network First - NEVER CACHED PERMANENTLY) ---
+  // We do NOT write HTML responses to the cache. This ensures the browser always fetches
+  // the freshest HTML from Vercel, preventing stale PWA layouts on Android.
+  const isNavigation = event.request.mode === 'navigate' || event.request.headers.get('accept')?.includes('text/html');
+  if (isNavigation) {
     event.respondWith(
-      fetch(event.request)
-        .then((response) => {
-          // If response is valid, cache it for offline fallback and return it
-          if (response && response.status === 200 && response.type === 'basic') {
-            const responseToCache = response.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, responseToCache);
-            });
-          }
-          return response;
-        })
-        .catch(() => {
-          // Offline fallback: try to serve the requested page from cache, or default to home '/'
-          return caches.match(event.request).then((cachedResponse) => {
-            return cachedResponse || caches.match('/');
-          });
-        })
+      fetch(event.request).catch((err) => {
+        console.warn('[SW] Navigation fetch failed (offline). Checking fallback...', err);
+        // If offline and we have a cached page, serve it. Otherwise, let it fail.
+        return caches.match(event.request);
+      })
     );
     return;
   }
 
-  // --- STRATEGY 2: Stale While Revalidate for Static Assets (CSS, JS, Fonts) ---
-  const isStaticAsset = 
+  // --- Static Assets CSS & JS (Stale-While-Revalidate) ---
+  const isStaticCode = 
     url.pathname.includes('/_next/static/') ||
     url.pathname.endsWith('.js') ||
-    url.pathname.endsWith('.css') ||
-    url.pathname.endsWith('.woff') ||
-    url.pathname.endsWith('.woff2') ||
-    url.pathname.endsWith('.ttf');
+    url.pathname.endsWith('.css');
 
-  if (isStaticAsset) {
+  if (isStaticCode) {
     event.respondWith(
       caches.match(event.request).then((cachedResponse) => {
         const fetchPromise = fetch(event.request).then((networkResponse) => {
@@ -117,17 +103,16 @@ self.addEventListener('fetch', (event) => {
           }
           return networkResponse;
         }).catch(() => {
-          // Silently swallow fetch errors for static assets if we are offline
+          // Ignore offline errors for revalidation
         });
 
-        // Return the cached asset immediately (stale), while update runs in background (revalidate)
         return cachedResponse || fetchPromise;
       })
     );
     return;
   }
 
-  // --- STRATEGY 3: Cache First for Images ---
+  // --- Images, Fonts & Icons (Cache First) ---
   const isImage = 
     url.pathname.endsWith('.png') ||
     url.pathname.endsWith('.jpg') ||
@@ -138,7 +123,13 @@ self.addEventListener('fetch', (event) => {
     url.pathname.endsWith('.ico') ||
     event.request.headers.get('accept')?.includes('image/');
 
-  if (isImage) {
+  const isFont = 
+    url.pathname.endsWith('.woff') ||
+    url.pathname.endsWith('.woff2') ||
+    url.pathname.endsWith('.ttf') ||
+    url.pathname.endsWith('.otf');
+
+  if (isImage || isFont) {
     event.respondWith(
       caches.match(event.request).then((cachedResponse) => {
         if (cachedResponse) {
@@ -153,12 +144,14 @@ self.addEventListener('fetch', (event) => {
             });
           }
           return networkResponse;
+        }).catch(() => {
+          // If offline and image is not in cache, let it fail
         });
       })
     );
     return;
   }
 
-  // --- DEFAULT STRATEGY: Network-Only for all other GET requests ---
+  // --- Default: Fetch from network ---
   event.respondWith(fetch(event.request));
 });
