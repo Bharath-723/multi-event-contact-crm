@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from 'next-themes';
+import PwaUpdateBanner from '@/components/pwa-update-banner';
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -40,8 +41,10 @@ export default function Providers({ children }: { children: React.ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
         {children}
+        <PwaUpdateBanner />
       </ThemeProvider>
     </QueryClientProvider>
   );
 }
+
 
