@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from 'next-themes';
 import PwaUpdateBanner from '@/components/pwa-update-banner';
@@ -19,24 +19,6 @@ export default function Providers({ children }: { children: React.ReactNode }) {
       })
   );
 
-  useEffect(() => {
-    if (
-      typeof window !== 'undefined' &&
-      'serviceWorker' in navigator &&
-      process.env.NODE_ENV === 'production'
-    ) {
-      // Register service worker
-      navigator.serviceWorker
-        .register('/sw.js')
-        .then((reg) => {
-          console.log('PWA Service Worker registered successfully:', reg.scope);
-        })
-        .catch((err) => {
-          console.warn('PWA Service Worker registration failed:', err);
-        });
-    }
-  }, []);
-
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
@@ -46,5 +28,6 @@ export default function Providers({ children }: { children: React.ReactNode }) {
     </QueryClientProvider>
   );
 }
+
 
 

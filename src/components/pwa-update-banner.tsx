@@ -17,17 +17,20 @@ export default function PwaUpdateBanner() {
       return;
     }
 
-    // 1. Listen for the controllerchange event to reload the page once the new SW takes control
+    // 1. Listen for controllerchange (fires when the new SW calls skipWaiting() and activates)
     let refreshing = false;
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
+    const handleControllerChange = () => {
       if (refreshing) return;
       refreshing = true;
+      console.log('[PWA] Controller changed. Reloading page for new version...');
       window.location.reload();
-    });
+    };
+    navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
 
-    // 2. Helper function to monitor state changes of an installing worker
+    // 2. Track service worker installation states to catch when it enters waiting (installed) state
     const trackInstalling = (worker: ServiceWorker) => {
       worker.addEventListener('statechange', () => {
+        console.log('[PWA] Installing worker state changed:', worker.state);
         if (worker.state === 'installed') {
           setWaitingWorker(worker);
           setShowBanner(true);
@@ -35,45 +38,80 @@ export default function PwaUpdateBanner() {
       });
     };
 
-    // 3. Register/Inspect service worker registration
-    navigator.serviceWorker.ready.then((reg) => {
-      // If there's already a waiting worker, show the banner
-      if (reg.waiting) {
-        setWaitingWorker(reg.waiting);
-        setShowBanner(true);
-        return;
-      }
+    // 3. Register the Service Worker with updateViaCache: 'none'
+    // This tells Android Chrome / Samsung Internet to bypass HTTP cache for sw.js
+    navigator.serviceWorker
+      .register('/sw.js', { updateViaCache: 'none' })
+      .then((reg) => {
+        console.log('[PWA] Service Worker registered successfully scope:', reg.scope);
 
-      // If a worker is installing, track its progress
-      if (reg.installing) {
-        trackInstalling(reg.installing);
-        return;
-      }
+        // Force check for update immediately on load
+        reg.update().catch((err) => {
+          console.warn('[PWA] Manual SW update check failed on register:', err);
+        });
 
-      // Listen for new service workers installing in the future
-      reg.addEventListener('updatefound', () => {
+        // A. Check if there is already a waiting worker
+        if (reg.waiting) {
+          console.log('[PWA] Found an existing waiting worker.');
+          setWaitingWorker(reg.waiting);
+          setShowBanner(true);
+        }
+
+        // B. Check if there is an installing worker currently
         if (reg.installing) {
+          console.log('[PWA] Found an active installing worker.');
           trackInstalling(reg.installing);
         }
-      });
-    });
 
-    // 4. Periodically check for updates on the server (every 10 minutes)
+        // C. Listen for future updates
+        reg.addEventListener('updatefound', () => {
+          console.log('[PWA] Update found. New service worker installing...');
+          if (reg.installing) {
+            trackInstalling(reg.installing);
+          }
+        });
+      })
+      .catch((err) => {
+        console.warn('[PWA] Service Worker registration failed:', err);
+      });
+
+    // 4. Periodically check for updates on the server (every 5 minutes)
     const updateInterval = setInterval(() => {
       navigator.serviceWorker.ready.then((reg) => {
         reg.update().catch((err) => {
-          console.debug('Service Worker update check failed:', err);
+          console.debug('[PWA] Periodic SW update check failed:', err);
         });
       });
-    }, 10 * 60 * 1000);
+    }, 5 * 60 * 1000);
 
-    return () => clearInterval(updateInterval);
+    // 5. Trigger update check when app transitions to visible (e.g. opened from background on Android)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        navigator.serviceWorker.ready.then((reg) => {
+          console.log('[PWA] App visible. Triggering immediate update check...');
+          reg.update().catch((err) => {
+            console.debug('[PWA] Visibility SW update check failed:', err);
+          });
+        });
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      clearInterval(updateInterval);
+    };
   }, []);
 
   const handleUpdate = () => {
     if (waitingWorker) {
-      // Send message to waiting service worker to skipWaiting
+      console.log('[PWA] User triggered update. Activating new Service Worker...');
+      // Post message to waiting service worker to skipWaiting
       waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+    } else {
+      // Fallback reload if worker reference is lost but banner was shown
+      window.location.reload();
     }
   };
 
@@ -94,8 +132,7 @@ export default function PwaUpdateBanner() {
           {/* Header with HKM Branding & Close */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              {/* Styled HKM Branding Indicator */}
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-tr from-purple-650 to-indigo-600 text-white shadow-md">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-tr from-purple-605 to-indigo-600 text-white shadow-md">
                 <Sparkles className="h-4 w-4 text-purple-200 animate-pulse" />
               </div>
               <div className="flex flex-col text-left">
@@ -103,7 +140,7 @@ export default function PwaUpdateBanner() {
                   HKM Rathayatra
                 </span>
                 <span className="text-xs font-semibold text-slate-200">
-                  Update Available
+                  New Version Available
                 </span>
               </div>
             </div>
@@ -119,7 +156,7 @@ export default function PwaUpdateBanner() {
 
           {/* Banner Description */}
           <p className="text-xs text-slate-400 text-left leading-relaxed">
-            A new version of the Volunteer Registration app is available. Update now to access the latest features and fixes.
+            An update is available. Click update to load the newest version.
           </p>
 
           {/* Action Buttons */}
