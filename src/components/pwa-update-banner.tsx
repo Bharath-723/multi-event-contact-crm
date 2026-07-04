@@ -29,6 +29,12 @@ export default function PwaUpdateBanner() {
 
     // 2. Track service worker installation states to catch when it enters waiting (installed) state
     const trackInstalling = (worker: ServiceWorker) => {
+      if (worker.state === 'installed') {
+        console.log('[PWA] Worker is already installed (waiting). Showing banner...');
+        setWaitingWorker(worker);
+        setShowBanner(true);
+        return;
+      }
       worker.addEventListener('statechange', () => {
         console.log('[PWA] Installing worker state changed:', worker.state);
         if (worker.state === 'installed') {
@@ -156,7 +162,7 @@ export default function PwaUpdateBanner() {
 
           {/* Banner Description */}
           <p className="text-xs text-slate-400 text-left leading-relaxed">
-            An update is available. Click update to load the newest version.
+            A newer version of Rathayatra is available.
           </p>
 
           {/* Action Buttons */}
@@ -165,7 +171,7 @@ export default function PwaUpdateBanner() {
               onClick={handleDismiss}
               className="flex-1 py-2 px-3 rounded-xl border border-slate-800 hover:bg-slate-900 text-slate-400 hover:text-slate-200 font-semibold text-xs transition-all text-center cursor-pointer"
             >
-              Dismiss
+              Later
             </button>
             <button
               onClick={handleUpdate}

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
-import { useForm, useWatch } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
@@ -83,6 +83,7 @@ export default function RegistrationForm() {
     setValue,
     getValues,
     control,
+    watch,
     formState: { errors, isValid },
     trigger,
     reset,
@@ -108,7 +109,7 @@ export default function RegistrationForm() {
   });
 
   // Watch key fields to handle conditional rendering and local storage persistence
-  const watchedFields = useWatch({ control });
+  const watchedFields = watch();
 
   // 3. Load Draft from Local Storage on Mount and detect donation success callback
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -628,7 +629,8 @@ export default function RegistrationForm() {
                         <button
                           key={occ}
                           type="button"
-                          onClick={() => {
+                          onMouseDown={(e) => {
+                            e.preventDefault(); // Prevents premature input blur
                             setValue('occupation', occ);
                             setOccupationSearch(occ);
                             setShowOccupationDropdown(false);
@@ -692,7 +694,8 @@ export default function RegistrationForm() {
                         <button
                           key={area}
                           type="button"
-                          onClick={() => {
+                          onMouseDown={(e) => {
+                            e.preventDefault(); // Prevents premature input blur
                             setValue('areaOfStay', area);
                             setAreaSearch(area);
                             setShowAreaDropdown(false);
