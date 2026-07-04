@@ -136,8 +136,9 @@ export default function AdminDashboardPage() {
   const todaysCount = todaysList.length;
 
   const studentsCount = registrations.filter(r => r.occupation === 'Student').length;
-  const employeesCount = registrations.filter(r => r.occupation === 'Employee').length;
-  const othersCount = totalCount - studentsCount - employeesCount;
+  const workingCount = registrations.filter(r => r.occupation === 'Working').length;
+  const businessCount = registrations.filter(r => r.occupation === 'Business').length;
+  const othersCount = totalCount - studentsCount - workingCount - businessCount;
 
   // Group Volunteers by Slot for the details modal
   const volunteersBySlot = slots.map(slot => {
@@ -213,7 +214,7 @@ export default function AdminDashboardPage() {
     ];
   };
 
-  // E. Occupation analytics
+  // E. Navigation/Occupation analytics
   const getOccupationCountsList = () => {
     const counts: Record<string, number> = {};
     let othersCountSum = 0;
@@ -228,17 +229,12 @@ export default function AdminDashboardPage() {
     });
 
     const predefinedList = [
-      { label: 'Students', count: counts['Student'] || 0 },
-      { label: 'Employees', count: counts['Employee'] || 0 },
+      { label: 'Student', count: counts['Student'] || 0 },
+      { label: 'Working', count: counts['Working'] || 0 },
       { label: 'Business', count: counts['Business'] || 0 },
-      { label: 'Self Employed', count: counts['Self Employed'] || counts['Self Emp'] || 0 },
-      { label: 'Government Employee', count: counts['Government Employee'] || 0 },
-      { label: 'Professional', count: counts['Professional'] || 0 },
-      { label: 'Homemaker', count: counts['Homemaker'] || 0 },
-      { label: 'Retired', count: counts['Retired'] || 0 },
     ];
 
-    const predefinedKeys = ['Student', 'Employee', 'Business', 'Self Employed', 'Self Emp', 'Government Employee', 'Professional', 'Homemaker', 'Retired'];
+    const predefinedKeys = ['Student', 'Working', 'Business'];
 
     const customList = Object.entries(counts)
       .filter(([key]) => !predefinedKeys.includes(key))
@@ -405,18 +401,22 @@ export default function AdminDashboardPage() {
         {/* Occupation Summary */}
         <div 
           onClick={() => setActiveModal('occupation')}
-          className="glass-card rounded-2xl p-3.5 md:p-4 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[150px] md:min-h-[160px]"
+          className="glass-card rounded-2xl p-3.5 md:p-4 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[155px] md:min-h-[165px]"
         >
           <div>
             <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Occupation Summary</span>
-            <div className="mt-2 text-xs md:text-[13px] text-slate-300 space-y-1 font-medium">
+            <div className="mt-1.5 text-xs md:text-[13px] text-slate-300 space-y-0.5 font-medium">
               <div className="flex justify-between items-center">
-                <span>👨🎓 Students</span>
+                <span>👨🎓 Student</span>
                 <span className="font-bold text-slate-100">{studentsCount}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span>👨💼 Employees</span>
-                <span className="font-bold text-slate-100">{employeesCount}</span>
+                <span>💼 Working</span>
+                <span className="font-bold text-slate-100">{workingCount}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span>📈 Business</span>
+                <span className="font-bold text-slate-100">{businessCount}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span>👥 Others</span>
@@ -436,12 +436,17 @@ export default function AdminDashboardPage() {
                   <div 
                     style={{ width: `${(studentsCount / totalCount) * 100}%` }} 
                     className="h-full bg-purple-500 rounded-l-full" 
-                    title={`Students: ${studentsCount}`}
+                    title={`Student: ${studentsCount}`}
                   />
                   <div 
-                    style={{ width: `${(employeesCount / totalCount) * 100}%` }} 
+                    style={{ width: `${(workingCount / totalCount) * 100}%` }} 
                     className="h-full bg-pink-500" 
-                    title={`Employees: ${employeesCount}`}
+                    title={`Working: ${workingCount}`}
+                  />
+                  <div 
+                    style={{ width: `${(businessCount / totalCount) * 100}%` }} 
+                    className="h-full bg-blue-500" 
+                    title={`Business: ${businessCount}`}
                   />
                   <div 
                     style={{ width: `${(othersCount / totalCount) * 100}%` }} 
@@ -450,7 +455,7 @@ export default function AdminDashboardPage() {
                   />
                 </>
               ) : (
-                <div className="w-full h-full bg-slate-900" />
+                <div className="w-full h-full bg-slate-800" />
               )}
             </div>
           </div>

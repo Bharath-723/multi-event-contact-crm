@@ -215,8 +215,7 @@ export default function RegistrationsPage() {
   const uniqueCompanies = Array.from(new Set(registrations.map(r => r.company_college).filter(Boolean))) as string[];
 
   const predefinedOccupations = [
-    'Student', 'Employee', 'Business', 'Self Employed',
-    'Government Employee', 'Professional', 'Homemaker', 'Retired'
+    'Student', 'Working', 'Business', 'Others'
   ];
 
   const customOccupations = Array.from(
@@ -292,8 +291,8 @@ export default function RegistrationsPage() {
 
     // 12. Occupation filter
     if (filterOccupation) {
-      if (filterOccupation === 'Other') {
-        const predefined = ['Student', 'Employee', 'Business', 'Self Employed', 'Government Employee', 'Professional', 'Homemaker', 'Retired'];
+      if (filterOccupation === 'Others') {
+        const predefined = ['Student', 'Working', 'Business'];
         if (!reg.occupation || predefined.includes(reg.occupation)) return false;
       } else {
         if (reg.occupation !== filterOccupation) return false;
@@ -786,7 +785,6 @@ export default function RegistrationsPage() {
             {customOccupations.map(occ => (
               <option key={occ} value={occ}>{occ}</option>
             ))}
-            <option value="Other">Other</option>
           </select>
 
           {/* Dinner Prasadam — hidden on mobile */}

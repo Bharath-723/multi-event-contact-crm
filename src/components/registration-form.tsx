@@ -30,12 +30,9 @@ const ALLOWED_AREAS = [
 
 const OCCUPATION_SUGGESTIONS = [
   'Student',
-  'Employee',
+  'Working',
   'Business',
-  'Self Employed',
-  'Homemaker',
-  'Retired',
-  'Other'
+  'Others'
 ];
 
 export default function RegistrationForm() {
