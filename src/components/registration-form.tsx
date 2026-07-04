@@ -79,7 +79,6 @@ export default function RegistrationForm() {
     handleSubmit,
     setValue,
     getValues,
-    control,
     watch,
     formState: { errors, isValid },
     trigger,
@@ -109,7 +108,6 @@ export default function RegistrationForm() {
   const watchedFields = watch();
 
   // 3. Load Draft from Local Storage on Mount and detect donation success callback
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -153,7 +151,6 @@ export default function RegistrationForm() {
       }
     }
   }, [reset, setValue]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   // 4. Save draft to local storage on change
   useEffect(() => {
@@ -165,7 +162,6 @@ export default function RegistrationForm() {
   // 5. Handle Donation Redirect logic
   const wantsToDonateValue = watchedFields.wantsToDonate;
   const [isRedirectingToDonate, setIsRedirectingToDonate] = useState(false);
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (wantsToDonateValue === 'Yes') {
       const alreadyRedirected = localStorage.getItem(REDIRECT_FLAG_KEY);
@@ -191,7 +187,6 @@ export default function RegistrationForm() {
       setIsDonationReturned(false);
     }
   }, [wantsToDonateValue, getValues]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   // 6. Click outside handler to close custom dropdown
   useEffect(() => {
@@ -478,7 +473,7 @@ export default function RegistrationForm() {
             Volunteer Registration
           </h1>
           <p className="text-slate-400 text-sm sm:text-base">
-            Join the grand festival team.Meet on 19/July/2026 at temple.
+            Join the grand RATHAYATRA festival on 19-July-2026.
           </p>
         </div>
 
@@ -764,8 +759,8 @@ export default function RegistrationForm() {
                 <label
                   key={skill.id}
                   className={`flex items-center gap-3 p-3.5 rounded-xl border text-sm font-medium cursor-pointer transition-all ${(watchedFields.skills || []).includes(skill.id)
-                      ? 'bg-purple-950/40 border-purple-500/50 text-white shadow-[0_0_15px_rgba(168,85,247,0.15)]'
-                      : 'bg-slate-950/50 border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
+                    ? 'bg-purple-950/40 border-purple-500/50 text-white shadow-[0_0_15px_rgba(168,85,247,0.15)]'
+                    : 'bg-slate-950/50 border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
                     }`}
                 >
                   <input
@@ -775,8 +770,8 @@ export default function RegistrationForm() {
                     {...register('skills')}
                   />
                   <div className={`w-4 h-4 rounded flex items-center justify-center border shrink-0 ${(watchedFields.skills || []).includes(skill.id)
-                      ? 'border-purple-400 bg-purple-500 text-slate-950'
-                      : 'border-slate-700'
+                    ? 'border-purple-400 bg-purple-500 text-slate-950'
+                    : 'border-slate-700'
                     }`}>
                     {(watchedFields.skills || []).includes(skill.id) && (
                       <CheckCircle2 className="w-3.5 h-3.5 stroke-[3]" />
@@ -804,8 +799,8 @@ export default function RegistrationForm() {
                   <label
                     key={opt}
                     className={`flex-1 flex items-center justify-center gap-2.5 py-3 rounded-xl border font-semibold text-base cursor-pointer transition-all ${watchedFields.interestedToVolunteer === opt
-                        ? 'bg-purple-950/40 border-purple-500/50 text-white'
-                        : 'bg-slate-950/50 border-slate-800 text-slate-400'
+                      ? 'bg-purple-950/40 border-purple-500/50 text-white'
+                      : 'bg-slate-950/50 border-slate-800 text-slate-400'
                       }`}
                   >
                     <input
@@ -845,8 +840,8 @@ export default function RegistrationForm() {
                       <label
                         key={slot.id}
                         className={`flex items-center gap-3 p-3 rounded-xl border text-sm font-medium cursor-pointer transition-all ${watchedFields.volunteerSlotId === slot.id
-                            ? 'bg-purple-950/40 border-purple-500/50 text-white'
-                            : 'bg-slate-950/30 border-slate-900 text-slate-400 hover:border-slate-800 hover:text-white'
+                          ? 'bg-purple-950/40 border-purple-500/50 text-white'
+                          : 'bg-slate-950/30 border-slate-900 text-slate-400 hover:border-slate-800 hover:text-white'
                           }`}
                       >
                         <input
@@ -856,8 +851,8 @@ export default function RegistrationForm() {
                           {...register('volunteerSlotId')}
                         />
                         <div className={`w-4 h-4 rounded-full flex items-center justify-center border shrink-0 ${watchedFields.volunteerSlotId === slot.id
-                            ? 'border-purple-400 bg-purple-500'
-                            : 'border-slate-800'
+                          ? 'border-purple-400 bg-purple-500'
+                          : 'border-slate-800'
                           }`}>
                           {watchedFields.volunteerSlotId === slot.id && (
                             <div className="w-1.5 h-1.5 rounded-full bg-slate-950" />
@@ -886,8 +881,8 @@ export default function RegistrationForm() {
                 <label
                   key={opt}
                   className={`flex-1 flex items-center justify-center gap-2.5 py-3 rounded-xl border font-semibold text-base cursor-pointer transition-all ${watchedFields.interestedToDinner === opt
-                      ? 'bg-purple-950/40 border-purple-500/50 text-white'
-                      : 'bg-slate-950/50 border-slate-800 text-slate-400'
+                    ? 'bg-purple-950/40 border-purple-500/50 text-white'
+                    : 'bg-slate-950/50 border-slate-800 text-slate-400'
                     }`}
                 >
                   <input
@@ -916,17 +911,17 @@ export default function RegistrationForm() {
               <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3">
                 {(watchedFields.occupation === 'Student'
                   ? [
-                      { count: '2 People', amount: '₹116', desc: 'Prasadam Sponsorship' },
-                      { count: '4 People', amount: '₹216', desc: 'Prasadam Sponsorship' },
-                      { count: '10 People', amount: '₹516', desc: 'Festival Seva' },
-                      { count: '20 People', amount: '₹1,016', desc: 'Grand Festival Seva' },
-                    ]
+                    { count: '2 People', amount: '₹116', desc: 'Prasadam Sponsorship' },
+                    { count: '4 People', amount: '₹216', desc: 'Prasadam Sponsorship' },
+                    { count: '10 People', amount: '₹516', desc: 'Festival Seva' },
+                    { count: '20 People', amount: '₹1,016', desc: 'Grand Festival Seva' },
+                  ]
                   : [
-                      { count: '10 People', amount: '₹516', desc: 'Prasadam Sponsorship' },
-                      { count: '20 People', amount: '₹1,016', desc: 'Prasadam Sponsorship' },
-                      { count: '50 People', amount: '₹2,516', desc: 'Festival Seva' },
-                      { count: '100 People', amount: '₹5,016', desc: 'Grand Festival Seva' },
-                    ]
+                    { count: '10 People', amount: '₹516', desc: 'Prasadam Sponsorship' },
+                    { count: '20 People', amount: '₹1,016', desc: 'Prasadam Sponsorship' },
+                    { count: '50 People', amount: '₹2,516', desc: 'Festival Seva' },
+                    { count: '100 People', amount: '₹5,016', desc: 'Grand Festival Seva' },
+                  ]
                 ).map((card, i) => (
                   <div
                     key={i}
@@ -950,8 +945,8 @@ export default function RegistrationForm() {
                 <label
                   key={opt}
                   className={`flex-1 flex items-center justify-center gap-2.5 py-3 rounded-xl border font-semibold text-base cursor-pointer transition-all ${watchedFields.wantsToDonate === opt
-                      ? 'bg-purple-950/40 border-purple-500/50 text-white'
-                      : 'bg-slate-950/50 border-slate-800 text-slate-400'
+                    ? 'bg-purple-950/40 border-purple-500/50 text-white'
+                    : 'bg-slate-950/50 border-slate-800 text-slate-400'
                     }`}
                 >
                   <input
@@ -1009,8 +1004,8 @@ export default function RegistrationForm() {
               type="submit"
               disabled={isSubmitting}
               className={`w-full py-4 rounded-xl font-bold text-lg text-white transition-all transform active:scale-[0.98] ${isValid
-                  ? 'bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:opacity-95 shadow-[0_0_20px_rgba(139,92,246,0.3)] hover:shadow-[0_0_30px_rgba(139,92,246,0.5)] cursor-pointer'
-                  : 'bg-slate-900 border border-slate-800 text-slate-500 cursor-not-allowed'
+                ? 'bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:opacity-95 shadow-[0_0_20px_rgba(139,92,246,0.3)] hover:shadow-[0_0_30px_rgba(139,92,246,0.5)] cursor-pointer'
+                : 'bg-slate-900 border border-slate-800 text-slate-500 cursor-not-allowed'
                 }`}
             >
               {isSubmitting ? (

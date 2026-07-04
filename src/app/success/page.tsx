@@ -60,9 +60,9 @@ export default function SuccessPage() {
             <h1 className="text-3xl font-extrabold tracking-tight text-white mb-3">
               Registration Successful!
             </h1>
-            
+
             <p className="text-slate-300 text-base mb-6 leading-relaxed">
-              Thank you for registering. We look forward to seeing you and serving together at the grand festival.
+              Thank you for registering. We look forward to seeing you and serving together at the grand festival on 19-july-2026.
             </p>
 
             <div className="border-t border-slate-800/80 my-6 pt-6 text-left space-y-4">
@@ -71,7 +71,7 @@ export default function SuccessPage() {
                 <div>
                   <p className="font-semibold text-white">Event Details</p>
                   <p className="text-slate-400 text-xs">Rathayatra Festival 2026</p>
-                  
+
                   {lastReg?.interestedToVolunteer === 'Yes' && lastReg.volunteerSlotTime && (
                     <div className="mt-2.5">
                       <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Volunteer Time Slot</p>
@@ -102,7 +102,7 @@ export default function SuccessPage() {
               </button>
             </Link>
           </motion.div>
-          
+
           <p className="text-center text-xs text-slate-500 mt-6">
             Need support? Please contact event coordinators at the helpdesk.
           </p>

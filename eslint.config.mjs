@@ -17,6 +17,8 @@ const eslintConfig = defineConfig([
     "src/test-db.js",
     "src/verify-rls.js",
     "src/verify-rpc.js",
+    "scripts/**",
+    "*.mjs",
   ]),
 ]);
 
