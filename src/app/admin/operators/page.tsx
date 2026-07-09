@@ -287,16 +287,24 @@ function OperatorFormModal({
 function ViewAssignedModal({
   operator,
   onClose,
+  onUnassigned,
 }: {
   operator: ContactOperator;
   onClose: () => void;
+  onUnassigned: () => void;
 }) {
   const [assignments, setAssignments] = useState<Record<string, unknown>[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function load() {
+  // Unassign states
+  const [unassignId, setUnassignId] = useState<string | null>(null);
+  const [unassignName, setUnassignName] = useState('');
+  const [unassigning, setUnassigning] = useState(false);
+  const [errorUnassign, setErrorUnassign] = useState<string | null>(null);
+
+  const loadAssignments = useCallback(async () => {
+    try {
       const auth = await getAuthHeader();
       const res = await fetch(`/api/assignments?operator_id=${operator.id}&limit=100`, {
         headers: { Authorization: auth },
@@ -306,10 +314,39 @@ function ViewAssignedModal({
         setAssignments(d.assignments ?? []);
         setTotalCount(d.total ?? 0);
       }
+    } finally {
       setLoading(false);
     }
-    load();
   }, [operator.id]);
+
+  useEffect(() => {
+    loadAssignments();
+  }, [loadAssignments]);
+
+  const handleConfirmUnassign = async () => {
+    if (!unassignId) return;
+    setUnassigning(true);
+    setErrorUnassign(null);
+    try {
+      const auth = await getAuthHeader();
+      const res = await fetch(`/api/assignments/${unassignId}`, {
+        method: 'DELETE',
+        headers: { Authorization: auth },
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        setErrorUnassign(d.error || 'Failed to unassign contact');
+        return;
+      }
+      setUnassignId(null);
+      await loadAssignments();
+      onUnassigned();
+    } catch {
+      setErrorUnassign('Network error. Please try again.');
+    } finally {
+      setUnassigning(false);
+    }
+  };
 
   const statusColors: Record<string, string> = {
     Pending: 'text-yellow-400 bg-yellow-950/30 border-yellow-500/20',
@@ -357,14 +394,72 @@ function ViewAssignedModal({
                   <p className="text-xs text-slate-500">{String(reg?.phone ?? '—')} · {String(reg?.area_of_stay ?? '—')}</p>
                   {remarksText && <p className="text-xs text-slate-600 italic mt-0.5 truncate">{remarksText}</p>}
                 </div>
-                <span className={`text-[10px] font-bold px-2 py-1 rounded-lg border shrink-0 ${statusClass}`}>
-                  {String(a.status)}
-                </span>
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <button
+                    onClick={() => {
+                      setUnassignId(a.id as string);
+                      setUnassignName(String(reg?.full_name ?? 'Contact'));
+                      setErrorUnassign(null);
+                    }}
+                    className="px-2.5 py-1 rounded-lg border border-slate-700 hover:border-orange-500/50 hover:bg-orange-950/20 text-slate-400 hover:text-orange-400 text-[10px] font-semibold transition-all cursor-pointer flex items-center gap-1"
+                    title="Unassign this contact"
+                  >
+                    Unassign
+                  </button>
+                  <span className={`text-[10px] font-bold px-2 py-1 rounded-lg border shrink-0 ${statusClass}`}>
+                    {String(a.status)}
+                  </span>
+                </div>
               </div>
             );
           })}
         </div>
       </motion.div>
+
+      {/* Confirmation Dialog */}
+      {unassignId && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm animate-fade-in">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="glass-card rounded-2xl p-6 w-full max-w-sm relative"
+          >
+            <h2 className="text-base font-extrabold text-slate-100 mb-2">Unassign Contact</h2>
+            <div className="space-y-4">
+              <p className="text-xs text-slate-300 leading-relaxed">
+                This contact <strong className="text-slate-100">({unassignName})</strong> will no longer be assigned to this operator.
+              </p>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                The registration remains intact and can later be assigned to another operator.
+              </p>
+
+              {errorUnassign && (
+                <div className="p-3 bg-red-950/40 border border-red-500/30 rounded-xl text-red-300 text-xs flex gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-400" />
+                  {errorUnassign}
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={handleConfirmUnassign}
+                  disabled={unassigning}
+                  className="flex-1 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 active:bg-orange-800 disabled:opacity-60 text-white text-xs font-bold transition-all cursor-pointer border-none"
+                >
+                  {unassigning ? 'Unassigning...' : 'Unassign'}
+                </button>
+                <button
+                  onClick={() => setUnassignId(null)}
+                  disabled={unassigning}
+                  className="px-4 py-2.5 rounded-xl bg-slate-900/60 border border-slate-700/40 text-slate-400 text-xs font-semibold hover:text-slate-100 transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
@@ -569,6 +664,7 @@ export default function ContactOperatorsPage() {
             key="view-modal"
             operator={viewOp}
             onClose={() => setViewOp(null)}
+            onUnassigned={loadOperators}
           />
         )}
         {removeOp && (

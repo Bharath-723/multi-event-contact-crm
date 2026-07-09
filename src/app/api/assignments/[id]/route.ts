@@ -131,3 +131,46 @@ export async function PUT(
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
   return NextResponse.json({ assignment: updated });
 }
+
+// DELETE /api/assignments/[id]
+// Admin: deactivate assignment (unassign contact) while keeping audit log history
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const authHeader = req.headers.get('Authorization') || '';
+  const token = authHeader.replace('Bearer ', '');
+  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+  if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { data: adminRow } = await supabaseAdmin.from('admins').select('id').eq('id', user.id).single();
+  if (!adminRow) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
+  const { id } = await params;
+
+  const { data: updated, error: updateError } = await supabaseAdmin
+    .from('contact_assignments')
+    .update({
+      is_active: false,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', id)
+    .select('id, registration_id, operator_id')
+    .single();
+
+  if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+  if (!updated) return NextResponse.json({ error: 'Assignment not found' }, { status: 404 });
+
+  // Record audit log
+  await supabaseAdmin.from('audit_logs').insert({
+    admin_id: user.id,
+    action: 'ASSIGNMENT_DEACTIVATED',
+    details: {
+      assignment_id: id,
+      registration_id: updated.registration_id,
+      operator_id: updated.operator_id
+    },
+  });
+
+  return NextResponse.json({ message: 'Assignment deactivated successfully', assignment: updated });
+}
