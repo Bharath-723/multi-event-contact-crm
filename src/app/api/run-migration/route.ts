@@ -6,26 +6,57 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const secret = searchParams.get('secret');
   
-  // Security check to prevent unauthorized execution
   if (secret !== 'HarekrishnaMigrationSecret2026') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const client = new Client({
-    host: 'db.nmnizrkgdypylgllrfui.supabase.co',
-    port: 5432,
-    user: 'postgres',
-    password: 'Harekrishna@123',
-    database: 'postgres',
-    ssl: { rejectUnauthorized: false }
-  });
+  const regions = [
+    'ap-south-1',       // Mumbai
+    'ap-southeast-1',   // Singapore
+    'us-east-1',        // N. Virginia
+    'us-west-2',        // Oregon
+    'eu-central-1',     // Frankfurt
+    'eu-west-1'         // Ireland
+  ];
+
+  let lastError = null;
+  let connectedRegion = null;
+  let client = null;
+
+  for (const region of regions) {
+    const host = `aws-0-${region}.pooler.supabase.com`;
+    console.log(`[Migration API] Trying connection via pooler in region: ${region} (${host})...`);
+    
+    client = new Client({
+      host: host,
+      port: 6543,
+      user: 'postgres.nmnizrkgdypylgllrfui',
+      password: 'Harekrishna@123',
+      database: 'postgres',
+      connectionTimeoutMillis: 5000,
+      ssl: { rejectUnauthorized: false }
+    });
+
+    try {
+      await client.connect();
+      console.log(`[Migration API] CONNECTED successfully to pooler in region: ${region}`);
+      connectedRegion = region;
+      break;
+    } catch (err: any) {
+      console.log(`[Migration API] Failed for region ${region}:`, err.message);
+      lastError = err;
+      client = null;
+    }
+  }
+
+  if (!connectedRegion || !client) {
+    return NextResponse.json({
+      error: 'Could not connect to database pooler in any scanned region.',
+      details: lastError?.message || lastError
+    }, { status: 500 });
+  }
 
   try {
-    console.log('[Migration API] Connecting to database...');
-    await client.connect();
-    console.log('[Migration API] Connected successfully!');
-
-    // SQL statements
     const sql = `
       -- Add transportation_required column to registrations
       ALTER TABLE registrations ADD COLUMN IF NOT EXISTS transportation_required BOOLEAN DEFAULT FALSE;
@@ -111,11 +142,15 @@ export async function GET(request: NextRequest) {
       $$ LANGUAGE plpgsql SECURITY DEFINER;
     `;
 
-    console.log('[Migration API] Executing migration SQL...');
+    console.log('[Migration API] Connected region: ' + connectedRegion + '. Executing migration SQL...');
     await client.query(sql);
     console.log('[Migration API] Migration completed successfully!');
 
-    return NextResponse.json({ success: true, message: 'Database migrations for transportation applied successfully.' });
+    return NextResponse.json({
+      success: true,
+      region: connectedRegion,
+      message: 'Database migrations for transportation applied successfully.'
+    });
   } catch (err: any) {
     console.error('[Migration API] Error running migration:', err);
     return NextResponse.json({ error: err.message || err }, { status: 500 });
