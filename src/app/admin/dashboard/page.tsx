@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { Registration, VolunteerSlot } from '@/lib/types';
 import { 
   Users, Heart, Soup, Clock, Loader2, X, Phone, 
-  User, CheckCircle, ExternalLink, Calendar, Building, Briefcase
+  User, CheckCircle, ExternalLink, Calendar, Building, Briefcase, Bus
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -31,7 +31,7 @@ const PURPLE_COLORS = ['#8b5cf6', '#6366f1', '#ec4899', '#3b82f6', '#14b8a6', '#
 
 export default function AdminDashboardPage() {
   const queryClient = useQueryClient();
-  const [activeModal, setActiveModal] = useState<'total' | 'donors' | 'prasadam' | 'volunteers' | 'todays' | 'occupation' | null>(null);
+  const [activeModal, setActiveModal] = useState<'total' | 'donors' | 'prasadam' | 'volunteers' | 'todays' | 'occupation' | 'transportation' | null>(null);
   const [realtimeStatus, setRealtimeStatus] = useState<string>('SUBSCRIBED');
 
   // 1. Query all registrations with joint data
@@ -139,6 +139,9 @@ export default function AdminDashboardPage() {
   const workingCount = registrations.filter(r => r.occupation === 'Working').length;
   const businessCount = registrations.filter(r => r.occupation === 'Business').length;
   const othersCount = totalCount - studentsCount - workingCount - businessCount;
+
+  const transportationYesCount = registrations.filter(r => r.transportation_required === 'Yes').length;
+  const transportationNoCount = totalCount - transportationYesCount;
 
   // Group Volunteers by Slot for the details modal
   const volunteersBySlot = slots.map(slot => {
@@ -321,7 +324,7 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* 1. Statistics Cards Section */}
-      <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 md:gap-6">
+      <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3.5 md:gap-6">
         
         {/* Total Registrations */}
         <div 
@@ -396,6 +399,21 @@ export default function AdminDashboardPage() {
             Click to view list <ExternalLink className="w-3 h-3" />
           </span>
           <Calendar className="w-9 h-9 md:w-16 md:h-16 opacity-8 md:opacity-12 absolute right-2 top-2 text-slate-400 dark:text-slate-700 group-hover:text-purple-400/80 transition-colors" />
+        </div>
+
+        {/* Transportation Required */}
+        <div 
+          onClick={() => setActiveModal('transportation')}
+          className="glass-card rounded-2xl p-3.5 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[105px] md:min-h-[140px]"
+        >
+          <div>
+            <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Transportation Required</span>
+            <span className="text-lg md:text-3xl font-extrabold text-slate-100 mt-1 md:mt-2 block">{transportationYesCount}</span>
+          </div>
+          <span className="text-[9px] md:text-[10px] text-purple-600 dark:text-purple-400 font-bold mt-2 md:mt-4 flex items-center gap-1">
+            Yes: {transportationYesCount} | No: {transportationNoCount} <ExternalLink className="w-3 h-3" />
+          </span>
+          <Bus className="w-9 h-9 md:w-16 md:h-16 opacity-8 md:opacity-12 absolute right-2 top-2 text-slate-400 dark:text-slate-700 group-hover:text-purple-400/80 transition-colors" />
         </div>
 
         {/* Occupation Summary */}
@@ -606,6 +624,7 @@ export default function AdminDashboardPage() {
                   {activeModal === 'volunteers' && 'Volunteers Grouped By Time Slot'}
                   {activeModal === 'todays' && "Today's Registrations"}
                   {activeModal === 'occupation' && 'Occupation Summary & Details'}
+                  {activeModal === 'transportation' && 'Transportation Summary'}
                 </h3>
                 <button
                   onClick={() => setActiveModal(null)}
@@ -818,6 +837,62 @@ export default function AdminDashboardPage() {
                                 .map((_, index) => (
                                   <Cell key={`cell-${index}`} fill={PURPLE_COLORS[index % PURPLE_COLORS.length]} />
                                 ))}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeModal === 'transportation' && (
+                  <div className="space-y-5">
+                    {/* List counts grouped by transportation option */}
+                    <div className="space-y-3 font-mono">
+                      <div className="flex justify-between items-center text-xs sm:text-sm py-0.5">
+                        <span className="text-slate-350 dark:text-slate-300">Yes (Requires Transport)</span>
+                        <span className="text-slate-650 flex-1 mx-2 overflow-hidden truncate">{".".repeat(35)}</span>
+                        <span className="font-bold text-slate-100">{transportationYesCount}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-xs sm:text-sm py-0.5">
+                        <span className="text-slate-350 dark:text-slate-300">No (Does Not Require)</span>
+                        <span className="text-slate-650 flex-1 mx-2 overflow-hidden truncate">{".".repeat(35)}</span>
+                        <span className="font-bold text-slate-100">{transportationNoCount}</span>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-slate-900/60 pt-3 flex justify-between items-center text-xs font-bold text-slate-400 uppercase tracking-wider">
+                      <span>Total Registrations</span>
+                      <span className="text-slate-100 text-sm font-mono">{totalCount}</span>
+                    </div>
+
+                    {/* Horizontal Bar Chart of Transportation Distribution */}
+                    <div className="border-t border-slate-900/60 pt-4">
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-3">Transportation Distribution</span>
+                      <div className="h-40 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            layout="vertical"
+                            data={[
+                              { name: 'Yes', value: transportationYesCount },
+                              { name: 'No', value: transportationNoCount }
+                            ]}
+                            margin={{ top: 5, right: 20, left: 10, bottom: 5 }}
+                          >
+                            <XAxis type="number" stroke="#64748b" fontSize={10} tickLine={false} />
+                            <YAxis type="category" dataKey="name" stroke="#64748b" fontSize={10} tickLine={false} width={40} />
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: '#0f172a',
+                                borderColor: '#334155',
+                                borderRadius: '12px',
+                                color: '#f8fafc',
+                                fontSize: '11px',
+                              }}
+                            />
+                            <Bar dataKey="value" fill="#8b5cf6" radius={[0, 4, 4, 0]} name="Count">
+                              <Cell fill="#ec4899" />
+                              <Cell fill="#6366f1" />
                             </Bar>
                           </BarChart>
                         </ResponsiveContainer>

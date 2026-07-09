@@ -69,6 +69,7 @@ export async function POST(request: NextRequest) {
       volunteerSlotId,
       interestedToDinner,
       wantsToDonate,
+      transportationRequired,
       skills,
     } = validationResult.data;
 
@@ -88,6 +89,7 @@ export async function POST(request: NextRequest) {
       p_donation_status: wantsToDonate === 'Yes' ? 'User Opted to Donate' : 'Pending',
       p_skill_ids: skills,
       p_occupation: occupation || null,
+      p_transportation_required: transportationRequired,
     });
 
     if (error) {

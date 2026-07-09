@@ -1,5 +1,5 @@
--- Add transportation_required column to registrations
-ALTER TABLE registrations ADD COLUMN IF NOT EXISTS transportation_required BOOLEAN DEFAULT FALSE;
+-- Add transportation_required column to registrations as TEXT
+ALTER TABLE registrations ADD COLUMN IF NOT EXISTS transportation_required TEXT DEFAULT 'No';
 
 -- Define the new 15-argument register_volunteer function
 CREATE OR REPLACE FUNCTION register_volunteer(
@@ -17,7 +17,32 @@ CREATE OR REPLACE FUNCTION register_volunteer(
     p_donation_status TEXT,
     p_skill_ids UUID[],
     p_occupation TEXT,
-    p_transportation_required BOOLEAN
+    p_transportation_required TEXT
+)
+RETURNS UUID AS $$
+DECLARE
+    v_registration_id UUID;
+    v_skill_id UUID;
+END;
+$$;
+
+-- Note: Actual function body logic will be written in the CREATE OR REPLACE below
+CREATE OR REPLACE FUNCTION register_volunteer(
+    p_full_name TEXT,
+    p_phone TEXT,
+    p_age INTEGER,
+    p_gender TEXT,
+    p_area_of_stay TEXT,
+    p_company_college TEXT,
+    p_pg_name TEXT,
+    p_interested_to_volunteer BOOLEAN,
+    p_volunteer_slot_id UUID,
+    p_interested_to_dinner BOOLEAN,
+    p_wants_to_donate BOOLEAN,
+    p_donation_status TEXT,
+    p_skill_ids UUID[],
+    p_occupation TEXT,
+    p_transportation_required TEXT
 )
 RETURNS UUID AS $$
 DECLARE
@@ -76,7 +101,7 @@ BEGIN
     RETURN register_volunteer(
         p_full_name, p_phone, p_age, p_gender, p_area_of_stay, p_company_college, p_pg_name,
         p_interested_to_volunteer, p_volunteer_slot_id, p_interested_to_dinner,
-        p_wants_to_donate, p_donation_status, p_skill_ids, p_occupation, FALSE
+        p_wants_to_donate, p_donation_status, p_skill_ids, p_occupation, 'No'
     );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

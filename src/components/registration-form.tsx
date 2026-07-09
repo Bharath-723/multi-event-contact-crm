@@ -8,7 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import confetti from 'canvas-confetti';
 import {
   User, Phone, Award, Building, Home as HomeIcon, CheckCircle2,
-  ChevronDown, Search, ShieldAlert, Sparkles, Loader2, Info, Briefcase
+  ChevronDown, Search, ShieldAlert, Sparkles, Loader2, Info, Briefcase, Megaphone
 } from 'lucide-react';
 import { registrationSchema, RegistrationSchemaInput } from '@/lib/validation';
 import { supabase } from '@/lib/supabase';
@@ -101,11 +101,20 @@ export default function RegistrationForm() {
       volunteerSlotId: '',
       interestedToDinner: undefined,
       wantsToDonate: undefined,
+      transportationRequired: undefined,
     } as unknown as RegistrationSchemaInput,
   });
 
   // Watch key fields to handle conditional rendering and local storage persistence
   const watchedFields = watch();
+
+  const transportationRequiredValue = watchedFields.transportationRequired;
+  const areaOfStayValue = watchedFields.areaOfStay;
+  const allowedAreas = ['Aziz Nagar', 'Gandipet', 'Narsingi'];
+  const showTransportationWarning = 
+    transportationRequiredValue === 'Yes' && 
+    areaOfStayValue && 
+    !allowedAreas.some(area => area.toLowerCase() === areaOfStayValue.trim().toLowerCase());
 
   // 3. Load Draft from Local Storage on Mount and detect donation success callback
   useEffect(() => {
@@ -710,6 +719,43 @@ export default function RegistrationForm() {
                 )}
               </div>
             </div>
+
+            {/* Transportation Notice */}
+            <div className="border border-red-500/40 bg-red-950/30 shadow-[0_0_12px_rgba(239,68,68,0.25)] rounded-xl p-3 flex items-start gap-2.5 mt-1">
+              <Megaphone className="w-5 h-5 text-red-500 shrink-0 mt-0.5 animate-pulse" />
+              <span className="text-xs text-white leading-relaxed">
+                <strong className="text-red-500 font-bold">*NOTE:</strong> Transportation is available from <span className="text-yellow-400 font-semibold">Aziz Nagar, Gandipet, Narsingi</span>.
+              </span>
+            </div>
+
+            {/* Transportation Dropdown */}
+            <div className="relative">
+              <select
+                {...register('transportationRequired')}
+                className="w-full px-4 py-3 rounded-xl glass-input text-white text-base appearance-none cursor-pointer"
+                aria-invalid={errors.transportationRequired ? 'true' : 'false'}
+                defaultValue=""
+              >
+                <option value="" disabled className="bg-slate-950 text-slate-500">Select Transportation Requirement *</option>
+                <option value="Yes" className="bg-slate-950 text-white">Yes</option>
+                <option value="No" className="bg-slate-950 text-white">No</option>
+              </select>
+              <span className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-slate-500">
+                <ChevronDown className="w-5 h-5" />
+              </span>
+              {errors.transportationRequired && (
+                <p className="text-red-400 text-xs mt-1 pl-1">{errors.transportationRequired.message}</p>
+              )}
+              {showTransportationWarning ? (
+                <div className="flex items-start gap-2 mt-2 px-1 text-yellow-400 text-xs leading-relaxed">
+                  <Info className="w-4 h-4 shrink-0 mt-0.5" />
+                  <p>
+                    Transportation service is currently available only from Aziz Nagar, Gandipet, and Narsingi. Please contact the organizers for assistance.
+                  </p>
+                </div>
+              ) : null}
+            </div>
+
             <div className={watchedFields.gender === 'Male' ? "grid grid-cols-1 sm:grid-cols-2 gap-4" : "grid grid-cols-1 gap-4"}>
               {/* PG Name (Conditional: Gender == 'Male') */}
               {watchedFields.gender === 'Male' && (

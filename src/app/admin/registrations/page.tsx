@@ -29,6 +29,7 @@ export default function RegistrationsPage() {
   const [filterCompany, setFilterCompany] = useState('');
   const [filterSkill, setFilterSkill] = useState('');
   const [filterDate, setFilterDate] = useState('');
+  const [filterTransportation, setFilterTransportation] = useState('');
 
   // --- PAGINATION STATE ---
   const [currentPage, setCurrentPage] = useState(1);
@@ -159,8 +160,9 @@ export default function RegistrationsPage() {
       const pr = sessionStorage.getItem('regs_filterPrasadam');
       const a = sessionStorage.getItem('regs_filterArea');
       const c = sessionStorage.getItem('regs_filterCompany');
-      const sk = sessionStorage.getItem('regs_filterSkill');
+          const sk = sessionStorage.getItem('regs_filterSkill');
       const dt = sessionStorage.getItem('regs_filterDate');
+      const tr = sessionStorage.getItem('regs_filterTransportation');
  
       if (q) setSearchQuery(q);
       if (p) setSearchPhone(p);
@@ -174,6 +176,7 @@ export default function RegistrationsPage() {
       if (c) setFilterCompany(c);
       if (sk) setFilterSkill(sk);
       if (dt) setFilterDate(dt);
+      if (tr) setFilterTransportation(tr);
     }
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -191,6 +194,7 @@ export default function RegistrationsPage() {
   useEffect(() => { sessionStorage.setItem('regs_filterCompany', filterCompany); }, [filterCompany]);
   useEffect(() => { sessionStorage.setItem('regs_filterSkill', filterSkill); }, [filterSkill]);
   useEffect(() => { sessionStorage.setItem('regs_filterDate', filterDate); }, [filterDate]);
+  useEffect(() => { sessionStorage.setItem('regs_filterTransportation', filterTransportation); }, [filterTransportation]);
 
   const highlightText = (text: string, query: string) => {
     if (!query.trim()) return text;
@@ -235,7 +239,8 @@ export default function RegistrationsPage() {
       const matchCompany = reg.company_college.toLowerCase().includes(query);
       const matchArea = reg.area_of_stay?.toLowerCase().includes(query) || false;
       const matchOccupation = reg.occupation?.toLowerCase().includes(query) || false;
-      if (!matchName && !matchCompany && !matchArea && !matchOccupation) return false;
+      const matchTransportation = reg.transportation_required?.toLowerCase().includes(query) || false;
+      if (!matchName && !matchCompany && !matchArea && !matchOccupation && !matchTransportation) return false;
     }
 
     // 2. Phone specific search
@@ -297,6 +302,12 @@ export default function RegistrationsPage() {
       } else {
         if (reg.occupation !== filterOccupation) return false;
       }
+    }
+
+    // 13. Transportation filter
+    if (filterTransportation) {
+      const val = reg.transportation_required || 'No';
+      if (val !== filterTransportation) return false;
     }
 
     return true;
@@ -477,7 +488,7 @@ export default function RegistrationsPage() {
     const headers = [
       'Name', 'Phone', 'Age', 'Gender', 'Area', 'Company', 'PG', 
       'Skills', 'Volunteer', 'Volunteer Slot', 'Dinner Prasadam', 
-      'Donation Status', 'Registered Date', 'Occupation'
+      'Donation Status', 'Registered Date', 'Occupation', 'Transportation Required'
     ];
 
     const rows = filteredRegistrations.map(r => [
@@ -494,7 +505,8 @@ export default function RegistrationsPage() {
       r.interested_to_dinner ? 'Yes' : 'No',
       r.donation_status,
       formatDate(r.created_at),
-      `"${(r.occupation || '').replace(/"/g, '""')}"`
+      `"${(r.occupation || '').replace(/"/g, '""')}"`,
+      r.transportation_required || 'No'
     ]);
 
     const csvContent = "data:text/csv;charset=utf-8," 
@@ -798,6 +810,17 @@ export default function RegistrationsPage() {
             <option value="No">No</option>
           </select>
 
+          {/* Transportation Filter — always visible */}
+          <select
+            value={filterTransportation}
+            onChange={(e) => setFilterTransportation(e.target.value)}
+            className="px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-800 text-slate-300 focus:outline-none cursor-pointer"
+          >
+            <option value="">Transportation (All)</option>
+            <option value="Yes">Yes Only</option>
+            <option value="No">No Only</option>
+          </select>
+
           {/* Donation Status — hidden on mobile */}
           <select
             value={filterDonation}
@@ -873,13 +896,14 @@ export default function RegistrationsPage() {
                 <th className="px-5 py-4">Volunteer Slot</th>
                 <th className="px-5 py-4">Dinner</th>
                 <th className="px-5 py-4">Donation Status</th>
+                <th className="px-5 py-4">Transport</th>
                 <th className="px-5 py-4 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-900/60 text-sm text-slate-300">
               {currentItems.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-5 py-12 text-center text-slate-500">
+                  <td colSpan={11} className="px-5 py-12 text-center text-slate-500">
                     No registrations found.
                   </td>
                 </tr>
@@ -973,6 +997,13 @@ export default function RegistrationsPage() {
                       ) : (
                         <span className="text-xs text-slate-500">No</span>
                       )}
+                    </td>
+
+                    {/* Transportation */}
+                    <td className="px-5 py-4">
+                      <span className={`text-xs font-semibold ${reg.transportation_required === 'Yes' ? 'text-purple-400 font-bold' : 'text-slate-500'}`}>
+                        {reg.transportation_required || 'No'}
+                      </span>
                     </td>
 
                     {/* Actions */}
@@ -1124,7 +1155,7 @@ export default function RegistrationsPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 border-t border-slate-900 pt-3">
+                <div className="grid grid-cols-3 gap-4 border-t border-slate-900 pt-3">
                   <div>
                     <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Volunteering Schedule</span>
                     <span className="font-semibold text-slate-100 mt-0.5 block">
@@ -1138,6 +1169,13 @@ export default function RegistrationsPage() {
                     <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Dinner Prasadam</span>
                     <span className="font-semibold text-slate-100 mt-0.5 block">
                       {selectedReg.interested_to_dinner ? 'Yes' : 'No'}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Transportation</span>
+                    <span className="font-semibold text-slate-100 mt-0.5 block">
+                      {selectedReg.transportation_required || 'No'}
                     </span>
                   </div>
                 </div>

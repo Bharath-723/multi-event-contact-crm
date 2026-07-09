@@ -25,6 +25,7 @@ export interface Registration {
   interested_to_dinner: boolean;
   wants_to_donate: boolean;
   donation_status: 'Pending' | 'User Opted to Donate' | 'Completed' | 'Failed';
+  transportation_required?: string | null;
   created_at: string;
   skills?: Skill[];
 }

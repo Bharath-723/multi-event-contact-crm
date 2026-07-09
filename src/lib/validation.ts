@@ -42,6 +42,9 @@ export const registrationSchema = z.object({
   wantsToDonate: z.enum(['Yes', 'No'], {
     message: 'Please select a donation preference',
   }),
+  transportationRequired: z.enum(['Yes', 'No'], {
+    message: 'Please select a transportation preference',
+  }),
 }).superRefine((data, ctx) => {
   // If gender is Male, areaOfStay is required
   if (data.gender === 'Male' && (!data.areaOfStay || data.areaOfStay.trim() === '')) {
