@@ -6,7 +6,7 @@ import {
   PhoneCall, Plus, Edit2, ToggleLeft, ToggleRight,
   Users, CheckCircle, Clock, TrendingUp, Eye,
   Loader2, AlertCircle, X, Save, Phone, Mail,
-  User, Lock, RefreshCw, Headset, LogIn
+  User, Lock, RefreshCw, Headset, LogIn, Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { ContactOperator } from '@/lib/types';
@@ -23,11 +23,13 @@ function OperatorCard({
   onEdit,
   onToggle,
   onViewAssigned,
+  onRemove,
 }: {
   op: ContactOperator;
   onEdit: (op: ContactOperator) => void;
   onToggle: (op: ContactOperator) => void;
   onViewAssigned: (op: ContactOperator) => void;
+  onRemove: (op: ContactOperator) => void;
 }) {
   const callRate = op.call_success_pct ?? 0;
   const statusColor = op.is_active
@@ -95,29 +97,35 @@ function OperatorCard({
       )}
 
       {/* Action Buttons */}
-      <div className="flex gap-2 pt-1">
+      <div className="grid grid-cols-2 gap-2 pt-1">
         <button
           onClick={() => onViewAssigned(op)}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-purple-950/30 border border-purple-500/20 text-purple-400 text-xs font-semibold hover:bg-purple-950/50 transition-all cursor-pointer"
+          className="flex items-center justify-center gap-1.5 py-2 rounded-xl bg-purple-950/30 border border-purple-500/20 text-purple-400 text-xs font-semibold hover:bg-purple-950/50 transition-all cursor-pointer"
         >
           <Eye className="w-3.5 h-3.5" /> View
         </button>
         <button
           onClick={() => onEdit(op)}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-slate-900/40 border border-slate-700/30 text-slate-400 text-xs font-semibold hover:text-slate-100 transition-all cursor-pointer"
+          className="flex items-center justify-center gap-1.5 py-2 rounded-xl bg-slate-900/40 border border-slate-700/30 text-slate-400 text-xs font-semibold hover:text-slate-100 transition-all cursor-pointer"
         >
           <Edit2 className="w-3.5 h-3.5" /> Edit
         </button>
         <button
           onClick={() => onToggle(op)}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
+          className={`flex items-center justify-center gap-1.5 py-2 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
             op.is_active
-              ? 'bg-red-950/20 border-red-500/20 text-red-400 hover:bg-red-950/40'
+              ? 'bg-yellow-950/20 border-yellow-500/20 text-yellow-400 hover:bg-yellow-950/40'
               : 'bg-green-950/20 border-green-500/20 text-green-400 hover:bg-green-950/40'
           }`}
         >
           {op.is_active ? <ToggleRight className="w-3.5 h-3.5" /> : <ToggleLeft className="w-3.5 h-3.5" />}
           {op.is_active ? 'Disable' : 'Enable'}
+        </button>
+        <button
+          onClick={() => onRemove(op)}
+          className="flex items-center justify-center gap-1.5 py-2 rounded-xl bg-red-950/20 border border-red-500/20 text-red-400 hover:bg-red-950/45 text-xs font-semibold transition-all cursor-pointer"
+        >
+          <Trash2 className="w-3.5 h-3.5" /> Remove
         </button>
       </div>
     </motion.div>
@@ -368,11 +376,39 @@ export default function ContactOperatorsPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [editOp, setEditOp] = useState<ContactOperator | null>(null);
   const [viewOp, setViewOp] = useState<ContactOperator | null>(null);
+  const [removeOp, setRemoveOp] = useState<ContactOperator | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const [errorRemove, setErrorRemove] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const toast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 3500);
+  };
+
+  const handleConfirmRemove = async () => {
+    if (!removeOp) return;
+    setRemoving(true);
+    setErrorRemove(null);
+    try {
+      const auth = await getAuthHeader();
+      const res = await fetch(`/api/operators/${removeOp.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: auth },
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        setErrorRemove(d.error || 'Failed to remove operator');
+        return;
+      }
+      setRemoveOp(null);
+      loadOperators();
+      toast('Operator removed successfully.');
+    } catch {
+      setErrorRemove('Network error. Please try again.');
+    } finally {
+      setRemoving(false);
+    }
   };
 
   const loadOperators = useCallback(async () => {
@@ -389,7 +425,6 @@ export default function ContactOperatorsPage() {
     }
   }, []);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadOperators(); }, [loadOperators]);
 
   // Realtime subscription for contact assignments status/count updates
@@ -504,6 +539,7 @@ export default function ContactOperatorsPage() {
               onEdit={setEditOp}
               onToggle={handleToggle}
               onViewAssigned={setViewOp}
+              onRemove={setRemoveOp}
             />
           ))}
         </div>
@@ -534,6 +570,61 @@ export default function ContactOperatorsPage() {
             operator={viewOp}
             onClose={() => setViewOp(null)}
           />
+        )}
+        {removeOp && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="glass-card rounded-2xl p-6 w-full max-w-md relative"
+            >
+              <button
+                onClick={() => setRemoveOp(null)}
+                className="absolute top-4 right-4 text-slate-500 hover:text-slate-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <h2 className="text-lg font-extrabold text-slate-100 mb-2">Remove Operator</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Operator</label>
+                  <p className="text-sm font-bold text-slate-200 mt-0.5">{removeOp.name}</p>
+                  <p className="text-xs text-slate-500">{removeOp.email}</p>
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  This action will permanently remove this operator.
+                </p>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  If the operator has assigned contacts, they will first be safely unassigned.
+                </p>
+
+                {errorRemove && (
+                  <div className="p-3 bg-red-950/40 border border-red-500/30 rounded-xl text-red-300 text-xs flex gap-2">
+                    <AlertCircle className="w-4.5 h-4.5 shrink-0 mt-0.5 text-red-400" />
+                    {errorRemove}
+                  </div>
+                )}
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    onClick={handleConfirmRemove}
+                    disabled={removing}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-red-650 hover:bg-red-600 disabled:opacity-60 text-white text-xs font-bold transition-all cursor-pointer"
+                  >
+                    {removing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                    Remove Operator
+                  </button>
+                  <button
+                    onClick={() => setRemoveOp(null)}
+                    disabled={removing}
+                    className="px-4 py-2.5 rounded-xl bg-slate-900/60 border border-slate-700/40 text-slate-400 text-xs font-semibold hover:text-slate-100 transition-all cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 

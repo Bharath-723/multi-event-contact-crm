@@ -64,7 +64,7 @@ export async function PUT(
 }
 
 // ─── DELETE /api/operators/[id] ──────────────────────────────────────────────
-// Soft-disable only — never hard-delete to preserve assignment history
+// Safe permanent removal of operator (detaches assignment history to preserve audits)
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -74,20 +74,39 @@ export async function DELETE(
 
   const { id } = await params;
 
-  const { data: operator, error } = await supabaseAdmin
+  // Step 1: Detach assignments by setting operator_id to NULL and is_active to false
+  const { error: updateError } = await supabaseAdmin
+    .from('contact_assignments')
+    .update({
+      operator_id: null,
+      is_active: false,
+    })
+    .eq('operator_id', id);
+
+  if (updateError) {
+    return NextResponse.json({ error: updateError.message }, { status: 500 });
+  }
+
+  // Step 2: Delete operator from contact_operators table
+  const { data: operator, error: deleteError } = await supabaseAdmin
     .from('contact_operators')
-    .update({ is_active: false })
+    .delete()
     .eq('id', id)
     .select('id, name, email')
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  if (!operator) return NextResponse.json({ error: 'Operator not found' }, { status: 404 });
+  if (deleteError) {
+    return NextResponse.json({ error: deleteError.message }, { status: 500 });
+  }
+  if (!operator) {
+    return NextResponse.json({ error: 'Operator not found' }, { status: 404 });
+  }
 
+  // Step 3: Record audit log
   await supabaseAdmin.from('audit_logs').insert({
-    action: 'OPERATOR_DISABLED',
-    details: { operator_id: id, name: operator.name },
+    action: 'OPERATOR_REMOVED',
+    details: { operator_id: id, name: operator.name, email: operator.email },
   });
 
-  return NextResponse.json({ message: 'Operator disabled', operator });
+  return NextResponse.json({ message: 'Operator removed successfully', operator });
 }
