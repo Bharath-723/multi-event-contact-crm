@@ -106,6 +106,7 @@ export default function RegistrationForm() {
   });
 
   // Watch key fields to handle conditional rendering and local storage persistence
+  // eslint-disable-next-line react-hooks/incompatible-library
   const watchedFields = watch();
 
   const transportationRequiredValue = watchedFields.transportationRequired;
