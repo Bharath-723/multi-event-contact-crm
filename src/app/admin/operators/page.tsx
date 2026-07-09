@@ -609,7 +609,7 @@ export default function ContactOperatorsPage() {
                   <button
                     onClick={handleConfirmRemove}
                     disabled={removing}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-red-650 hover:bg-red-600 disabled:opacity-60 text-white text-xs font-bold transition-all cursor-pointer"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 active:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 text-white text-xs font-semibold transition-all cursor-pointer disabled:opacity-60 border-none"
                   >
                     {removing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
                     Remove Operator
