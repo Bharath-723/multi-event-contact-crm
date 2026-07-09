@@ -62,7 +62,7 @@ export default function SuccessPage() {
             </h1>
 
             <p className="text-slate-300 text-base mb-6 leading-relaxed">
-              Thank you for registering. We look forward to seeing you and serving together at the grand festival on 19-july-2026.
+              Thank you for registering. We look forward to seeing you and serving together at the grand festival on    19-july-2026.
             </p>
 
             <div className="border-t border-slate-800/80 my-6 pt-6 text-left space-y-4">
