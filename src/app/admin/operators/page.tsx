@@ -284,6 +284,7 @@ function ViewAssignedModal({
   onClose: () => void;
 }) {
   const [assignments, setAssignments] = useState<Record<string, unknown>[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -295,6 +296,7 @@ function ViewAssignedModal({
       if (res.ok) {
         const d = await res.json();
         setAssignments(d.assignments ?? []);
+        setTotalCount(d.total ?? 0);
       }
       setLoading(false);
     }
@@ -328,12 +330,12 @@ function ViewAssignedModal({
           </div>
           <div>
             <h2 className="text-base font-extrabold text-slate-100">{operator.name}</h2>
-            <p className="text-xs text-slate-500">Assigned Contacts — {assignments.length} total</p>
+            <p className="text-xs text-slate-500">Assigned Contacts — {totalCount} total</p>
           </div>
         </div>
         <div className="overflow-y-auto flex-1 space-y-2 pr-1">
           {loading && <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-purple-400" /></div>}
-          {!loading && assignments.length === 0 && (
+          {!loading && totalCount === 0 && (
             <p className="text-slate-500 text-sm text-center py-8">No contacts assigned yet.</p>
           )}
           {assignments.map((a) => {
@@ -389,6 +391,24 @@ export default function ContactOperatorsPage() {
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadOperators(); }, [loadOperators]);
+
+  // Realtime subscription for contact assignments status/count updates
+  useEffect(() => {
+    const channel = supabase
+      .channel('admin_operators_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'contact_assignments' },
+        () => {
+          loadOperators();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [loadOperators]);
 
   const handleToggle = async (op: ContactOperator) => {
     const auth = await getAuthHeader();

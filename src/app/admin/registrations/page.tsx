@@ -90,7 +90,12 @@ function AssignContactModal({
               <div className="p-3 bg-green-950/30 border border-green-500/25 rounded-xl flex items-center justify-between gap-2">
                 <div>
                   <p className="text-[10px] text-green-400 font-bold uppercase tracking-wider">Already Assigned to</p>
-                  <p className="text-sm font-bold text-slate-100 mt-0.5">{existing.contact_operators?.name ?? '—'}</p>
+                  <p className="text-sm font-bold text-slate-100 mt-0.5">
+                    {(() => {
+                      const op = existing.contact_operators as unknown;
+                      return (Array.isArray(op) ? (op as Array<{ name: string }>)[0]?.name : (op as { name: string } | null)?.name) ?? '—';
+                    })()}
+                  </p>
                 </div>
                 <UserCheck className="w-5 h-5 text-green-400 shrink-0" />
               </div>
@@ -272,6 +277,13 @@ export default function RegistrationsPage() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'registrations' },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['registrations-list'] });
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'contact_assignments' },
         () => {
           queryClient.invalidateQueries({ queryKey: ['registrations-list'] });
         }

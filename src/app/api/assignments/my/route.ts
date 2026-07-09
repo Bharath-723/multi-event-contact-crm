@@ -32,17 +32,27 @@ export async function GET(req: Request) {
   const from = (page - 1) * limit;
   const to = from + limit - 1;
 
+  let matchedIds: string[] = [];
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(search);
+
+  if (search) {
+    const { data: matchedRegs, error: matchError } = await supabaseAdmin
+      .from('registrations')
+      .select('id')
+      .or(`full_name.ilike.%${search}%,phone.ilike.%${search}%`);
+
+    if (!matchError && matchedRegs) {
+      matchedIds = matchedRegs.map((r) => r.id);
+    }
+  }
+
   // Build query — ALWAYS filter by session operator_id
   let query = supabaseAdmin
     .from('contact_assignments')
     .select(`
       id, registration_id, operator_id, assigned_at, called_at,
       status, remarks, is_active, created_at, updated_at,
-      registrations!registration_id (
-        id, full_name, phone, age, gender, area_of_stay, occupation,
-        company_college, interested_to_volunteer, interested_to_dinner,
-        transportation_required, created_at
-      )
+      registrations!registration_id (*)
     `, { count: 'exact' })
     .eq('operator_id', session.operatorId)  // CRITICAL security filter
     .eq('is_active', true)
@@ -51,15 +61,35 @@ export async function GET(req: Request) {
 
   // Search filter applied on registration fields
   if (search) {
-    // Search by name, phone, or registration ID (partial match)
-    // We apply an ilike on each relevant field
-    query = query.or(
-      [
-        `registrations.full_name.ilike.%${search}%`,
-        `registrations.phone.ilike.%${search}%`,
-        `registration_id.eq.${search}`,
-      ].join(',')
-    );
+    if (matchedIds.length === 0 && !isUuid) {
+      const { data: statsData } = await supabaseAdmin.rpc('get_operator_stats', {
+        p_operator_id: session.operatorId,
+      });
+      const stats = statsData?.[0] ?? {};
+      return NextResponse.json({
+        assignments: [],
+        total: 0,
+        page,
+        limit,
+        stats: {
+          total_assigned:   Number(stats.total_assigned   ?? 0),
+          total_pending:    Number(stats.total_pending    ?? 0),
+          total_completed:  Number(stats.total_completed  ?? 0),
+          total_called:     Number(stats.total_called     ?? 0),
+          call_success_pct: Number(stats.call_success_pct ?? 0),
+        },
+      });
+    }
+
+    if (isUuid) {
+      if (matchedIds.length > 0) {
+        query = query.or(`registration_id.eq.${search},registration_id.in.(${matchedIds.join(',')})`);
+      } else {
+        query = query.eq('registration_id', search);
+      }
+    } else {
+      query = query.in('registration_id', matchedIds);
+    }
   }
 
   const { data, error, count } = await query;

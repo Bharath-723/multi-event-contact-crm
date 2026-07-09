@@ -40,11 +40,7 @@ export async function GET(req: Request) {
       id, registration_id, operator_id, assigned_by, assigned_at, called_at,
       status, remarks, is_active, created_at, updated_at,
       contact_operators!operator_id (id, name, email, phone),
-      registrations!registration_id (
-        id, full_name, phone, age, gender, area_of_stay, occupation,
-        company_college, interested_to_volunteer, interested_to_dinner,
-        transportation_required, created_at
-      )
+      registrations!registration_id (*)
     `, { count: 'exact' })
     .eq('is_active', true)
     .order('assigned_at', { ascending: false })
