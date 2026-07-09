@@ -149,7 +149,7 @@ function ContactRow({
       layout
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="glass-card rounded-xl p-4 space-y-3"
+      className="glass-card rounded-xl p-4 space-y-2.5"
     >
       {/* Header row */}
       <div className="flex items-start justify-between gap-2">
@@ -170,19 +170,6 @@ function ContactRow({
         {/* Status Badge */}
         <span className={`text-[10px] font-bold px-2 py-1 rounded-lg border shrink-0 ${STATUS_COLORS[assignment.status]}`}>
           {assignment.status}
-        </span>
-      </div>
-
-      {/* Info chips */}
-      <div className="flex flex-wrap gap-1.5 text-[10px] font-semibold">
-        <span className={`px-2 py-0.5 rounded border ${reg.interested_to_volunteer ? 'text-indigo-400 bg-indigo-950/30 border-indigo-500/20' : 'text-slate-600 bg-slate-900/40 border-slate-700/20'}`}>
-          Volunteer: {reg.interested_to_volunteer ? 'Yes' : 'No'}
-        </span>
-        <span className={`px-2 py-0.5 rounded border ${reg.interested_to_dinner ? 'text-green-400 bg-green-950/30 border-green-500/20' : 'text-slate-600 bg-slate-900/40 border-slate-700/20'}`}>
-          Dinner: {reg.interested_to_dinner ? 'Yes' : 'No'}
-        </span>
-        <span className={`px-2 py-0.5 rounded border ${reg.transportation_required === 'Yes' ? 'text-yellow-400 bg-yellow-950/30 border-yellow-500/20' : 'text-slate-600 bg-slate-900/40 border-slate-700/20'}`}>
-          Transport: {reg.transportation_required || 'No'}
         </span>
       </div>
 

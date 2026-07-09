@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Headset, LogOut, Loader2, ShieldAlert, PhoneCall } from 'lucide-react';
-import Link from 'next/link';
 import { motion } from 'framer-motion';
 
 interface OperatorInfo {
@@ -96,9 +95,31 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
               <span className="text-xs text-slate-300 font-medium">{operator.name}</span>
             </div>
           )}
-          <Link href="/admin/operator/portal" className="p-2 rounded-lg bg-slate-900/50 border border-slate-800 text-slate-400 hover:text-purple-400 transition-all" aria-label="Portal home">
-            <PhoneCall className="w-4 h-4" />
-          </Link>
+          {operator?.phone ? (
+            <a
+              href={(() => {
+                const cleanDigits = operator.phone.replace(/\D/g, '');
+                if (cleanDigits.startsWith('91') && cleanDigits.length === 12) {
+                  return `tel:+${cleanDigits}`;
+                }
+                if (cleanDigits.startsWith('0') && cleanDigits.length === 11) {
+                  return `tel:+91${cleanDigits.substring(1)}`;
+                }
+                return `tel:+91${cleanDigits}`;
+              })()}
+              className="p-2 rounded-lg bg-slate-900/50 border border-slate-800 text-slate-400 hover:text-purple-400 transition-all cursor-pointer"
+              aria-label="Call operator"
+            >
+              <PhoneCall className="w-4 h-4" />
+            </a>
+          ) : (
+            <div
+              className="p-2 rounded-lg bg-slate-900/50 border border-slate-800/40 text-slate-600 cursor-not-allowed"
+              title="No phone number set for operator"
+            >
+              <PhoneCall className="w-4 h-4" />
+            </div>
+          )}
           <button
             onClick={handleLogout}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-red-500/20 text-red-400 hover:bg-red-950/20 text-xs font-bold transition-all cursor-pointer"
