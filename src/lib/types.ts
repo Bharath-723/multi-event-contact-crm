@@ -90,3 +90,80 @@ export interface CompanyStat {
   company: string;
   count: number;
 }
+
+// ============================================================
+// Contact Operator Module Types (Phase 1 — Isolated)
+// ============================================================
+
+export type AssignmentStatus =
+  | 'Pending'
+  | 'Called'
+  | 'Confirmed'
+  | 'No Answer'
+  | 'Wrong Number'
+  | 'Callback Required'
+  | 'Completed'
+  | 'Visited';
+
+export interface ContactOperator {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string | null;
+  is_active: boolean;
+  last_login_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  // Stats — joined in API response
+  total_assigned?: number;
+  total_pending?: number;
+  total_completed?: number;
+  total_called?: number;
+  total_confirmed?: number;
+  call_success_pct?: number;
+}
+
+export interface ContactAssignment {
+  id: string;
+  registration_id: string;
+  operator_id: string;
+  assigned_by?: string | null;
+  assigned_at: string;
+  called_at?: string | null;
+  status: AssignmentStatus;
+  remarks?: string | null;
+  is_active: boolean;
+  // Future Visitor QR Module fields (nullable now)
+  visited?: boolean | null;
+  visited_at?: string | null;
+  visited_by?: string | null;
+  visit_method?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AssignmentWithRegistration extends ContactAssignment {
+  operator?: Pick<ContactOperator, 'id' | 'name' | 'email' | 'phone'> | null;
+  registration?: {
+    id: string;
+    full_name: string;
+    phone: string;
+    age?: number;
+    gender?: string;
+    area_of_stay?: string | null;
+    occupation?: string | null;
+    company_college?: string;
+    interested_to_volunteer?: boolean;
+    interested_to_dinner?: boolean;
+    transportation_required?: string | null;
+    created_at: string;
+  } | null;
+}
+
+export interface OperatorSession {
+  operatorId: string;
+  name: string;
+  email: string;
+  iat?: number;
+  exp?: number;
+}

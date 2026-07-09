@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { 
   ShieldAlert, LayoutDashboard, Users, LogOut, 
-  Loader2, Menu, X, ShieldCheck
+  Loader2, Menu, X, ShieldCheck, PhoneCall
 } from 'lucide-react';
 import Link from 'next/link';
 import NotificationBell from '@/components/notification-bell';
@@ -113,6 +113,7 @@ export default function AdminDashboardLayout({
   const sidebarLinks = [
     { name: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
     { name: 'Registrations', path: '/admin/registrations', icon: Users },
+    { name: 'Contact Operators', path: '/admin/operators', icon: PhoneCall },
   ];
 
   if (pathname === '/admin') {

@@ -7,10 +7,138 @@ import { Registration, VolunteerSlot, Skill } from '@/lib/types';
 import { formatDate, sanitizeText } from '@/lib/utils';
 import { 
   Search, Filter, Download, Printer, QrCode, Edit2, Trash2, 
-  ChevronLeft, ChevronRight, X, Eye, Loader2, AlertTriangle, Check
+  ChevronLeft, ChevronRight, X, Eye, Loader2, AlertTriangle, Check,
+  PhoneCall, UserCheck, AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import QRModal from '@/components/qr-modal';
+
+// ─── Assign Contact Modal ─────────────────────────────────────────────────────
+function AssignContactModal({
+  registration,
+  onClose,
+  onAssigned,
+}: {
+  registration: { id: string; full_name: string; phone: string };
+  onClose: () => void;
+  onAssigned: () => void;
+}) {
+  const [operators, setOperators] = React.useState<Array<{id:string;name:string;email:string;is_active:boolean;total_assigned?:number}>>([]);
+  const [existing, setExisting] = React.useState<{id:string;status:string;contact_operators:{name:string;email:string}|null} | null>(null);
+  const [loadingCheck, setLoadingCheck] = React.useState(true);
+  const [selectedOp, setSelectedOp] = React.useState('');
+  const [assigning, setAssigning] = React.useState(false);
+  const [error, setError] = React.useState<string|null>(null);
+  const [reassignMode, setReassignMode] = React.useState(false);
+
+  React.useEffect(() => {
+    async function load() {
+      try {
+        const { data: { session } } = await (await import('@/lib/supabase')).supabase.auth.getSession();
+        const auth = session?.access_token ? `Bearer ${session.access_token}` : '';
+        const [opsRes, checkRes] = await Promise.all([
+          fetch('/api/operators', { headers: { Authorization: auth } }),
+          fetch(`/api/assignments/check?registration_id=${registration.id}`, { headers: { Authorization: auth } }),
+        ]);
+        if (opsRes.ok) { const d = await opsRes.json(); setOperators((d.operators ?? []).filter((o: {is_active:boolean}) => o.is_active)); }
+        if (checkRes.ok) { const d = await checkRes.json(); setExisting(d.assignment); }
+      } finally { setLoadingCheck(false); }
+    }
+    load();
+  }, [registration.id]);
+
+  const handleAssign = async () => {
+    if (!selectedOp) { setError('Please select an operator'); return; }
+    setAssigning(true); setError(null);
+    try {
+      const { data: { session } } = await (await import('@/lib/supabase')).supabase.auth.getSession();
+      const auth = session?.access_token ? `Bearer ${session.access_token}` : '';
+      const res = await fetch('/api/assignments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: auth },
+        body: JSON.stringify({ registration_id: registration.id, operator_id: selectedOp, reassign: reassignMode }),
+      });
+      const d = await res.json();
+      if (!res.ok) { setError(d.error || 'Assignment failed'); return; }
+      const result = d.results?.[0];
+      if (result?.status === 'already_assigned') { setError(result.message); setReassignMode(false); return; }
+      onAssigned();
+    } catch { setError('Network error. Please try again.'); }
+    finally { setAssigning(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+      <motion.div initial={{opacity:0,scale:0.95}} animate={{opacity:1,scale:1}} className="glass-card rounded-2xl p-6 w-full max-w-md relative">
+        <button onClick={onClose} className="absolute top-4 right-4 text-slate-500 hover:text-slate-100 cursor-pointer"><X className="w-5 h-5" /></button>
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-9 h-9 rounded-xl bg-purple-950/50 border border-purple-500/20 flex items-center justify-center text-purple-400">
+            <PhoneCall className="w-4 h-4" />
+          </div>
+          <div>
+            <h2 className="text-base font-extrabold text-slate-100">{reassignMode ? 'Reassign Contact' : 'Assign Contact'}</h2>
+            <p className="text-xs text-slate-500 truncate">{registration.full_name} · {registration.phone}</p>
+          </div>
+        </div>
+
+        {loadingCheck ? (
+          <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-purple-400" /></div>
+        ) : (
+          <div className="space-y-4">
+            {/* Existing assignment badge */}
+            {existing && !reassignMode && (
+              <div className="p-3 bg-green-950/30 border border-green-500/25 rounded-xl flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-[10px] text-green-400 font-bold uppercase tracking-wider">Already Assigned to</p>
+                  <p className="text-sm font-bold text-slate-100 mt-0.5">{existing.contact_operators?.name ?? '—'}</p>
+                </div>
+                <UserCheck className="w-5 h-5 text-green-400 shrink-0" />
+              </div>
+            )}
+
+            {error && (
+              <div className="p-3 bg-red-950/40 border border-red-500/30 rounded-xl text-red-300 text-xs flex gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />{error}
+              </div>
+            )}
+
+            {(!existing || reassignMode) && (
+              <div>
+                <label className="text-xs text-slate-400 font-semibold block mb-1.5">Select Operator</label>
+                <select
+                  value={selectedOp} onChange={e => setSelectedOp(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl glass-input text-sm text-foreground cursor-pointer"
+                >
+                  <option value="">— Choose an operator —</option>
+                  {operators.map(op => (
+                    <option key={op.id} value={op.id}>{op.name} ({op.email}) · {op.total_assigned ?? 0} assigned</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-1">
+              {existing && !reassignMode && (
+                <button onClick={() => { setReassignMode(true); setError(null); }}
+                  className="flex-1 py-2.5 rounded-xl bg-yellow-950/30 border border-yellow-500/25 text-yellow-400 text-sm font-bold hover:bg-yellow-950/50 transition-all cursor-pointer">
+                  Reassign Contact
+                </button>
+              )}
+              {(!existing || reassignMode) && (
+                <button onClick={handleAssign} disabled={assigning || !selectedOp}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm font-bold transition-all cursor-pointer disabled:opacity-60">
+                  {assigning ? <Loader2 className="w-4 h-4 animate-spin" /> : <PhoneCall className="w-4 h-4" />}
+                  {assigning ? 'Assigning...' : reassignMode ? 'Confirm Reassign' : 'Assign'}
+                </button>
+              )}
+              <button onClick={onClose} className="px-4 py-2.5 rounded-xl bg-slate-900/60 border border-slate-700/40 text-slate-400 text-sm font-semibold hover:text-slate-100 transition-all cursor-pointer">Cancel</button>
+            </div>
+          </div>
+        )}
+      </motion.div>
+    </div>
+  );
+}
 
 export default function RegistrationsPage() {
   const queryClient = useQueryClient();
@@ -34,6 +162,15 @@ export default function RegistrationsPage() {
   // --- PAGINATION STATE ---
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+
+  // --- ASSIGNMENT STATE (new) ---
+  const [assignReg, setAssignReg] = React.useState<{id:string;full_name:string;phone:string}|null>(null);
+  const [assignToast, setAssignToast] = React.useState<string|null>(null);
+
+  const showAssignToast = (msg: string) => {
+    setAssignToast(msg);
+    setTimeout(() => setAssignToast(null), 3500);
+  };
 
   // --- CRUD MODALS STATE ---
   const [selectedReg, setSelectedReg] = useState<Registration | null>(null);
@@ -897,13 +1034,14 @@ export default function RegistrationsPage() {
                 <th className="px-5 py-4">Dinner</th>
                 <th className="px-5 py-4">Donation Status</th>
                 <th className="px-5 py-4">Transport</th>
+                <th className="px-5 py-4">Assign</th>
                 <th className="px-5 py-4 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-900/60 text-sm text-slate-300">
               {currentItems.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-5 py-12 text-center text-slate-500">
+                  <td colSpan={12} className="px-5 py-12 text-center text-slate-500">
                     No registrations found.
                   </td>
                 </tr>
@@ -1004,6 +1142,17 @@ export default function RegistrationsPage() {
                       <span className={`text-xs font-semibold ${reg.transportation_required === 'Yes' ? 'text-purple-400 font-bold' : 'text-slate-500'}`}>
                         {reg.transportation_required || 'No'}
                       </span>
+                    </td>
+
+                    {/* Assign */}
+                    <td className="px-5 py-4">
+                      <button
+                        onClick={() => setAssignReg({ id: reg.id, full_name: reg.full_name, phone: reg.phone })}
+                        aria-label="Assign contact operator"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-950/30 border border-purple-500/20 text-purple-400 text-xs font-semibold hover:bg-purple-950/50 transition-all cursor-pointer whitespace-nowrap"
+                      >
+                        <PhoneCall className="w-3.5 h-3.5" /> Assign
+                      </button>
                     </td>
 
                     {/* Actions */}
@@ -1561,6 +1710,37 @@ export default function RegistrationsPage() {
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── Assign Contact Modal (new, isolated) ─── */}
+      <AnimatePresence>
+        {assignReg && (
+          <AssignContactModal
+            key="assign-modal"
+            registration={assignReg}
+            onClose={() => setAssignReg(null)}
+            onAssigned={() => {
+              setAssignReg(null);
+              showAssignToast('Contact assigned successfully!');
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Assign Toast */}
+      <AnimatePresence>
+        {assignToast && (
+          <motion.div
+            key="assign-toast"
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 30 }}
+            className="fixed bottom-6 right-6 z-[100] bg-slate-800 border border-green-500/30 text-slate-100 text-sm font-medium px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-2"
+          >
+            <Check className="w-4 h-4 text-green-400" />
+            {assignToast}
+          </motion.div>
         )}
       </AnimatePresence>
 

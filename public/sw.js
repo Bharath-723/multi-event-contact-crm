@@ -1,5 +1,5 @@
 // ONLINE-FIRST Cache Versioning
-const CACHE_NAME = 'rathayatra-online-v1783590731379';
+const CACHE_NAME = 'rathayatra-online-v1783593459433';
 
 // Core assets to pre-cache (excluding root '/' and HTML to force online-first layout checks)
 const ASSETS_TO_CACHE = [
