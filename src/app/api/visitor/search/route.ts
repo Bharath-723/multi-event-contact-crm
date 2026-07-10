@@ -2,12 +2,12 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getOperatorSessionFromRequest } from '@/lib/operator-auth';
 
-// Helper to authenticate Admin or Operator
+// Helper to authenticate Admin, Operator, or Public client
 async function authenticateUser(req: Request): Promise<{
-  role: 'admin' | 'operator';
-  id: string; // admin user.id or operator.id
+  role: 'admin' | 'operator' | 'public';
+  id: string; // admin user.id, operator.id, or 'public'
   name?: string;
-} | null> {
+}> {
   const authHeader = req.headers.get('Authorization') || '';
   if (authHeader.startsWith('Bearer ')) {
     const token = authHeader.replace('Bearer ', '');
@@ -30,14 +30,12 @@ async function authenticateUser(req: Request): Promise<{
     return { role: 'operator', id: opSession.operatorId, name: opSession.name };
   }
 
-  return null;
+  // Return public role for public visitor page access
+  return { role: 'public', id: 'public', name: 'Public Check-In Center' };
 }
 
 export async function GET(req: Request) {
   const auth = await authenticateUser(req);
-  if (!auth) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
 
   const url = new URL(req.url);
   const q = (url.searchParams.get('q') ?? '').trim();
