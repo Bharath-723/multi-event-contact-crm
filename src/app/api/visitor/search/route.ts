@@ -107,7 +107,7 @@ export async function GET(req: Request) {
   }
 
   // Search Priority Logic (Flexible across Name, Phone, and Registration Number)
-  const searchClean = q.trim();
+  const searchClean = q.trim().replace(/\s+/g, ' ');
   const searchDigits = searchClean.replace(/\D/g, '');
 
   let orFilter = `full_name.ilike.%${searchClean}%,registration_no.ilike.%${searchClean}%`;

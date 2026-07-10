@@ -357,6 +357,8 @@ export default function OperatorVisitorPage() {
             </button>
           </div>
         </div>
+      ) : results.length > 1 ? (
+        null
       ) : !loadingSearch && query ? (
         <div className="glass-card rounded-2xl p-10 text-center border border-slate-900">
           <UserX className="w-12 h-12 text-slate-700 mx-auto mb-3" />

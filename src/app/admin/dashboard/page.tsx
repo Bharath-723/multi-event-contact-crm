@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { Registration, VolunteerSlot } from '@/lib/types';
 import { 
   Users, Soup, Clock, Loader2, X, Phone, 
-  User, CheckCircle, ExternalLink, Calendar, Building, Briefcase
+  User, CheckCircle, ExternalLink, Building, Briefcase
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -181,15 +181,6 @@ export default function AdminDashboardPage() {
   // Visitor check-in metrics calculated from unified registrations query (joined visitor_visits)
   const visitedCount = registrations.filter(r => r.visitor_visits && r.visitor_visits.length > 0).length;
   const volunteerVisitedCount = registrations.filter(r => r.interested_to_volunteer && r.visitor_visits && r.visitor_visits.length > 0).length;
-  const dinnerVisitedCount = registrations.filter(r => r.interested_to_dinner && r.visitor_visits && r.visitor_visits.length > 0).length;
-  const todaysVisitsCount = registrations.filter(r => {
-    if (!r.visitor_visits || r.visitor_visits.length === 0) return false;
-    const visitDate = new Date(r.visitor_visits[0].visited_at);
-    const today = new Date();
-    return visitDate.getDate() === today.getDate() &&
-      visitDate.getMonth() === today.getMonth() &&
-      visitDate.getFullYear() === today.getFullYear();
-  }).length;
 
   const studentsCount = registrations.filter(r => r.occupation === 'Student').length;
   const workingCount = registrations.filter(r => r.occupation === 'Working').length;
@@ -380,7 +371,7 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* 1. Statistics Cards Section */}
-      <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3.5 md:gap-6">
+      <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3.5 md:gap-6">
         
         {/* Total Registered */}
         <div 
@@ -447,26 +438,12 @@ export default function AdminDashboardPage() {
         >
           <div>
             <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Dinner Count</span>
-            <span className="text-lg md:text-3xl font-extrabold text-slate-100 mt-1 md:mt-2 block">{dinnerVisitedCount}</span>
+            <span className="text-lg md:text-3xl font-extrabold text-slate-100 mt-1 md:mt-2 block">{dinnerList.length}</span>
           </div>
           <span className="text-[9px] md:text-[10px] text-purple-600 dark:text-purple-400 font-bold mt-2 md:mt-4 flex items-center gap-1">
             Click to view list <ExternalLink className="w-3 h-3" />
           </span>
           <Soup className="w-9 h-9 md:w-16 md:h-16 opacity-8 md:opacity-12 absolute right-2 top-2 text-slate-400 dark:text-slate-700 group-hover:text-purple-400/80 transition-colors" />
-        </div>
-
-        {/* Today's Visits */}
-        <div 
-          className="glass-card rounded-2xl p-3.5 md:p-6 hover:border-emerald-500/40 hover:shadow-[0_0_20px_rgba(16,185,129,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[105px] md:min-h-[140px]"
-        >
-          <div>
-            <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Today&apos;s Visits</span>
-            <span className="text-lg md:text-3xl font-extrabold text-emerald-450 mt-1 md:mt-2 block">{todaysVisitsCount}</span>
-          </div>
-          <span className="text-[9px] md:text-[10px] text-emerald-600 dark:text-emerald-450 font-bold mt-2 md:mt-4">
-            Visits Today
-          </span>
-          <Calendar className="w-9 h-9 md:w-16 md:h-16 opacity-8 md:opacity-12 absolute right-2 top-2 text-slate-400 dark:text-slate-700 group-hover:text-emerald-400/80 transition-colors" />
         </div>
 
         {/* Occupation Summary */}

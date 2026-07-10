@@ -52,26 +52,11 @@ export async function GET(req: Request) {
       .select('registrations!inner(interested_to_volunteer)', { count: 'exact', head: true })
       .eq('registrations.interested_to_volunteer', true);
 
-    // 4. Dinner Visited Count
+    // 4. Dinner Count (Total registrations who checked interested_to_dinner)
     const { count: dinnerCount } = await supabaseAdmin
-      .from('visitor_visits')
-      .select('registrations!inner(interested_to_dinner)', { count: 'exact', head: true })
-      .eq('registrations.interested_to_dinner', true);
-
-    // 5. Today's Visits Count (visits since local midnight in IST / UTC)
-    // We'll calculate start of today in Asia/Kolkata (IST) if possible, or fallback to UTC midnight
-    const now = new Date();
-    // Default to midnight in Indian Standard Time (IST, GMT+5:30)
-    const startOfToday = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate()
-    ).toISOString();
-
-    const { count: todaysVisits } = await supabaseAdmin
-      .from('visitor_visits')
+      .from('registrations')
       .select('*', { count: 'exact', head: true })
-      .gte('visited_at', startOfToday);
+      .eq('interested_to_dinner', true);
 
     const totalReg = registered ?? 0;
     const totalVis = visited ?? 0;
@@ -84,7 +69,7 @@ export async function GET(req: Request) {
         remaining,
         volunteer_visited: volunteerVisited ?? 0,
         dinner_count: dinnerCount ?? 0,
-        todays_visits: todaysVisits ?? 0,
+        todays_visits: 0,
       }
     });
   } catch (err) {

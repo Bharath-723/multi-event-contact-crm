@@ -279,14 +279,13 @@ export default function AdminVisitorPage() {
       </div>
 
       {/* STATISTICS STRIP */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {[
           { label: 'Total Registered', value: stats.registered, color: 'text-purple-400', bg: 'bg-purple-950/20 border-purple-500/10' },
           { label: 'Checked In', value: stats.visited, color: 'text-green-400', bg: 'bg-green-950/20 border-green-500/10' },
           { label: 'Remaining', value: stats.remaining, color: 'text-yellow-450', bg: 'bg-yellow-950/20 border-yellow-500/10' },
           { label: 'Volunteers Checked In', value: stats.volunteer_visited, color: 'text-blue-400', bg: 'bg-blue-950/20 border-blue-500/10' },
-          { label: 'Dinners Checked In', value: stats.dinner_count, color: 'text-indigo-400', bg: 'bg-indigo-950/20 border-indigo-500/10' },
-          { label: "Today's Visits", value: stats.todays_visits, color: 'text-emerald-400', bg: 'bg-emerald-950/20 border-emerald-500/10' },
+          { label: 'Dinner Count', value: stats.dinner_count, color: 'text-indigo-400', bg: 'bg-indigo-950/20 border-indigo-500/10' },
         ].map((card) => (
           <div key={card.label} className={`glass-card rounded-xl p-3 text-center border ${card.bg}`}>
             <p className={`text-xl font-black ${card.color}`}>{card.value}</p>
@@ -487,6 +486,8 @@ export default function AdminVisitorPage() {
                 </button>
               </div>
             </div>
+          ) : results.length > 1 ? (
+            null
           ) : !loadingSearch && query ? (
             <div className="glass-card rounded-2xl p-10 text-center border border-slate-900">
               <UserX className="w-12 h-12 text-slate-700 mx-auto mb-3" />
