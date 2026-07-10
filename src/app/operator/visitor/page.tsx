@@ -53,31 +53,43 @@ export default function OperatorVisitorPage() {
   const [checkInRemarks, setCheckInRemarks] = useState('');
   const [checkingIn, setCheckingIn] = useState(false);
   const [errorCheckIn, setErrorCheckIn] = useState<string | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   // 1. Search Visitor (Operator Cookie auth is handled automatically by the browser)
   const handleSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    const searchVal = query.trim();
-    if (!searchVal) return;
+    const searchVal = query.trim().replace(/\s+/g, ' ');
+    if (!searchVal) {
+      setResults([]);
+      setSelectedVisitor(null);
+      setSearchError(null);
+      return;
+    }
 
     setLoadingSearch(true);
+    setSearchError(null);
     setErrorCheckIn(null);
+    setResults([]);
+    setSelectedVisitor(null);
     try {
       const res = await fetch(`/api/visitor/search?q=${encodeURIComponent(searchVal)}`);
       const data = await res.json();
       if (!res.ok) {
+        setSearchError(data.error || `Search failed (HTTP ${res.status}). Please try again.`);
         setResults([]);
         setSelectedVisitor(null);
         return;
       }
-      setResults(data.registrations ?? []);
-      if (data.registrations?.length === 1) {
-        setSelectedVisitor(data.registrations[0]);
+      const registrations = data.registrations ?? [];
+      setResults(registrations);
+      if (registrations.length === 1) {
+        setSelectedVisitor(registrations[0]);
       } else {
         setSelectedVisitor(null);
       }
     } catch (err) {
-      console.error(err);
+      console.error('[Search] Network error:', err);
+      setSearchError('Network error. Please check your connection and try again.');
     } finally {
       setLoadingSearch(false);
     }
@@ -88,6 +100,7 @@ export default function OperatorVisitorPage() {
     if (!val.trim()) {
       setResults([]);
       setSelectedVisitor(null);
+      setSearchError(null);
     }
   };
 
@@ -204,6 +217,14 @@ export default function OperatorVisitorPage() {
           {loadingSearch ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Search'}
         </button>
       </form>
+
+      {/* Inline Search Error */}
+      {searchError && (
+        <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl bg-red-950/30 border border-red-500/30 text-red-400 text-xs font-semibold">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          {searchError}
+        </div>
+      )}
 
       {/* Search Result List (if multiple results found) */}
       {results.length > 1 && !selectedVisitor && (
