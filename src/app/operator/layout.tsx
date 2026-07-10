@@ -20,7 +20,7 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
   const [authState, setAuthState] = useState<'loading' | 'ok' | 'denied'>('loading');
 
   // Skip layout for operator login page itself
-  const isLoginPage = pathname === '/admin/operator';
+  const isLoginPage = pathname === '/operator';
 
   const loadSession = useCallback(async () => {
     if (isLoginPage) { setAuthState('ok'); return; }
@@ -32,11 +32,11 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
         setAuthState('ok');
       } else {
         setAuthState('denied');
-        router.push('/admin/operator');
+        router.push('/operator');
       }
     } catch {
       setAuthState('denied');
-      router.push('/admin/operator');
+      router.push('/operator');
     }
   }, [isLoginPage, router]);
 
@@ -47,7 +47,7 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
 
   const handleLogout = async () => {
     await fetch('/api/operators/logout', { method: 'POST' });
-    router.push('/admin/operator');
+    router.push('/operator');
   };
 
   if (isLoginPage) return <>{children}</>;

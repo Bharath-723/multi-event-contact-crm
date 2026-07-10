@@ -175,7 +175,7 @@ export default function OperatorVisitorPage() {
           <p className="text-slate-500 text-xs mt-1">Search and approve checked-in status for assigned visitors</p>
         </div>
         <a
-          href="/admin/operator/portal"
+          href="/operator/portal"
           className="px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-450 hover:text-slate-100 transition-all text-xs font-semibold"
         >
           ← Back to Call Portal

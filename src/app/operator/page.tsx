@@ -19,7 +19,7 @@ export default function OperatorLoginPage() {
       try {
         const res = await fetch('/api/operators/me');
         if (res.ok) {
-          router.push('/admin/operator/portal');
+          router.push('/operator/portal');
           return;
         }
       } catch {
@@ -44,7 +44,7 @@ export default function OperatorLoginPage() {
       });
       const data = await res.json();
       if (!res.ok) { setErrorMsg(data.error || 'Login failed.'); return; }
-      router.push('/admin/operator/portal');
+      router.push('/operator/portal');
     } catch {
       setErrorMsg('Network error. Please try again.');
     } finally {

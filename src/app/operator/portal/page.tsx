@@ -398,7 +398,7 @@ export default function OperatorPortalPage() {
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <Link
-              href="/admin/operator/visitor"
+              href="/operator/visitor"
               className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-purple-950/40 border border-purple-500/25 text-purple-400 hover:text-purple-300 text-xs font-bold transition-all"
             >
               Visitor Check-In

@@ -661,7 +661,7 @@ export default function ContactOperatorsPage() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <a
-            href="/admin/operator"
+            href="/operator"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900/50 border border-slate-700/40 text-slate-400 text-sm font-semibold hover:text-slate-100 transition-all cursor-pointer"

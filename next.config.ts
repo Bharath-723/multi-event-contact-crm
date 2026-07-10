@@ -27,6 +27,30 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async redirects() {
+    return [
+      {
+        source: '/admin/operator',
+        destination: '/operator',
+        permanent: false,
+      },
+      {
+        source: '/admin/operator/portal',
+        destination: '/operator/portal',
+        permanent: false,
+      },
+      {
+        source: '/admin/operator/visitor',
+        destination: '/operator/visitor',
+        permanent: false,
+      },
+      {
+        source: '/admin/visitor',
+        destination: '/visitor',
+        permanent: false,
+      },
+    ];
+  },
 };
 
 export default nextConfig;
