@@ -14,6 +14,23 @@ export const MAX_CONTACTS_PER_OPERATOR = 30;
  */
 export async function assignOperator(registrationId: string): Promise<string | null> {
   try {
+    // 0. Fetch the registration gender
+    const { data: reg, error: regError } = await supabaseAdmin
+      .from('registrations')
+      .select('gender')
+      .eq('id', registrationId)
+      .single();
+
+    if (regError || !reg) {
+      console.error(`Auto-assignment: Error fetching registration gender for ${registrationId}:`, regError);
+      return null;
+    }
+
+    if (reg.gender === 'Female') {
+      console.log(`Assignment skipped: Female registration.`);
+      return null;
+    }
+
     // 1. Duplicate Protection check (pre-flight check for logging clarity)
     const { data: existing, error: checkError } = await supabaseAdmin
       .from('contact_assignments')

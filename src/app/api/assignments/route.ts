@@ -81,6 +81,25 @@ export async function POST(req: Request) {
   if (!operator_id) return NextResponse.json({ error: 'operator_id is required' }, { status: 400 });
   if (!regIds.length) return NextResponse.json({ error: 'At least one registration_id is required' }, { status: 400 });
 
+  // Verify registrations exist and check their gender
+  const { data: registrations, error: regsFetchError } = await supabaseAdmin
+    .from('registrations')
+    .select('id, gender')
+    .in('id', regIds);
+
+  if (regsFetchError || !registrations) {
+    return NextResponse.json({ error: 'Failed to fetch registrations' }, { status: 500 });
+  }
+
+  // Check if any of the registrations is female
+  const hasFemale = registrations.some(r => r.gender === 'Female');
+  if (hasFemale) {
+    return NextResponse.json({
+      success: false,
+      message: "FEMALES are NOT ALLOWED to ASSIGN"
+    }, { status: 403 });
+  }
+
   // Verify operator exists and is active
   const { data: operator } = await supabaseAdmin
     .from('contact_operators')

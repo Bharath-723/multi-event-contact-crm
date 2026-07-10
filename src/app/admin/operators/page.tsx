@@ -476,11 +476,14 @@ function ViewAssignedModal({
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface DryRunSummary {
   total_unassigned: number;
+  skipped_female: number;
+  eligible_male: number;
   active_operators: number;
   total_capacity: number;
   currently_assigned: number;
   available_slots: number;
   will_assign: number;
+  will_skip_capacity: number;
   will_skip: number;
   capacity_warning: boolean;
   operator_breakdown: Array<{ id: string; name: string; current: number; capacity: number; available: number }>;
@@ -489,6 +492,7 @@ interface DryRunSummary {
 interface BatchReport {
   total_unassigned: number;
   successfully_assigned: number;
+  skipped_female: number;
   skipped_no_capacity: number;
   failed: number;
   distribution: Array<{ operator_id: string; operator_name: string; assigned_in_batch: number }>;
@@ -849,9 +853,11 @@ export default function ContactOperatorsPage() {
               </div>
 
               {/* Summary stats */}
-              <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
                 {[
-                  { label: 'Unassigned Registrations', value: dryRunSummary.total_unassigned, color: 'text-slate-100' },
+                  { label: 'Unassigned', value: dryRunSummary.total_unassigned, color: 'text-slate-100' },
+                  { label: 'Eligible (Male)', value: dryRunSummary.eligible_male, color: 'text-blue-400' },
+                  { label: 'Skipped (Female)', value: dryRunSummary.skipped_female, color: 'text-slate-400' },
                   { label: 'Active Operators', value: dryRunSummary.active_operators, color: 'text-purple-400' },
                   { label: 'Available Slots', value: dryRunSummary.available_slots, color: 'text-green-400' },
                   { label: 'Will Be Assigned', value: dryRunSummary.will_assign, color: 'text-amber-400' },
@@ -868,8 +874,8 @@ export default function ContactOperatorsPage() {
                 <div className="mb-4 p-3 bg-red-950/40 border border-red-500/25 rounded-xl flex gap-2 items-start">
                   <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-red-400" />
                   <p className="text-xs text-red-300 leading-relaxed">
-                    <strong>Capacity Warning:</strong> There are {dryRunSummary.total_unassigned} unassigned registrations but only {dryRunSummary.available_slots} available slots across all operators.
-                    {dryRunSummary.will_skip > 0 && <> <strong>{dryRunSummary.will_skip} registrations will be skipped</strong> due to insufficient capacity.</> }
+                    <strong>Capacity Warning:</strong> There are {dryRunSummary.eligible_male} eligible male registrations but only {dryRunSummary.available_slots} available slots across all operators.
+                    {dryRunSummary.will_skip_capacity > 0 && <> <strong>{dryRunSummary.will_skip_capacity} registrations will be skipped</strong> due to insufficient capacity.</> }
                   </p>
                 </div>
               )}
@@ -973,11 +979,12 @@ export default function ContactOperatorsPage() {
               </div>
 
               {/* Result stats */}
-              <div className="grid grid-cols-2 gap-3 mb-5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5">
                 {[
                   { label: 'Total Processed', value: batchReport.total_unassigned, color: 'text-slate-100' },
-                  { label: 'Successfully Assigned', value: batchReport.successfully_assigned, color: 'text-green-400' },
-                  { label: 'Skipped (No Capacity)', value: batchReport.skipped_no_capacity, color: 'text-amber-400' },
+                  { label: 'Assigned', value: batchReport.successfully_assigned, color: 'text-green-400' },
+                  { label: 'Skipped (Female)', value: batchReport.skipped_female, color: 'text-slate-400' },
+                  { label: 'Skipped (Capacity)', value: batchReport.skipped_no_capacity, color: 'text-amber-400' },
                   { label: 'Failed', value: batchReport.failed, color: batchReport.failed > 0 ? 'text-red-400' : 'text-slate-500' },
                 ].map(({ label, value, color }) => (
                   <div key={label} className="bg-slate-900/40 rounded-xl p-3 text-center">

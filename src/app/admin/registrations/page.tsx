@@ -19,7 +19,7 @@ function AssignContactModal({
   onClose,
   onAssigned,
 }: {
-  registration: { id: string; full_name: string; phone: string };
+  registration: { id: string; full_name: string; phone: string; gender?: string };
   onClose: () => void;
   onAssigned: () => void;
 }) {
@@ -32,6 +32,9 @@ function AssignContactModal({
   const [reassignMode, setReassignMode] = React.useState(false);
 
   React.useEffect(() => {
+    if (registration.gender === 'Female') {
+      return;
+    }
     async function load() {
       try {
         const { data: { session } } = await (await import('@/lib/supabase')).supabase.auth.getSession();
@@ -45,7 +48,27 @@ function AssignContactModal({
       } finally { setLoadingCheck(false); }
     }
     load();
-  }, [registration.id]);
+  }, [registration.id, registration.gender]);
+
+  if (registration.gender === 'Female') {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+        <motion.div initial={{opacity:0,scale:0.95}} animate={{opacity:1,scale:1}} className="glass-card rounded-2xl p-6 w-full max-w-md relative border border-red-500/30">
+          <button onClick={onClose} className="absolute top-4 right-4 text-slate-500 hover:text-slate-100 cursor-pointer"><X className="w-5 h-5" /></button>
+          <div className="flex items-center gap-3 mb-5 text-red-500">
+            <AlertTriangle className="w-6 h-6" />
+            <div>
+              <h2 className="text-base font-extrabold text-red-400">Assignment Blocked</h2>
+              <p className="text-xs text-slate-400 truncate">{registration.full_name} · {registration.phone}</p>
+            </div>
+          </div>
+          <div className="p-4 bg-red-950/30 border border-red-500/20 rounded-xl text-center text-sm font-bold text-red-400">
+            ⚠ FEMALES are NOT ALLOWED to ASSIGN
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
 
   const handleAssign = async () => {
     if (!selectedOp) { setError('Please select an operator'); return; }
@@ -202,7 +225,7 @@ export default function RegistrationsPage() {
   const itemsPerPage = 10;
 
   // --- ASSIGNMENT STATE (new) ---
-  const [assignReg, setAssignReg] = React.useState<{id:string;full_name:string;phone:string}|null>(null);
+  const [assignReg, setAssignReg] = React.useState<{id:string;full_name:string;phone:string;gender?:string}|null>(null);
   const [assignToast, setAssignToast] = React.useState<string|null>(null);
 
   const showAssignToast = (msg: string) => {
@@ -1205,6 +1228,27 @@ export default function RegistrationsPage() {
                     {/* Assign */}
                     <td className="px-5 py-4">
                       {(() => {
+                        if (reg.gender === 'Female') {
+                          return (
+                            <div className="flex flex-col gap-1">
+                              <div className="relative group inline-block">
+                                <button
+                                  disabled
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-500 text-xs font-bold whitespace-nowrap cursor-not-allowed select-none"
+                                >
+                                  Not Assignable
+                                </button>
+                                <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block z-50 w-48 p-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 text-[10px] leading-relaxed shadow-2xl pointer-events-none">
+                                  Female registrations are excluded from operator assignment.
+                                </div>
+                              </div>
+                              <span className="text-[9px] font-bold text-red-500 flex items-center gap-0.5 whitespace-nowrap mt-0.5" title="FEMALES are NOT ALLOWED to ASSIGN">
+                                ⚠ FEMALES are NOT ALLOWED to ASSIGN
+                              </span>
+                            </div>
+                          );
+                        }
+
                         const activeAssignment = reg.contact_assignments?.find((a) => a.is_active);
                         if (activeAssignment) {
                           const op = activeAssignment.contact_operators;
@@ -1231,7 +1275,7 @@ export default function RegistrationsPage() {
 
                         return (
                           <button
-                            onClick={() => setAssignReg({ id: reg.id, full_name: reg.full_name, phone: reg.phone })}
+                            onClick={() => setAssignReg({ id: reg.id, full_name: reg.full_name, phone: reg.phone, gender: reg.gender })}
                             aria-label="Assign contact operator"
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-950/30 border border-purple-500/20 text-purple-400 text-xs font-semibold hover:bg-purple-950/50 transition-all cursor-pointer whitespace-nowrap"
                           >

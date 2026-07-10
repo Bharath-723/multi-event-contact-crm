@@ -106,7 +106,7 @@ export async function POST(req: Request) {
   // Unassigned = no active contact_assignment exists for the registration_id
   const { data: unassignedRegs, error: regsError } = await supabaseAdmin
     .from('registrations')
-    .select('id, full_name')
+    .select('id, full_name, gender')
     .order('created_at', { ascending: true });
 
   if (regsError) {
@@ -135,15 +135,24 @@ export async function POST(req: Request) {
     available: MAX_CONTACTS_PER_OPERATOR - (countMap[op.id] ?? 0),
   }));
 
+  const skippedFemaleCount = unassigned.filter(r => r.gender === 'Female').length;
+  const eligibleMaleCount = unassigned.filter(r => r.gender === 'Male').length;
+  
+  const willAssign = Math.min(eligibleMaleCount, Math.max(0, availableSlots));
+  const willSkipCapacity = Math.max(0, eligibleMaleCount - availableSlots);
+
   const dryRunSummary = {
     total_unassigned: unassigned.length,
+    skipped_female: skippedFemaleCount,
+    eligible_male: eligibleMaleCount,
     active_operators: activeOperators.length,
     total_capacity: totalCapacity,
     currently_assigned: currentlyAssigned,
     available_slots: availableSlots,
-    will_assign: Math.min(unassigned.length, Math.max(0, availableSlots)),
-    will_skip: Math.max(0, unassigned.length - availableSlots),
-    capacity_warning: unassigned.length > availableSlots,
+    will_assign: willAssign,
+    will_skip_capacity: willSkipCapacity,
+    will_skip: skippedFemaleCount + willSkipCapacity,
+    capacity_warning: eligibleMaleCount > availableSlots,
     operator_breakdown: operatorSummaries,
   };
 
@@ -164,12 +173,19 @@ export async function POST(req: Request) {
   isBatchRunning = true;
 
   let assigned = 0;
-  let skipped = 0;
+  let skippedFemale = 0;
+  let skippedCapacity = 0;
   let failed = 0;
   const distribution: Record<string, { name: string; assigned_in_batch: number }> = {};
 
   try {
     for (const reg of unassigned) {
+      if (reg.gender === 'Female') {
+        skippedFemale++;
+        console.log("Assignment skipped: Female registration.");
+        continue;
+      }
+
       try {
         const { data: operatorId, error: rpcError } = await supabaseAdmin.rpc(
           'assign_operator_to_registration',
@@ -187,7 +203,7 @@ export async function POST(req: Request) {
 
         if (!operatorId) {
           // No capacity available
-          skipped++;
+          skippedCapacity++;
           continue;
         }
 
@@ -220,7 +236,8 @@ export async function POST(req: Request) {
   const report = {
     total_unassigned: unassigned.length,
     successfully_assigned: assigned,
-    skipped_no_capacity: skipped,
+    skipped_female: skippedFemale,
+    skipped_no_capacity: skippedCapacity,
     failed: failed,
     distribution: Object.entries(distribution).map(([id, d]) => ({
       operator_id: id,
