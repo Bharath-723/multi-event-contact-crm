@@ -1,36 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
-export async function GET(req: Request) {
-  // Check authorization
-  const authHeader = req.headers.get('Authorization') || '';
-  let authorized = false;
-
-  if (authHeader.startsWith('Bearer ')) {
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
-    if (!error && user) {
-      const { data: adminRow } = await supabaseAdmin
-        .from('admins')
-        .select('id')
-        .eq('id', user.id)
-        .single();
-      if (adminRow) {
-        authorized = true;
-      }
-    }
-  }
-
-  // Operators can also view stats for dashboard synchronization
-  const cookieHeader = req.headers.get('cookie') || '';
-  if (cookieHeader.includes('operator-session=')) {
-    authorized = true;
-  }
-
-  if (!authorized) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
+export async function GET() {
   try {
     // 1. Total Registered Count
     const { count: registered, error: err1 } = await supabaseAdmin

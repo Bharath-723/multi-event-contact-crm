@@ -20,6 +20,8 @@ interface SearchResult {
   area_of_stay: string | null;
   interested_to_volunteer: boolean;
   interested_to_dinner: boolean;
+  transportation_required: string | null;
+  operator_status: string | null;
   created_at: string;
   company_college: string;
   volunteer_slot_time: string | null;
@@ -85,6 +87,7 @@ export default function AdminVisitorPage() {
   });
   const [logs, setLogs] = useState<VisitorLog[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(true);
+  const [logsAuthorized, setLogsAuthorized] = useState(true);
 
   // Helper to fetch admin headers
   const getHeaders = async () => {
@@ -111,6 +114,11 @@ export default function AdminVisitorPage() {
       if (logsRes.ok) {
         const logsData = await logsRes.json();
         setLogs(logsData.logs ?? []);
+        setLogsAuthorized(true);
+      } else if (logsRes.status === 401) {
+        setLogsAuthorized(false);
+      } else {
+        setLogsAuthorized(true);
       }
     } catch (err) {
       console.error('Failed to load stats/logs:', err);
@@ -427,6 +435,18 @@ export default function AdminVisitorPage() {
                   <p className="text-slate-200 mt-0.5">{selectedVisitor.interested_to_dinner ? 'Yes' : 'No'}</p>
                 </div>
                 <div>
+                  <p className="text-slate-500 font-bold uppercase text-[9px]">Transportation Required</p>
+                  <p className="text-slate-200 mt-0.5">{selectedVisitor.transportation_required || 'No'}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500 font-bold uppercase text-[9px]">Current Operator Status</p>
+                  <p className={`mt-0.5 font-semibold ${
+                    selectedVisitor.operator_status === 'Coming' ? 'text-green-400' : 
+                    selectedVisitor.operator_status === 'Not Coming' ? 'text-red-400' : 
+                    selectedVisitor.operator_status === 'Callback Required' ? 'text-blue-400' : 'text-yellow-405'
+                  }`}>{selectedVisitor.operator_status || 'Pending'}</p>
+                </div>
+                <div>
                   <p className="text-slate-500 font-bold uppercase text-[9px]">Assigned Operator</p>
                   <p className="text-slate-200 mt-0.5">{selectedVisitor.assigned_operator?.name || 'Unassigned'}</p>
                 </div>
@@ -513,7 +533,13 @@ export default function AdminVisitorPage() {
           </div>
 
           <div className="glass-card rounded-2xl p-4 border border-slate-900 flex flex-col min-h-[350px] max-h-[550px] overflow-hidden">
-            {loadingLogs ? (
+            {!logsAuthorized ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-slate-500">
+                <HelpCircle className="w-8 h-8 text-slate-700 mb-2" />
+                <p className="text-sm font-semibold text-slate-400">Authentication Required</p>
+                <p className="text-xs text-slate-600 mt-1">Admin authorization is required to view live check-in logs.</p>
+              </div>
+            ) : loadingLogs ? (
               <div className="flex-1 flex items-center justify-center"><Loader2 className="w-7 h-7 animate-spin text-purple-400" /></div>
             ) : logs.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-slate-500">

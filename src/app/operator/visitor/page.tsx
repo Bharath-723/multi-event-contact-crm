@@ -18,6 +18,8 @@ interface SearchResult {
   area_of_stay: string | null;
   interested_to_volunteer: boolean;
   interested_to_dinner: boolean;
+  transportation_required: string | null;
+  operator_status: string | null;
   created_at: string;
   company_college: string;
   volunteer_slot_time: string | null;
@@ -308,6 +310,18 @@ export default function OperatorVisitorPage() {
             <div>
               <p className="text-slate-500 font-bold uppercase text-[9px]">Prasadam Dinner</p>
               <p className="text-slate-200 mt-0.5">{selectedVisitor.interested_to_dinner ? 'Yes' : 'No'}</p>
+            </div>
+            <div>
+              <p className="text-slate-500 font-bold uppercase text-[9px]">Transportation Required</p>
+              <p className="text-slate-200 mt-0.5">{selectedVisitor.transportation_required || 'No'}</p>
+            </div>
+            <div>
+              <p className="text-slate-500 font-bold uppercase text-[9px]">Current Operator Status</p>
+              <p className={`mt-0.5 font-semibold ${
+                selectedVisitor.operator_status === 'Coming' ? 'text-green-400' : 
+                selectedVisitor.operator_status === 'Not Coming' ? 'text-red-400' : 
+                selectedVisitor.operator_status === 'Callback Required' ? 'text-blue-400' : 'text-yellow-405'
+              }`}>{selectedVisitor.operator_status || 'Pending'}</p>
             </div>
           </div>
 

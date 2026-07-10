@@ -79,6 +79,7 @@ export async function GET(req: Request) {
       pg_name,
       interested_to_volunteer,
       interested_to_dinner,
+      transportation_required,
       created_at,
       registration_no,
       volunteer_slots:volunteer_slot_id (slot_time),
@@ -86,6 +87,7 @@ export async function GET(req: Request) {
         id,
         operator_id,
         is_active,
+        status,
         contact_operators (id, name, email, phone)
       ),
       visitor_visits (
@@ -146,6 +148,9 @@ export async function GET(req: Request) {
       company_college: reg.company_college,
       interested_to_volunteer: reg.interested_to_volunteer,
       interested_to_dinner: reg.interested_to_dinner,
+      transportation_required: reg.transportation_required,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      operator_status: (activeAssignments[0] as any)?.status ?? 'Pending',
       created_at: reg.created_at,
       volunteer_slot_time: (() => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
