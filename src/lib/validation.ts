@@ -44,7 +44,7 @@ export const registrationSchema = z.object({
   }),
   transportationRequired: z.enum(['Yes', 'No'], {
     message: 'Please select a transportation preference',
-  }),
+  }).optional().or(z.literal('')),
 }).superRefine((data, ctx) => {
   // If gender is Male, areaOfStay is required
   if (data.gender === 'Male' && (!data.areaOfStay || data.areaOfStay.trim() === '')) {
@@ -52,6 +52,15 @@ export const registrationSchema = z.object({
       code: z.ZodIssueCode.custom,
       message: 'Area of Stay is required',
       path: ['areaOfStay'],
+    });
+  }
+
+  // If gender is Male, transportationRequired is required
+  if (data.gender === 'Male' && (!data.transportationRequired || data.transportationRequired.trim() === '')) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Please select a transportation preference',
+      path: ['transportationRequired'],
     });
   }
 

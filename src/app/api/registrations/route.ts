@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { registrationSchema } from '@/lib/validation';
+import { assignOperator } from '@/lib/assignment-engine';
 
 // Basic in-memory rate limiting (Note: in serverless environments, this is per-instance. 
 // For distributed rate-limiting, Vercel KV or Upstash Redis is recommended).
@@ -89,7 +90,7 @@ export async function POST(request: NextRequest) {
       p_donation_status: wantsToDonate === 'Yes' ? 'User Opted to Donate' : 'Pending',
       p_skill_ids: skills,
       p_occupation: occupation || null,
-      p_transportation_required: transportationRequired,
+      p_transportation_required: gender === 'Male' ? transportationRequired || 'No' : 'No',
     });
 
     if (error) {
@@ -115,6 +116,13 @@ export async function POST(request: NextRequest) {
         },
         { status: 500 }
       );
+    }
+
+    // Attempt automatic operator assignment (DO NOT block or fail registration if this fails)
+    try {
+      await assignOperator(registrationId);
+    } catch (assignError) {
+      console.error('Failed to automatically assign operator to registration:', assignError);
     }
 
     return NextResponse.json(
