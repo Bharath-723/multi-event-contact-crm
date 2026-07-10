@@ -109,16 +109,49 @@ function AssignContactModal({
 
             {(!existing || reassignMode) && (
               <div>
-                <label className="text-xs text-slate-400 font-semibold block mb-1.5">Select Operator</label>
-                <select
-                  value={selectedOp} onChange={e => setSelectedOp(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl glass-input text-sm text-foreground cursor-pointer"
-                >
-                  <option value="">— Choose an operator —</option>
-                  {operators.map(op => (
-                    <option key={op.id} value={op.id}>{op.name} ({op.email}) · {op.total_assigned ?? 0} assigned</option>
-                  ))}
-                </select>
+                <label className="text-xs text-slate-400 font-semibold block mb-2">Select Operator</label>
+                {operators.length === 0 ? (
+                  <p className="text-xs text-slate-500 text-center py-4">No active operators available.</p>
+                ) : (
+                  <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                    {operators.map(op => {
+                      const MAX_CAP = 30;
+                      const assigned = op.total_assigned ?? 0;
+                      const pct = Math.round((assigned / MAX_CAP) * 100);
+                      const isFull = assigned >= MAX_CAP;
+                      const barColor = isFull ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-green-500';
+                      const badgeColor = isFull
+                        ? 'text-red-400 bg-red-950/30 border-red-500/25'
+                        : pct >= 70
+                        ? 'text-amber-400 bg-amber-950/30 border-amber-500/25'
+                        : 'text-green-400 bg-green-950/30 border-green-500/25';
+                      const isSelected = selectedOp === op.id;
+                      return (
+                        <button
+                          key={op.id}
+                          type="button"
+                          disabled={isFull}
+                          onClick={() => !isFull && setSelectedOp(op.id)}
+                          className={`w-full text-left px-3 py-2.5 rounded-xl border transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                            isSelected
+                              ? 'bg-purple-950/40 border-purple-500/40'
+                              : 'bg-slate-900/30 border-slate-800/40 hover:border-slate-700/60 hover:bg-slate-900/50'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2 mb-1.5">
+                            <p className="text-xs font-semibold text-slate-100 truncate">{op.name}</p>
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${badgeColor}`}>
+                              {isFull ? 'FULL' : `${assigned}/${MAX_CAP}`}
+                            </span>
+                          </div>
+                          <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
 

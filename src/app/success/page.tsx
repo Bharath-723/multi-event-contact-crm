@@ -94,6 +94,47 @@ export default function SuccessPage() {
               )}
             </div>
 
+            {/* WhatsApp Community Card */}
+            <div className="mb-6 p-5 rounded-2xl bg-purple-950/20 border border-purple-500/10 text-center relative overflow-hidden space-y-4">
+              <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-purple-500/20 to-transparent" />
+              
+              <div className="w-12 h-12 rounded-full bg-green-950/40 border border-green-500/20 flex items-center justify-center mx-auto text-[#25D366]">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  className="w-6 h-6"
+                >
+                  <path d="M12.012 2c-5.506 0-9.989 4.478-9.99 9.984a9.96 9.96 0 001.33 4.982L2 22l5.233-1.371a9.994 9.994 0 004.78 1.218h.004c5.502 0 9.985-4.479 9.986-9.985a9.96 9.96 0 00-2.926-7.062A9.97 9.97 0 0012.012 2zm5.718 13.962c-.244.686-1.42 1.258-1.956 1.341-.479.075-.972.115-3.076-.714-2.502-.988-4.108-3.529-4.232-3.695-.125-.165-1.01-1.34-1.01-2.557 0-1.217.636-1.815.862-2.062.227-.247.495-.309.661-.309.165 0 .33.003.475.01.149.007.348-.056.545.422.2.489.683 1.666.743 1.79.059.122.099.264.019.425-.08.162-.12.261-.24.402-.12.142-.25.316-.356.425-.119.122-.244.254-.105.492.138.238.614 1.013 1.314 1.637.902.802 1.66 1.05 1.899 1.168.238.119.376.1.515-.062.138-.162.604-.703.766-.944.162-.241.323-.201.545-.119.221.082 1.402.66 1.643.78.241.12.402.181.462.284.059.102.059.59-.185 1.276z"/>
+                </svg>
+              </div>
+
+              <div className="space-y-1">
+                <h3 className="text-white font-bold text-base">Stay Connected</h3>
+                <p className="text-slate-300 text-xs leading-relaxed max-w-sm mx-auto">
+                  Kindly join our official WhatsApp community to receive important updates about the Rathayatra Festival, volunteer coordination, announcements, and important event notifications.
+                </p>
+              </div>
+
+              <a
+                href="https://chat.whatsapp.com/G10hiJTbjjX5ALAkLeNBI2"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Join our official WhatsApp community"
+                className="inline-flex w-full items-center justify-center gap-2 bg-[#25D366] hover:bg-[#20ba5a] text-slate-950 py-3.5 rounded-xl font-bold text-sm transition-all shadow-md shadow-green-950/20 active:scale-[0.98] hover:scale-[1.02] cursor-pointer"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  className="w-4 h-4"
+                >
+                  <path d="M12.012 2c-5.506 0-9.989 4.478-9.99 9.984a9.96 9.96 0 001.33 4.982L2 22l5.233-1.371a9.994 9.994 0 004.78 1.218h.004c5.502 0 9.985-4.479 9.986-9.985a9.96 9.96 0 00-2.926-7.062A9.97 9.97 0 0012.012 2zm5.718 13.962c-.244.686-1.42 1.258-1.956 1.341-.479.075-.972.115-3.076-.714-2.502-.988-4.108-3.529-4.232-3.695-.125-.165-1.01-1.34-1.01-2.557 0-1.217.636-1.815.862-2.062.227-.247.495-.309.661-.309.165 0 .33.003.475.01.149.007.348-.056.545.422.2.489.683 1.666.743 1.79.059.122.099.264.019.425-.08.162-.12.261-.24.402-.12.142-.25.316-.356.425-.119.122-.244.254-.105.492.138.238.614 1.013 1.314 1.637.902.802 1.66 1.05 1.899 1.168.238.119.376.1.515-.062.138-.162.604-.703.766-.944.162-.241.323-.201.545-.119.221.082 1.402.66 1.643.78.241.12.402.181.462.284.059.102.059.59-.185 1.276z"/>
+                </svg>
+                Join WhatsApp Community
+              </a>
+            </div>
+
             {/* Back button */}
             <Link href="/">
               <button className="w-full bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white py-3.5 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer group">

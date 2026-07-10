@@ -6,7 +6,8 @@ import {
   PhoneCall, Plus, Edit2, ToggleLeft, ToggleRight,
   Users, CheckCircle, Clock, TrendingUp, Eye,
   Loader2, AlertCircle, X, Save, Phone, Mail,
-  User, Lock, RefreshCw, Headset, LogIn, Trash2
+  User, Lock, RefreshCw, Headset, LogIn, Trash2,
+  Zap, BarChart3, AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { ContactOperator } from '@/lib/types';
@@ -31,7 +32,6 @@ function OperatorCard({
   onViewAssigned: (op: ContactOperator) => void;
   onRemove: (op: ContactOperator) => void;
 }) {
-  const callRate = op.call_success_pct ?? 0;
   const statusColor = op.is_active
     ? 'text-green-400 bg-green-950/40 border-green-500/30'
     : 'text-slate-500 bg-slate-900/40 border-slate-700/30';
@@ -61,7 +61,7 @@ function OperatorCard({
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         <div className="bg-slate-900/40 rounded-xl p-2.5 text-center">
           <p className="text-lg font-extrabold text-slate-100">{op.total_assigned ?? 0}</p>
           <p className="text-[10px] text-slate-500">Assigned</p>
@@ -71,21 +71,27 @@ function OperatorCard({
           <p className="text-[10px] text-slate-500">Pending</p>
         </div>
         <div className="bg-slate-900/40 rounded-xl p-2.5 text-center">
-          <p className="text-lg font-extrabold text-green-400">{op.total_completed ?? 0}</p>
-          <p className="text-[10px] text-slate-500">Completed</p>
+          <p className="text-lg font-extrabold text-green-400">{op.total_coming ?? 0}</p>
+          <p className="text-[10px] text-slate-500">Coming</p>
+        </div>
+        <div className="bg-slate-900/40 rounded-xl p-2.5 text-center">
+          <p className="text-lg font-extrabold text-red-400">{op.total_not_coming ?? 0}</p>
+          <p className="text-[10px] text-slate-500">Not Coming</p>
         </div>
       </div>
 
-      {/* Call Rate Bar */}
+      {/* Completion Bar: Coming / Assigned */}
       <div>
         <div className="flex justify-between items-center mb-1">
-          <span className="text-[10px] text-slate-500">Call Success</span>
-          <span className="text-[11px] font-bold text-purple-400">{callRate}%</span>
+          <span className="text-[10px] text-slate-500">Coming Rate</span>
+          <span className="text-[11px] font-bold text-green-400">
+            {op.total_assigned ? Math.round(((op.total_coming ?? 0) / op.total_assigned) * 100) : 0}%
+          </span>
         </div>
         <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
           <div
-            className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full transition-all duration-700"
-            style={{ width: `${Math.min(callRate, 100)}%` }}
+            className="h-full bg-gradient-to-r from-green-500 to-emerald-400 rounded-full transition-all duration-700"
+            style={{ width: `${op.total_assigned ? Math.min(((op.total_coming ?? 0) / op.total_assigned) * 100, 100) : 0}%` }}
           />
         </div>
       </div>
@@ -349,14 +355,17 @@ function ViewAssignedModal({
   };
 
   const statusColors: Record<string, string> = {
-    Pending: 'text-yellow-400 bg-yellow-950/30 border-yellow-500/20',
-    Called: 'text-blue-400 bg-blue-950/30 border-blue-500/20',
-    Confirmed: 'text-green-400 bg-green-950/30 border-green-500/20',
-    'No Answer': 'text-red-400 bg-red-950/30 border-red-500/20',
-    'Wrong Number': 'text-red-500 bg-red-950/30 border-red-500/20',
-    'Callback Required': 'text-orange-400 bg-orange-950/30 border-orange-500/20',
-    Completed: 'text-emerald-400 bg-emerald-950/30 border-emerald-500/20',
-    Visited: 'text-purple-400 bg-purple-950/30 border-purple-500/20',
+    Pending:            'text-yellow-400 bg-yellow-950/30 border-yellow-500/20',
+    Coming:             'text-green-400  bg-green-950/30  border-green-500/20',
+    'Not Coming':       'text-red-400    bg-red-950/30    border-red-500/20',
+    'Callback Required':'text-blue-400   bg-blue-950/30   border-blue-500/20',
+    // Legacy fallbacks (post-migration data safety)
+    Called:             'text-blue-400   bg-blue-950/30   border-blue-500/20',
+    Confirmed:          'text-green-400  bg-green-950/30  border-green-500/20',
+    'No Answer':        'text-red-400    bg-red-950/30    border-red-500/20',
+    'Wrong Number':     'text-red-400    bg-red-950/30    border-red-500/20',
+    Completed:          'text-green-400  bg-green-950/30  border-green-500/20',
+    Visited:            'text-green-400  bg-green-950/30  border-green-500/20',
   };
 
   return (
@@ -464,6 +473,27 @@ function ViewAssignedModal({
   );
 }
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface DryRunSummary {
+  total_unassigned: number;
+  active_operators: number;
+  total_capacity: number;
+  currently_assigned: number;
+  available_slots: number;
+  will_assign: number;
+  will_skip: number;
+  capacity_warning: boolean;
+  operator_breakdown: Array<{ id: string; name: string; current: number; capacity: number; available: number }>;
+}
+
+interface BatchReport {
+  total_unassigned: number;
+  successfully_assigned: number;
+  skipped_no_capacity: number;
+  failed: number;
+  distribution: Array<{ operator_id: string; operator_name: string; assigned_in_batch: number }>;
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ContactOperatorsPage() {
   const [operators, setOperators] = useState<ContactOperator[]>([]);
@@ -475,6 +505,12 @@ export default function ContactOperatorsPage() {
   const [removing, setRemoving] = useState(false);
   const [errorRemove, setErrorRemove] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  // ── Auto Assign states ──────────────────────────────────────────────────────
+  const [autoAssignStep, setAutoAssignStep] = useState<'idle' | 'loading-dry-run' | 'dry-run' | 'assigning' | 'report'>('idle');
+  const [dryRunSummary, setDryRunSummary] = useState<DryRunSummary | null>(null);
+  const [batchReport, setBatchReport] = useState<BatchReport | null>(null);
+  const [autoAssignError, setAutoAssignError] = useState<string | null>(null);
 
   const toast = (msg: string) => {
     setToastMsg(msg);
@@ -522,6 +558,57 @@ export default function ContactOperatorsPage() {
 
   useEffect(() => { loadOperators(); }, [loadOperators]);
 
+  // ── Auto Assign handlers ────────────────────────────────────────────────────
+  const handleAutoAssignDryRun = async () => {
+    setAutoAssignStep('loading-dry-run');
+    setAutoAssignError(null);
+    setDryRunSummary(null);
+    try {
+      const auth = await getAuthHeader();
+      const res = await fetch('/api/assignments/auto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: auth },
+        body: JSON.stringify({ dry_run: true }),
+      });
+      const d = await res.json();
+      if (!res.ok) { setAutoAssignError(d.error || 'Failed to fetch dry-run summary'); setAutoAssignStep('idle'); return; }
+      setDryRunSummary(d.summary);
+      setAutoAssignStep('dry-run');
+    } catch {
+      setAutoAssignError('Network error. Please try again.');
+      setAutoAssignStep('idle');
+    }
+  };
+
+  const handleExecuteAutoAssign = async () => {
+    setAutoAssignStep('assigning');
+    setAutoAssignError(null);
+    try {
+      const auth = await getAuthHeader();
+      const res = await fetch('/api/assignments/auto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: auth },
+        body: JSON.stringify({ dry_run: false }),
+      });
+      const d = await res.json();
+      if (res.status === 409) { setAutoAssignError('Batch assignment already in progress. Please wait.'); setAutoAssignStep('dry-run'); return; }
+      if (!res.ok) { setAutoAssignError(d.error || 'Batch assignment failed'); setAutoAssignStep('dry-run'); return; }
+      setBatchReport(d.report);
+      setAutoAssignStep('report');
+      loadOperators();
+    } catch {
+      setAutoAssignError('Network error. Please try again.');
+      setAutoAssignStep('dry-run');
+    }
+  };
+
+  const closeAutoAssign = () => {
+    setAutoAssignStep('idle');
+    setDryRunSummary(null);
+    setBatchReport(null);
+    setAutoAssignError(null);
+  };
+
   // Realtime subscription for contact assignments status/count updates
   useEffect(() => {
     const channel = supabase
@@ -558,8 +645,8 @@ export default function ContactOperatorsPage() {
   const activeOperators = operators.filter((o) => o.is_active).length;
   const totalAssigned = operators.reduce((s, o) => s + (o.total_assigned ?? 0), 0);
   const totalPending = operators.reduce((s, o) => s + (o.total_pending ?? 0), 0);
-  const totalCompleted = operators.reduce((s, o) => s + (o.total_completed ?? 0), 0);
-  const completionPct = totalAssigned > 0 ? Math.round((totalCompleted / totalAssigned) * 100) : 0;
+  const totalComing = operators.reduce((s, o) => s + (o.total_coming ?? 0), 0);
+  const totalNotComing = operators.reduce((s, o) => s + (o.total_not_coming ?? 0), 0);
 
   return (
     <div className="space-y-6">
@@ -572,7 +659,7 @@ export default function ContactOperatorsPage() {
           </h1>
           <p className="text-slate-500 text-sm mt-1">Manage call operators and contact assignments</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <a
             href="/admin/operator"
             target="_blank"
@@ -586,6 +673,19 @@ export default function ContactOperatorsPage() {
             className="p-2.5 rounded-xl bg-slate-900/50 border border-slate-700/40 text-slate-400 hover:text-slate-100 transition-all cursor-pointer"
           >
             <RefreshCw className="w-4 h-4" />
+          </button>
+          <button
+            onClick={handleAutoAssignDryRun}
+            disabled={autoAssignStep !== 'idle'}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-950/30 border border-amber-500/30 text-amber-400 hover:bg-amber-950/50 hover:text-amber-300 text-sm font-bold transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {autoAssignStep === 'loading-dry-run' ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Preparing...</>
+            ) : autoAssignStep === 'assigning' ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Assigning Contacts...</>
+            ) : (
+              <><Zap className="w-4 h-4" /> Auto Assign Existing Contacts</>
+            )}
           </button>
           <button
             onClick={() => setShowAdd(true)}
@@ -603,8 +703,8 @@ export default function ContactOperatorsPage() {
           { label: 'Active', value: activeOperators, icon: ToggleRight, color: 'text-green-400' },
           { label: 'Assigned', value: totalAssigned, icon: Users, color: 'text-blue-400' },
           { label: 'Pending Calls', value: totalPending, icon: Clock, color: 'text-yellow-400' },
-          { label: 'Completed', value: totalCompleted, icon: CheckCircle, color: 'text-emerald-400' },
-          { label: 'Completion %', value: `${completionPct}%`, icon: TrendingUp, color: 'text-indigo-400' },
+          { label: 'Coming', value: totalComing, icon: CheckCircle, color: 'text-emerald-400' },
+          { label: 'Not Coming', value: totalNotComing, icon: TrendingUp, color: 'text-red-400' },
         ].map(({ label, value, icon: Icon, color }) => (
           <div key={label} className="glass-card rounded-xl p-4 text-center">
             <Icon className={`w-5 h-5 mx-auto mb-2 ${color}`} />
@@ -719,6 +819,201 @@ export default function ContactOperatorsPage() {
                   </button>
                 </div>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Auto Assign Dialogs ──────────────────────────────────────────── */}
+      <AnimatePresence>
+        {/* Dry-Run Summary Dialog */}
+        {(autoAssignStep === 'dry-run' || autoAssignStep === 'loading-dry-run') && dryRunSummary && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="glass-card rounded-2xl p-6 w-full max-w-lg relative"
+            >
+              <button onClick={closeAutoAssign} className="absolute top-4 right-4 text-slate-500 hover:text-slate-100 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-9 h-9 rounded-xl bg-amber-950/40 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                  <Zap className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-extrabold text-slate-100">Auto Assign — Dry Run Preview</h2>
+                  <p className="text-xs text-slate-500">Review before executing the batch assignment</p>
+                </div>
+              </div>
+
+              {/* Summary stats */}
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                {[
+                  { label: 'Unassigned Registrations', value: dryRunSummary.total_unassigned, color: 'text-slate-100' },
+                  { label: 'Active Operators', value: dryRunSummary.active_operators, color: 'text-purple-400' },
+                  { label: 'Available Slots', value: dryRunSummary.available_slots, color: 'text-green-400' },
+                  { label: 'Will Be Assigned', value: dryRunSummary.will_assign, color: 'text-amber-400' },
+                ].map(({ label, value, color }) => (
+                  <div key={label} className="bg-slate-900/40 rounded-xl p-3 text-center">
+                    <p className={`text-xl font-extrabold ${color}`}>{value}</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">{label}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Capacity warning */}
+              {dryRunSummary.capacity_warning && (
+                <div className="mb-4 p-3 bg-red-950/40 border border-red-500/25 rounded-xl flex gap-2 items-start">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-red-400" />
+                  <p className="text-xs text-red-300 leading-relaxed">
+                    <strong>Capacity Warning:</strong> There are {dryRunSummary.total_unassigned} unassigned registrations but only {dryRunSummary.available_slots} available slots across all operators.
+                    {dryRunSummary.will_skip > 0 && <> <strong>{dryRunSummary.will_skip} registrations will be skipped</strong> due to insufficient capacity.</> }
+                  </p>
+                </div>
+              )}
+
+              {/* Operator breakdown */}
+              {dryRunSummary.operator_breakdown.length > 0 && (
+                <div className="mb-4">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Operator Capacity</p>
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                    {dryRunSummary.operator_breakdown.map((op) => {
+                      const pct = Math.round((op.current / op.capacity) * 100);
+                      const barColor = pct >= 100 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-green-500';
+                      const textColor = pct >= 100 ? 'text-red-400' : pct >= 70 ? 'text-amber-400' : 'text-green-400';
+                      return (
+                        <div key={op.id} className="flex items-center gap-3">
+                          <p className="text-xs text-slate-300 w-28 shrink-0 truncate">{op.name}</p>
+                          <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                          </div>
+                          <p className={`text-[10px] font-bold w-14 text-right shrink-0 ${textColor}`}>{op.current}/{op.capacity}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {dryRunSummary.active_operators === 0 && (
+                <div className="mb-4 p-3 bg-amber-950/30 border border-amber-500/25 rounded-xl text-xs text-amber-300">
+                  No active operators available. Create and enable operators before running auto-assignment.
+                </div>
+              )}
+
+              {autoAssignError && (
+                <div className="mb-4 p-3 bg-red-950/40 border border-red-500/30 rounded-xl text-red-300 text-xs flex gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-400" />
+                  {autoAssignError}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  onClick={handleExecuteAutoAssign}
+                  disabled={dryRunSummary.will_assign === 0}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold transition-all cursor-pointer"
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  Execute Auto Assignment ({dryRunSummary.will_assign} contacts)
+                </button>
+                <button
+                  onClick={closeAutoAssign}
+                  className="px-4 py-2.5 rounded-xl bg-slate-900/60 border border-slate-700/40 text-slate-400 text-xs font-semibold hover:text-slate-100 transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Assigning Progress Dialog */}
+        {autoAssignStep === 'assigning' && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="glass-card rounded-2xl p-8 w-full max-w-sm text-center"
+            >
+              <div className="w-14 h-14 rounded-2xl bg-amber-950/40 border border-amber-500/20 flex items-center justify-center text-amber-400 mx-auto mb-4">
+                <Loader2 className="w-7 h-7 animate-spin" />
+              </div>
+              <h2 className="text-base font-extrabold text-slate-100 mb-2">Assigning Contacts...</h2>
+              <p className="text-xs text-slate-400">Processing registrations through the assignment engine. This may take a moment.</p>
+              <div className="mt-4 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full animate-pulse w-full" />
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Final Report Dialog */}
+        {autoAssignStep === 'report' && batchReport && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="glass-card rounded-2xl p-6 w-full max-w-lg relative"
+            >
+              <button onClick={closeAutoAssign} className="absolute top-4 right-4 text-slate-500 hover:text-slate-100 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-9 h-9 rounded-xl bg-green-950/40 border border-green-500/20 flex items-center justify-center text-green-400">
+                  <BarChart3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-extrabold text-slate-100">Assignment Complete</h2>
+                  <p className="text-xs text-slate-500">Distribution report</p>
+                </div>
+              </div>
+
+              {/* Result stats */}
+              <div className="grid grid-cols-2 gap-3 mb-5">
+                {[
+                  { label: 'Total Processed', value: batchReport.total_unassigned, color: 'text-slate-100' },
+                  { label: 'Successfully Assigned', value: batchReport.successfully_assigned, color: 'text-green-400' },
+                  { label: 'Skipped (No Capacity)', value: batchReport.skipped_no_capacity, color: 'text-amber-400' },
+                  { label: 'Failed', value: batchReport.failed, color: batchReport.failed > 0 ? 'text-red-400' : 'text-slate-500' },
+                ].map(({ label, value, color }) => (
+                  <div key={label} className="bg-slate-900/40 rounded-xl p-3 text-center">
+                    <p className={`text-xl font-extrabold ${color}`}>{value}</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">{label}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Distribution breakdown */}
+              {batchReport.distribution.length > 0 && (
+                <div className="mb-5">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Distribution</p>
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    {batchReport.distribution
+                      .sort((a, b) => b.assigned_in_batch - a.assigned_in_batch)
+                      .map((d) => (
+                        <div key={d.operator_id} className="flex items-center justify-between p-2.5 bg-slate-900/30 rounded-xl border border-slate-800/40">
+                          <p className="text-xs font-semibold text-slate-200 truncate">{d.operator_name}</p>
+                          <span className="text-xs font-bold text-green-400 shrink-0 ml-2">+{d.assigned_in_batch} assigned</span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {batchReport.successfully_assigned === 0 && (
+                <p className="text-xs text-slate-400 text-center mb-4">No contacts were assigned. All registrations may already be assigned or all operators are at full capacity.</p>
+              )}
+
+              <button
+                onClick={() => { closeAutoAssign(); }}
+                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-sm transition-all cursor-pointer"
+              >
+                Done
+              </button>
             </motion.div>
           </div>
         )}

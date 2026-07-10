@@ -5,8 +5,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { Registration, VolunteerSlot } from '@/lib/types';
 import { 
-  Users, Heart, Soup, Clock, Loader2, X, Phone, 
-  User, CheckCircle, ExternalLink, Calendar, Building, Briefcase, Bus
+  Users, Soup, Clock, Loader2, X, Phone, 
+  User, CheckCircle, ExternalLink, Calendar, Building, Briefcase
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -29,10 +29,30 @@ const DashboardCharts = dynamic(() => import('@/components/dashboard-charts'), {
 
 const PURPLE_COLORS = ['#8b5cf6', '#6366f1', '#ec4899', '#3b82f6', '#14b8a6', '#f59e0b'];
 
+interface DashboardVisitorLog {
+  id: string;
+  visited_at: string;
+  visit_method: string;
+  registration_no: string;
+  full_name: string;
+  phone: string;
+  checked_in_by: string;
+  status: string;
+}
+
 export default function AdminDashboardPage() {
   const queryClient = useQueryClient();
   const [activeModal, setActiveModal] = useState<'total' | 'donors' | 'prasadam' | 'volunteers' | 'todays' | 'occupation' | 'transportation' | null>(null);
   const [realtimeStatus, setRealtimeStatus] = useState<string>('SUBSCRIBED');
+  const [visitorStats, setVisitorStats] = useState({
+    registered: 0,
+    visited: 0,
+    remaining: 0,
+    volunteer_visited: 0,
+    dinner_count: 0,
+    todays_visits: 0,
+  });
+  const [recentCheckIns, setRecentCheckIns] = useState<DashboardVisitorLog[]>([]);
 
   // 1. Query all registrations with joint data
   const { data: registrations = [], isLoading: isLoadingRegs } = useQuery<Registration[]>({
@@ -93,16 +113,49 @@ export default function AdminDashboardPage() {
     },
   });
 
+  const loadVisitorStats = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers = {
+        'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '',
+      };
+      
+      const statsRes = await fetch('/api/visitor/stats', { headers });
+      if (statsRes.ok) {
+        const d = await statsRes.json();
+        setVisitorStats(d.stats);
+      }
+
+      const logsRes = await fetch('/api/visitor/logs?limit=5', { headers });
+      if (logsRes.ok) {
+        const d = await logsRes.json();
+        setRecentCheckIns(d.logs ?? []);
+      }
+    } catch (err) {
+      console.error('Failed to load visitor stats:', err);
+    }
+  };
+
   // 3. Set up Supabase Realtime subscription to invalidate query keys on new submissions
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadVisitorStats();
+
     const channel = supabase
       .channel('dashboard_realtime_refetch')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'registrations' },
         () => {
-          // Trigger a query refetch to update all statistics and listings
           queryClient.invalidateQueries({ queryKey: ['registrations-summary'] });
+          loadVisitorStats();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'visitor_visits' },
+        () => {
+          loadVisitorStats();
         }
       )
       .subscribe((status) => {
@@ -118,10 +171,8 @@ export default function AdminDashboardPage() {
   const totalCount = registrations.length;
   
   const donorsList = registrations.filter(r => r.wants_to_donate);
-  const donorsCount = donorsList.length;
 
   const dinnerList = registrations.filter(r => r.interested_to_dinner);
-  const dinnerCount = dinnerList.length;
 
   const volunteersList = registrations.filter(r => r.interested_to_volunteer);
   const volunteersCount = volunteersList.length;
@@ -133,7 +184,6 @@ export default function AdminDashboardPage() {
       regDate.getMonth() === today.getMonth() &&
       regDate.getFullYear() === today.getFullYear();
   });
-  const todaysCount = todaysList.length;
 
   const studentsCount = registrations.filter(r => r.occupation === 'Student').length;
   const workingCount = registrations.filter(r => r.occupation === 'Working').length;
@@ -326,14 +376,14 @@ export default function AdminDashboardPage() {
       {/* 1. Statistics Cards Section */}
       <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3.5 md:gap-6">
         
-        {/* Total Registrations */}
+        {/* Total Registered */}
         <div 
           onClick={() => setActiveModal('total')}
           className="glass-card rounded-2xl p-3.5 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[105px] md:min-h-[140px]"
         >
           <div>
-            <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Total Registrations</span>
-            <span className="text-lg md:text-3xl font-extrabold text-slate-100 mt-1 md:mt-2 block">{totalCount}</span>
+            <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Registered</span>
+            <span className="text-lg md:text-3xl font-extrabold text-slate-100 mt-1 md:mt-2 block">{visitorStats.registered}</span>
           </div>
           <span className="text-[9px] md:text-[10px] text-purple-600 dark:text-purple-400 font-bold mt-2 md:mt-4 flex items-center gap-1">
             Click to view list <ExternalLink className="w-3 h-3" />
@@ -341,44 +391,57 @@ export default function AdminDashboardPage() {
           <Users className="w-9 h-9 md:w-16 md:h-16 opacity-8 md:opacity-12 absolute right-2 top-2 text-slate-400 dark:text-slate-700 group-hover:text-purple-400/80 transition-colors" />
         </div>
 
-        {/* Total Volunteers */}
+        {/* Visited / Checked In */}
+        <div 
+          className="glass-card rounded-2xl p-3.5 md:p-6 hover:border-green-500/40 hover:shadow-[0_0_20px_rgba(34,197,94,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[105px] md:min-h-[140px]"
+        >
+          <div>
+            <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Visited</span>
+            <span className="text-lg md:text-3xl font-extrabold text-green-400 mt-1 md:mt-2 block">{visitorStats.visited}</span>
+          </div>
+          <span className="text-[9px] md:text-[10px] text-green-550 dark:text-green-400 font-bold mt-2 md:mt-4">
+            Attendance Check-ins
+          </span>
+          <CheckCircle className="w-9 h-9 md:w-16 md:h-16 opacity-8 md:opacity-12 absolute right-2 top-2 text-slate-400 dark:text-slate-700 group-hover:text-green-400/80 transition-colors" />
+        </div>
+
+        {/* Remaining */}
+        <div 
+          className="glass-card rounded-2xl p-3.5 md:p-6 hover:border-yellow-500/40 hover:shadow-[0_0_20px_rgba(241,168,23,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[105px] md:min-h-[140px]"
+        >
+          <div>
+            <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Remaining</span>
+            <span className="text-lg md:text-3xl font-extrabold text-yellow-450 mt-1 md:mt-2 block">{visitorStats.remaining}</span>
+          </div>
+          <span className="text-[9px] md:text-[10px] text-yellow-600 dark:text-yellow-450 font-bold mt-2 md:mt-4">
+            Yet to Check In
+          </span>
+          <Clock className="w-9 h-9 md:w-16 md:h-16 opacity-8 md:opacity-12 absolute right-2 top-2 text-slate-400 dark:text-slate-700 group-hover:text-yellow-450/80 transition-colors" />
+        </div>
+
+        {/* Volunteer Visited */}
         <div 
           onClick={() => setActiveModal('volunteers')}
           className="glass-card rounded-2xl p-3.5 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[105px] md:min-h-[140px]"
         >
           <div>
-            <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Total Volunteers</span>
-            <span className="text-lg md:text-3xl font-extrabold text-slate-100 mt-1 md:mt-2 block">{volunteersCount}</span>
+            <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Volunteers Visited</span>
+            <span className="text-lg md:text-3xl font-extrabold text-slate-100 mt-1 md:mt-2 block">{visitorStats.volunteer_visited}</span>
           </div>
-          <span className="text-[9px] md:text-[10px] text-purple-600 dark:text-purple-400 font-bold mt-2 md:mt-4 flex items-center gap-1">
+          <span className="text-[9px] md:text-[10px] text-purple-650 dark:text-purple-400 font-bold mt-2 md:mt-4 flex items-center gap-1">
             Grouped by slot <ExternalLink className="w-3 h-3" />
           </span>
-          <Clock className="w-9 h-9 md:w-16 md:h-16 opacity-8 md:opacity-12 absolute right-2 top-2 text-slate-400 dark:text-slate-700 group-hover:text-purple-400/80 transition-colors" />
+          <Users className="w-9 h-9 md:w-16 md:h-16 opacity-8 md:opacity-12 absolute right-2 top-2 text-slate-400 dark:text-slate-700 group-hover:text-purple-400/80 transition-colors" />
         </div>
 
-        {/* Total Donors */}
-        <div 
-          onClick={() => setActiveModal('donors')}
-          className="glass-card rounded-2xl p-3.5 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[105px] md:min-h-[140px]"
-        >
-          <div>
-            <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Total Donors</span>
-            <span className="text-lg md:text-3xl font-extrabold text-slate-100 mt-1 md:mt-2 block">{donorsCount}</span>
-          </div>
-          <span className="text-[9px] md:text-[10px] text-purple-600 dark:text-purple-400 font-bold mt-2 md:mt-4 flex items-center gap-1">
-            Click to view list <ExternalLink className="w-3 h-3" />
-          </span>
-          <Heart className="w-9 h-9 md:w-16 md:h-16 opacity-8 md:opacity-12 absolute right-2 top-2 text-slate-400 dark:text-slate-700 group-hover:text-purple-400/80 transition-colors" />
-        </div>
-
-        {/* Dinner Prasadam */}
+        {/* Dinner Count */}
         <div 
           onClick={() => setActiveModal('prasadam')}
           className="glass-card rounded-2xl p-3.5 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[105px] md:min-h-[140px]"
         >
           <div>
-            <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Dinner Prasadam</span>
-            <span className="text-lg md:text-3xl font-extrabold text-slate-100 mt-1 md:mt-2 block">{dinnerCount}</span>
+            <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Dinner Count</span>
+            <span className="text-lg md:text-3xl font-extrabold text-slate-100 mt-1 md:mt-2 block">{visitorStats.dinner_count}</span>
           </div>
           <span className="text-[9px] md:text-[10px] text-purple-600 dark:text-purple-400 font-bold mt-2 md:mt-4 flex items-center gap-1">
             Click to view list <ExternalLink className="w-3 h-3" />
@@ -386,34 +449,18 @@ export default function AdminDashboardPage() {
           <Soup className="w-9 h-9 md:w-16 md:h-16 opacity-8 md:opacity-12 absolute right-2 top-2 text-slate-400 dark:text-slate-700 group-hover:text-purple-400/80 transition-colors" />
         </div>
 
-        {/* Today's Registrations */}
+        {/* Today's Visits */}
         <div 
-          onClick={() => setActiveModal('todays')}
-          className="glass-card rounded-2xl p-3.5 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[105px] md:min-h-[140px]"
+          className="glass-card rounded-2xl p-3.5 md:p-6 hover:border-emerald-500/40 hover:shadow-[0_0_20px_rgba(16,185,129,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[105px] md:min-h-[140px]"
         >
           <div>
-            <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Today&apos;s Registrations</span>
-            <span className="text-lg md:text-3xl font-extrabold text-slate-100 mt-1 md:mt-2 block">{todaysCount}</span>
+            <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Today&apos;s Visits</span>
+            <span className="text-lg md:text-3xl font-extrabold text-emerald-450 mt-1 md:mt-2 block">{visitorStats.todays_visits}</span>
           </div>
-          <span className="text-[9px] md:text-[10px] text-purple-600 dark:text-purple-400 font-bold mt-2 md:mt-4 flex items-center gap-1">
-            Click to view list <ExternalLink className="w-3 h-3" />
+          <span className="text-[9px] md:text-[10px] text-emerald-600 dark:text-emerald-450 font-bold mt-2 md:mt-4">
+            Visits Today
           </span>
-          <Calendar className="w-9 h-9 md:w-16 md:h-16 opacity-8 md:opacity-12 absolute right-2 top-2 text-slate-400 dark:text-slate-700 group-hover:text-purple-400/80 transition-colors" />
-        </div>
-
-        {/* Transportation Required */}
-        <div 
-          onClick={() => setActiveModal('transportation')}
-          className="glass-card rounded-2xl p-3.5 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[105px] md:min-h-[140px]"
-        >
-          <div>
-            <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Transportation Required</span>
-            <span className="text-lg md:text-3xl font-extrabold text-slate-100 mt-1 md:mt-2 block">{transportationYesCount}</span>
-          </div>
-          <span className="text-[9px] md:text-[10px] text-purple-600 dark:text-purple-400 font-bold mt-2 md:mt-4 flex items-center gap-1">
-            Yes: {transportationYesCount} | No: {transportationNoCount} <ExternalLink className="w-3 h-3" />
-          </span>
-          <Bus className="w-9 h-9 md:w-16 md:h-16 opacity-8 md:opacity-12 absolute right-2 top-2 text-slate-400 dark:text-slate-700 group-hover:text-purple-400/80 transition-colors" />
+          <Calendar className="w-9 h-9 md:w-16 md:h-16 opacity-8 md:opacity-12 absolute right-2 top-2 text-slate-400 dark:text-slate-700 group-hover:text-emerald-400/80 transition-colors" />
         </div>
 
         {/* Occupation Summary */}
@@ -485,7 +532,7 @@ export default function AdminDashboardPage() {
 
       </section>
 
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Recent 10 Registrations */}
         <div className="glass-card rounded-2xl p-6 flex flex-col h-[400px]">
           <h3 className="text-sm font-bold text-slate-300 border-b border-slate-900 pb-3 mb-4 flex items-center gap-2">
@@ -504,7 +551,7 @@ export default function AdminDashboardPage() {
                     {/* Name */}
                     <p className="font-semibold text-slate-100 text-sm flex items-center gap-1.5">
                       <User className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" /> 
-                      <span className="truncate max-w-[200px] sm:max-w-xs">{reg.full_name}</span>
+                      <span className="truncate max-w-[120px] sm:max-w-xs">{reg.full_name}</span>
                     </p>
                     {/* Occupation */}
                     {reg.occupation && (
@@ -520,8 +567,8 @@ export default function AdminDashboardPage() {
                     {/* Company */}
                     {reg.company_college && (
                       <p className="text-slate-500 dark:text-slate-400 flex items-center gap-1.5 text-[11px]">
-                        <Building className="w-3 h-3 text-slate-450 dark:text-slate-550 shrink-0" />
-                        <span className="truncate max-w-[200px] sm:max-w-xs">{reg.company_college}</span>
+                        <Building className="w-3 h-3 text-slate-455 dark:text-slate-555 shrink-0" />
+                        <span className="truncate max-w-[120px] sm:max-w-xs">{reg.company_college}</span>
                       </p>
                     )}
                     {/* Age Badge */}
@@ -537,6 +584,34 @@ export default function AdminDashboardPage() {
                       {formatDate(reg.created_at).split(',')[0]}
                     </span>
                   </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Recent Check-ins (last 5) */}
+        <div className="glass-card rounded-2xl p-6 flex flex-col h-[400px]">
+          <h3 className="text-sm font-bold text-slate-300 border-b border-slate-900 pb-3 mb-4 flex items-center gap-2">
+            <CheckCircle className="w-4.5 h-4.5 text-green-400 animate-pulse" /> Recent Check-Ins (last 5)
+          </h3>
+          <div className="flex-1 overflow-y-auto divide-y divide-slate-900/60 pr-1">
+            {recentCheckIns.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-slate-500 py-8 text-center">
+                <CheckCircle className="w-8 h-8 text-slate-650 mb-2" />
+                <p className="text-xs font-semibold">No check-ins today yet.</p>
+              </div>
+            ) : (
+              recentCheckIns.slice(0, 5).map((log) => (
+                <div key={log.id} className="py-3 flex justify-between items-start gap-2">
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-200 text-xs truncate">{log.full_name}</p>
+                    <p className="text-[10px] text-slate-500 font-semibold">{log.registration_no}</p>
+                    <p className="text-[9px] text-slate-500">By: <strong className="text-purple-400/90">{log.checked_in_by}</strong></p>
+                  </div>
+                  <span className="text-[9px] text-slate-550 shrink-0 bg-slate-900 px-1.5 py-0.5 rounded font-mono">
+                    {new Date(log.visited_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                  </span>
                 </div>
               ))
             )}

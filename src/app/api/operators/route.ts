@@ -49,9 +49,11 @@ export async function GET(req: Request) {
         ...op,
         total_assigned:   Number(s.total_assigned   ?? 0),
         total_pending:    Number(s.total_pending    ?? 0),
-        total_completed:  Number(s.total_completed  ?? 0),
+        total_coming:     Number(s.total_coming     ?? 0),
+        total_not_coming: Number(s.total_not_coming ?? 0),
+        total_completed:  Number(s.total_coming     ?? 0),  // legacy
         total_called:     Number(s.total_called     ?? 0),
-        total_confirmed:  Number(s.total_confirmed  ?? 0),
+        total_confirmed:  Number(s.total_coming     ?? 0),  // legacy
         call_success_pct: Number(s.call_success_pct ?? 0),
       };
     })

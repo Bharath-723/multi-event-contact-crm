@@ -9,8 +9,7 @@ import { getOperatorSessionFromRequest } from '@/lib/operator-auth';
 import type { AssignmentStatus } from '@/lib/types';
 
 const VALID_STATUSES: AssignmentStatus[] = [
-  'Pending', 'Called', 'Confirmed', 'No Answer',
-  'Wrong Number', 'Callback Required', 'Completed', 'Visited',
+  'Pending', 'Coming', 'Not Coming', 'Callback Required',
 ];
 
 export async function PATCH(
@@ -53,13 +52,14 @@ export async function PATCH(
   }
 
   const updates: Record<string, unknown> = {};
+  const oldStatus = assignment.status as AssignmentStatus;
 
   if (body.status !== undefined) {
     if (!VALID_STATUSES.includes(body.status as AssignmentStatus)) {
       return NextResponse.json({ error: `Invalid status: ${body.status}` }, { status: 400 });
     }
     updates.status = body.status;
-    // Record when call was first made
+    // Record when contact was first actioned
     if (body.status !== 'Pending' && !assignment.status) {
       updates.called_at = new Date().toISOString();
     }
@@ -82,12 +82,19 @@ export async function PATCH(
 
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
 
-  // Audit log
+  // Audit log with full status change details
+  const isStatusChange = body.status !== undefined;
   await supabaseAdmin.from('audit_logs').insert({
-    action: body.remarks !== undefined ? 'ASSIGNMENT_REMARKS_UPDATED' : 'ASSIGNMENT_STATUS_UPDATED',
+    action: isStatusChange ? 'ASSIGNMENT_STATUS_UPDATED' : 'ASSIGNMENT_REMARKS_UPDATED',
     details: {
       assignment_id: id,
       operator_id: session.operatorId,
+      operator_name: session.name,
+      ...(isStatusChange ? {
+        old_status: oldStatus,
+        new_status: body.status,
+      } : {}),
+      timestamp: new Date().toISOString(),
       changes: updates,
     },
   });

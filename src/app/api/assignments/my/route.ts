@@ -1,12 +1,19 @@
 /**
  * GET /api/assignments/my
- * Operator-only: returns paginated, searchable list of their own assigned contacts.
+ * Operator-only: returns paginated, searchable, filterable list of their own assigned contacts.
  * Auth: httpOnly JWT cookie (operator-session).
  * Security: All queries hard-filtered by operator_id from JWT — never trusts URL params.
+ *
+ * Phase 3B additions:
+ *   - ?status filter (Pending | Coming | Not Coming | Callback Required | all)
+ *   - Stats now return total_coming, total_not_coming, total_callback
  */
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getOperatorSessionFromRequest } from '@/lib/operator-auth';
+import type { AssignmentStatus } from '@/lib/types';
+
+const VALID_STATUSES: AssignmentStatus[] = ['Pending', 'Coming', 'Not Coming', 'Callback Required'];
 
 export async function GET(req: Request) {
   const session = getOperatorSessionFromRequest(req);
@@ -29,6 +36,7 @@ export async function GET(req: Request) {
   const page = Math.max(1, parseInt(url.searchParams.get('page') ?? '1', 10));
   const limit = Math.min(100, parseInt(url.searchParams.get('limit') ?? '30', 10));
   const search = (url.searchParams.get('search') ?? '').trim();
+  const statusFilter = (url.searchParams.get('status') ?? '').trim(); // Phase 3B
   const from = (page - 1) * limit;
   const to = from + limit - 1;
 
@@ -59,9 +67,15 @@ export async function GET(req: Request) {
     .order('assigned_at', { ascending: false })
     .range(from, to);
 
+  // Phase 3B: Status filter
+  if (statusFilter && VALID_STATUSES.includes(statusFilter as AssignmentStatus)) {
+    query = query.eq('status', statusFilter);
+  }
+
   // Search filter applied on registration fields
   if (search) {
     if (matchedIds.length === 0 && !isUuid) {
+      // No matching registrations found — return empty with fresh stats
       const { data: statsData } = await supabaseAdmin.rpc('get_operator_stats', {
         p_operator_id: session.operatorId,
       });
@@ -71,13 +85,7 @@ export async function GET(req: Request) {
         total: 0,
         page,
         limit,
-        stats: {
-          total_assigned:   Number(stats.total_assigned   ?? 0),
-          total_pending:    Number(stats.total_pending    ?? 0),
-          total_completed:  Number(stats.total_completed  ?? 0),
-          total_called:     Number(stats.total_called     ?? 0),
-          call_success_pct: Number(stats.call_success_pct ?? 0),
-        },
+        stats: buildStats(stats),
       });
     }
 
@@ -106,12 +114,22 @@ export async function GET(req: Request) {
     total: count ?? 0,
     page,
     limit,
-    stats: {
-      total_assigned:   Number(stats.total_assigned   ?? 0),
-      total_pending:    Number(stats.total_pending    ?? 0),
-      total_completed:  Number(stats.total_completed  ?? 0),
-      total_called:     Number(stats.total_called     ?? 0),
-      call_success_pct: Number(stats.call_success_pct ?? 0),
-    },
+    stats: buildStats(stats),
   });
+}
+
+// ─── Helper: build consistent stats object ───────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function buildStats(s: any) {
+  return {
+    total_assigned:    Number(s.total_assigned   ?? 0),
+    total_pending:     Number(s.total_pending    ?? 0),
+    total_coming:      Number(s.total_coming     ?? 0),
+    total_not_coming:  Number(s.total_not_coming ?? 0),
+    total_callback:    Number(s.total_callback   ?? 0),
+    // Legacy fields retained for backward compat
+    total_completed:   Number(s.total_coming     ?? 0),
+    total_called:      Number(s.total_called     ?? 0),
+    call_success_pct:  Number(s.call_success_pct ?? 0),
+  };
 }

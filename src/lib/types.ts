@@ -97,13 +97,19 @@ export interface CompanyStat {
 
 export type AssignmentStatus =
   | 'Pending'
+  | 'Coming'
+  | 'Not Coming'
+  | 'Callback Required';
+
+/** @deprecated Legacy statuses — kept only for migration reference. Do not use in new code. */
+export type LegacyAssignmentStatus =
   | 'Called'
   | 'Confirmed'
   | 'No Answer'
   | 'Wrong Number'
-  | 'Callback Required'
   | 'Completed'
   | 'Visited';
+
 
 export interface ContactOperator {
   id: string;
@@ -117,7 +123,9 @@ export interface ContactOperator {
   // Stats — joined in API response
   total_assigned?: number;
   total_pending?: number;
-  total_completed?: number;
+  total_completed?: number;  // legacy — maps to Coming
+  total_coming?: number;
+  total_not_coming?: number;
   total_called?: number;
   total_confirmed?: number;
   call_success_pct?: number;

@@ -114,6 +114,7 @@ export default function AdminDashboardLayout({
     { name: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
     { name: 'Registrations', path: '/admin/registrations', icon: Users },
     { name: 'Contact Operators', path: '/admin/operators', icon: PhoneCall },
+    { name: 'Visitor Check-In', path: '/admin/visitor', icon: ShieldCheck },
   ];
 
   if (pathname === '/admin') {

@@ -40,8 +40,10 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
     }
   }, [isLoginPage, router]);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { loadSession(); }, [loadSession]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadSession();
+  }, [loadSession]);
 
   const handleLogout = async () => {
     await fetch('/api/operators/logout', { method: 'POST' });
