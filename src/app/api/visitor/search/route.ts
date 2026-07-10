@@ -106,15 +106,15 @@ export async function GET(req: Request) {
     query = query.in('id', assignedIds);
   }
 
-  // Search Priority Logic
-  const searchValue = q.toLowerCase();
-  if (/^REG-\d{4}-\d{6}$/i.test(searchValue)) {
-    query = query.eq('registration_no', q.toUpperCase());
-  } else if (/^\d+$/.test(searchValue)) {
-    query = query.ilike('phone', `%${q}%`);
-  } else {
-    query = query.ilike('full_name', `%${q}%`);
+  // Search Priority Logic (Flexible across Name, Phone, and Registration Number)
+  const searchClean = q.trim();
+  const searchDigits = searchClean.replace(/\D/g, '');
+
+  let orFilter = `full_name.ilike.%${searchClean}%,registration_no.ilike.%${searchClean}%`;
+  if (searchDigits) {
+    orFilter += `,phone.ilike.%${searchDigits}%`;
   }
+  query = query.or(orFilter);
 
   const { data: registrations, error: fetchErr } = await query.limit(20);
 

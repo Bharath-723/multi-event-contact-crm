@@ -51,7 +51,8 @@ ALTER TABLE contact_assignments ADD CONSTRAINT contact_assignments_status_check
     CHECK (status IN ('Pending', 'Coming', 'Not Coming', 'Callback Required'));
 
 -- ── STEP 3: Update get_operator_stats RPC ────────────────────────────────────
--- Replace with new status-aware version
+-- Drop function first to allow changing the return table type/signature
+DROP FUNCTION IF EXISTS get_operator_stats(UUID);
 
 CREATE OR REPLACE FUNCTION get_operator_stats(p_operator_id UUID)
 RETURNS TABLE (
@@ -92,10 +93,15 @@ BEGIN
     WHERE ca.operator_id = p_operator_id
       AND ca.is_active = TRUE;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+ALTER FUNCTION get_operator_stats(UUID) OWNER TO postgres;
+GRANT EXECUTE ON FUNCTION get_operator_stats(UUID) TO public;
 
 
 -- ── STEP 4: Update get_contact_module_summary RPC ────────────────────────────
+-- Drop function first to allow changing the return table type/signature
+DROP FUNCTION IF EXISTS get_contact_module_summary();
 
 CREATE OR REPLACE FUNCTION get_contact_module_summary()
 RETURNS TABLE (
@@ -129,7 +135,10 @@ BEGIN
     FROM contact_assignments ca
     WHERE ca.is_active = TRUE;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+ALTER FUNCTION get_contact_module_summary() OWNER TO postgres;
+GRANT EXECUTE ON FUNCTION get_contact_module_summary() TO public;
 
 -- ── STEP 5: Add index on new status values for fast filtering ─────────────────
 DROP INDEX IF EXISTS idx_contact_assignments_status;

@@ -253,6 +253,19 @@ export default function RegistrationsPage() {
               id,
               name
             )
+          ),
+          contact_assignments (
+            id,
+            is_active,
+            status,
+            assigned_at,
+            assigned_by,
+            operator_id,
+            contact_operators (
+              id,
+              name,
+              email
+            )
           )
         `)
         .order('created_at', { ascending: false });
@@ -1191,13 +1204,41 @@ export default function RegistrationsPage() {
 
                     {/* Assign */}
                     <td className="px-5 py-4">
-                      <button
-                        onClick={() => setAssignReg({ id: reg.id, full_name: reg.full_name, phone: reg.phone })}
-                        aria-label="Assign contact operator"
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-950/30 border border-purple-500/20 text-purple-400 text-xs font-semibold hover:bg-purple-950/50 transition-all cursor-pointer whitespace-nowrap"
-                      >
-                        <PhoneCall className="w-3.5 h-3.5" /> Assign
-                      </button>
+                      {(() => {
+                        const activeAssignment = reg.contact_assignments?.find((a) => a.is_active);
+                        if (activeAssignment) {
+                          const op = activeAssignment.contact_operators;
+                          const opName = Array.isArray(op) ? op[0]?.name : op?.name;
+                          const assignDate = activeAssignment.assigned_at
+                            ? new Date(activeAssignment.assigned_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+                            : '—';
+                          const assignType = activeAssignment.assigned_by ? 'Manual' : 'System';
+
+                          return (
+                            <div className="relative group inline-block">
+                              <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-950/40 border border-green-500/30 text-green-400 text-xs font-bold whitespace-nowrap select-none">
+                                <Check className="w-3.5 h-3.5" /> Assigned
+                              </span>
+                              <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block z-50 w-48 p-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 text-[10px] leading-relaxed shadow-2xl pointer-events-none">
+                                <p className="font-semibold text-slate-100 border-b border-slate-800 pb-1 mb-1">Assignment Info</p>
+                                <p><span className="text-slate-500 font-medium">Assigned to:</span> {opName || '—'}</p>
+                                <p><span className="text-slate-500 font-medium">Date:</span> {assignDate}</p>
+                                <p><span className="text-slate-500 font-medium">Type:</span> {assignType}</p>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <button
+                            onClick={() => setAssignReg({ id: reg.id, full_name: reg.full_name, phone: reg.phone })}
+                            aria-label="Assign contact operator"
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-950/30 border border-purple-500/20 text-purple-400 text-xs font-semibold hover:bg-purple-950/50 transition-all cursor-pointer whitespace-nowrap"
+                          >
+                            <PhoneCall className="w-3.5 h-3.5" /> Assign
+                          </button>
+                        );
+                      })()}
                     </td>
 
                     {/* Actions */}

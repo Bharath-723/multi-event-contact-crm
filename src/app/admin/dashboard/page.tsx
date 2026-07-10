@@ -44,14 +44,7 @@ export default function AdminDashboardPage() {
   const queryClient = useQueryClient();
   const [activeModal, setActiveModal] = useState<'total' | 'donors' | 'prasadam' | 'volunteers' | 'todays' | 'occupation' | 'transportation' | null>(null);
   const [realtimeStatus, setRealtimeStatus] = useState<string>('SUBSCRIBED');
-  const [visitorStats, setVisitorStats] = useState({
-    registered: 0,
-    visited: 0,
-    remaining: 0,
-    volunteer_visited: 0,
-    dinner_count: 0,
-    todays_visits: 0,
-  });
+
   const [recentCheckIns, setRecentCheckIns] = useState<DashboardVisitorLog[]>([]);
 
   // 1. Query all registrations with joint data
@@ -73,6 +66,12 @@ export default function AdminDashboardPage() {
               id,
               name
             )
+          ),
+          visitor_visits (
+            id,
+            visited_at,
+            visit_method,
+            remarks
           )
         `)
         .order('created_at', { ascending: false });
@@ -119,12 +118,6 @@ export default function AdminDashboardPage() {
       const headers = {
         'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '',
       };
-      
-      const statsRes = await fetch('/api/visitor/stats', { headers });
-      if (statsRes.ok) {
-        const d = await statsRes.json();
-        setVisitorStats(d.stats);
-      }
 
       const logsRes = await fetch('/api/visitor/logs?limit=5', { headers });
       if (logsRes.ok) {
@@ -184,6 +177,19 @@ export default function AdminDashboardPage() {
       regDate.getMonth() === today.getMonth() &&
       regDate.getFullYear() === today.getFullYear();
   });
+
+  // Visitor check-in metrics calculated from unified registrations query (joined visitor_visits)
+  const visitedCount = registrations.filter(r => r.visitor_visits && r.visitor_visits.length > 0).length;
+  const volunteerVisitedCount = registrations.filter(r => r.interested_to_volunteer && r.visitor_visits && r.visitor_visits.length > 0).length;
+  const dinnerVisitedCount = registrations.filter(r => r.interested_to_dinner && r.visitor_visits && r.visitor_visits.length > 0).length;
+  const todaysVisitsCount = registrations.filter(r => {
+    if (!r.visitor_visits || r.visitor_visits.length === 0) return false;
+    const visitDate = new Date(r.visitor_visits[0].visited_at);
+    const today = new Date();
+    return visitDate.getDate() === today.getDate() &&
+      visitDate.getMonth() === today.getMonth() &&
+      visitDate.getFullYear() === today.getFullYear();
+  }).length;
 
   const studentsCount = registrations.filter(r => r.occupation === 'Student').length;
   const workingCount = registrations.filter(r => r.occupation === 'Working').length;
@@ -383,9 +389,9 @@ export default function AdminDashboardPage() {
         >
           <div>
             <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Registered</span>
-            <span className="text-lg md:text-3xl font-extrabold text-slate-100 mt-1 md:mt-2 block">{visitorStats.registered}</span>
+            <span className="text-lg md:text-3xl font-extrabold text-slate-100 mt-1 md:mt-2 block">{totalCount}</span>
           </div>
-          <span className="text-[9px] md:text-[10px] text-purple-600 dark:text-purple-400 font-bold mt-2 md:mt-4 flex items-center gap-1">
+          <span className="text-[9px] md:text-[10px] text-purple-650 dark:text-purple-400 font-bold mt-2 md:mt-4 flex items-center gap-1">
             Click to view list <ExternalLink className="w-3 h-3" />
           </span>
           <Users className="w-9 h-9 md:w-16 md:h-16 opacity-8 md:opacity-12 absolute right-2 top-2 text-slate-400 dark:text-slate-700 group-hover:text-purple-400/80 transition-colors" />
@@ -397,7 +403,7 @@ export default function AdminDashboardPage() {
         >
           <div>
             <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Visited</span>
-            <span className="text-lg md:text-3xl font-extrabold text-green-400 mt-1 md:mt-2 block">{visitorStats.visited}</span>
+            <span className="text-lg md:text-3xl font-extrabold text-green-400 mt-1 md:mt-2 block">{visitedCount}</span>
           </div>
           <span className="text-[9px] md:text-[10px] text-green-550 dark:text-green-400 font-bold mt-2 md:mt-4">
             Attendance Check-ins
@@ -405,18 +411,18 @@ export default function AdminDashboardPage() {
           <CheckCircle className="w-9 h-9 md:w-16 md:h-16 opacity-8 md:opacity-12 absolute right-2 top-2 text-slate-400 dark:text-slate-700 group-hover:text-green-400/80 transition-colors" />
         </div>
 
-        {/* Remaining */}
+        {/* Volunteers Registered (replaced Remaining) */}
         <div 
           className="glass-card rounded-2xl p-3.5 md:p-6 hover:border-yellow-500/40 hover:shadow-[0_0_20px_rgba(241,168,23,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[105px] md:min-h-[140px]"
         >
           <div>
-            <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Remaining</span>
-            <span className="text-lg md:text-3xl font-extrabold text-yellow-450 mt-1 md:mt-2 block">{visitorStats.remaining}</span>
+            <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Volunteers Registered</span>
+            <span className="text-lg md:text-3xl font-extrabold text-yellow-450 mt-1 md:mt-2 block">{volunteersCount}</span>
           </div>
           <span className="text-[9px] md:text-[10px] text-yellow-600 dark:text-yellow-450 font-bold mt-2 md:mt-4">
-            Yet to Check In
+            Interested to Volunteer
           </span>
-          <Clock className="w-9 h-9 md:w-16 md:h-16 opacity-8 md:opacity-12 absolute right-2 top-2 text-slate-400 dark:text-slate-700 group-hover:text-yellow-450/80 transition-colors" />
+          <Users className="w-9 h-9 md:w-16 md:h-16 opacity-8 md:opacity-12 absolute right-2 top-2 text-slate-400 dark:text-slate-700 group-hover:text-yellow-450/80 transition-colors" />
         </div>
 
         {/* Volunteer Visited */}
@@ -426,7 +432,7 @@ export default function AdminDashboardPage() {
         >
           <div>
             <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Volunteers Visited</span>
-            <span className="text-lg md:text-3xl font-extrabold text-slate-100 mt-1 md:mt-2 block">{visitorStats.volunteer_visited}</span>
+            <span className="text-lg md:text-3xl font-extrabold text-slate-100 mt-1 md:mt-2 block">{volunteerVisitedCount}</span>
           </div>
           <span className="text-[9px] md:text-[10px] text-purple-650 dark:text-purple-400 font-bold mt-2 md:mt-4 flex items-center gap-1">
             Grouped by slot <ExternalLink className="w-3 h-3" />
@@ -441,7 +447,7 @@ export default function AdminDashboardPage() {
         >
           <div>
             <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Dinner Count</span>
-            <span className="text-lg md:text-3xl font-extrabold text-slate-100 mt-1 md:mt-2 block">{visitorStats.dinner_count}</span>
+            <span className="text-lg md:text-3xl font-extrabold text-slate-100 mt-1 md:mt-2 block">{dinnerVisitedCount}</span>
           </div>
           <span className="text-[9px] md:text-[10px] text-purple-600 dark:text-purple-400 font-bold mt-2 md:mt-4 flex items-center gap-1">
             Click to view list <ExternalLink className="w-3 h-3" />
@@ -455,7 +461,7 @@ export default function AdminDashboardPage() {
         >
           <div>
             <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Today&apos;s Visits</span>
-            <span className="text-lg md:text-3xl font-extrabold text-emerald-450 mt-1 md:mt-2 block">{visitorStats.todays_visits}</span>
+            <span className="text-lg md:text-3xl font-extrabold text-emerald-450 mt-1 md:mt-2 block">{todaysVisitsCount}</span>
           </div>
           <span className="text-[9px] md:text-[10px] text-emerald-600 dark:text-emerald-450 font-bold mt-2 md:mt-4">
             Visits Today

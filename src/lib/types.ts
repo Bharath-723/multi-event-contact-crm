@@ -26,8 +26,37 @@ export interface Registration {
   wants_to_donate: boolean;
   donation_status: 'Pending' | 'User Opted to Donate' | 'Completed' | 'Failed';
   transportation_required?: string | null;
+  registration_no?: string;
   created_at: string;
   skills?: Skill[];
+  visitor_visits?: VisitorVisit[];
+  contact_assignments?: Array<{
+    id: string;
+    registration_id: string;
+    operator_id: string;
+    assigned_by?: string | null;
+    assigned_at: string;
+    called_at?: string | null;
+    status: string;
+    remarks?: string | null;
+    is_active: boolean;
+    contact_operators?: {
+      id: string;
+      name: string;
+      email: string;
+      phone?: string | null;
+    } | null;
+  }>;
+}
+
+export interface VisitorVisit {
+  id: string;
+  registration_id: string;
+  visited_at: string;
+  visit_method: string;
+  visited_by?: string | null;
+  visited_by_admin: boolean;
+  remarks?: string | null;
 }
 
 export interface RegistrationSkill {
