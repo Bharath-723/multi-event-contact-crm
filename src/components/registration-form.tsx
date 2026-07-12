@@ -25,6 +25,7 @@ const ALLOWED_AREAS = [
   'Gandipet',
   'Narsingi',
   'Aziz Nagar',
+  'Moinabad',
   'Banjara Hills'
 ].sort();
 

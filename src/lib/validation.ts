@@ -5,6 +5,7 @@ export const ALLOWED_AREAS = [
   'Gandipet',
   'Narsingi',
   'Aziz Nagar',
+  'Moinabad',
   'Banjara Hills'
 ] as const;
 
