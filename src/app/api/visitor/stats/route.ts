@@ -1,48 +1,10 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-admin';
+import { getVisitorStats } from '@/lib/visitor-stats';
 
 export async function GET() {
   try {
-    // 1. Total Registered Count
-    const { count: registered, error: err1 } = await supabaseAdmin
-      .from('registrations')
-      .select('*', { count: 'exact', head: true });
-
-    // 2. Total Visited Count
-    const { count: visited, error: err2 } = await supabaseAdmin
-      .from('visitor_visits')
-      .select('*', { count: 'exact', head: true });
-
-    if (err1 || err2) {
-      return NextResponse.json({ error: err1?.message || err2?.message }, { status: 500 });
-    }
-
-    // 3. Volunteer Visited Count
-    const { count: volunteerVisited } = await supabaseAdmin
-      .from('visitor_visits')
-      .select('registrations!inner(interested_to_volunteer)', { count: 'exact', head: true })
-      .eq('registrations.interested_to_volunteer', true);
-
-    // 4. Dinner Count (Total registrations who checked interested_to_dinner)
-    const { count: dinnerCount } = await supabaseAdmin
-      .from('registrations')
-      .select('*', { count: 'exact', head: true })
-      .eq('interested_to_dinner', true);
-
-    const totalReg = registered ?? 0;
-    const totalVis = visited ?? 0;
-    const remaining = Math.max(0, totalReg - totalVis);
-
-    return NextResponse.json({
-      stats: {
-        registered: totalReg,
-        visited: totalVis,
-        remaining,
-        volunteer_visited: volunteerVisited ?? 0,
-        dinner_count: dinnerCount ?? 0,
-        todays_visits: 0,
-      }
-    });
+    const stats = await getVisitorStats();
+    return NextResponse.json({ stats });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: msg }, { status: 500 });

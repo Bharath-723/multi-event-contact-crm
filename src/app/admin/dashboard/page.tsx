@@ -66,12 +66,6 @@ export default function AdminDashboardPage() {
               id,
               name
             )
-          ),
-          visitor_visits (
-            id,
-            visited_at,
-            visit_method,
-            remarks
           )
         `)
         .order('created_at', { ascending: false });
@@ -112,6 +106,21 @@ export default function AdminDashboardPage() {
     },
   });
 
+  // 2B. Query shared visitor stats to synchronize with Visitor Check-In Center
+  const { data: visitorStats } = useQuery({
+    queryKey: ['visitor-stats-summary'],
+    queryFn: async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers = {
+        'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '',
+      };
+      const res = await fetch('/api/visitor/stats', { headers });
+      if (!res.ok) throw new Error('Failed to fetch visitor stats');
+      const d = await res.json();
+      return d.stats;
+    },
+  });
+
   const loadVisitorStats = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -141,6 +150,7 @@ export default function AdminDashboardPage() {
         { event: '*', schema: 'public', table: 'registrations' },
         () => {
           queryClient.invalidateQueries({ queryKey: ['registrations-summary'] });
+          queryClient.invalidateQueries({ queryKey: ['visitor-stats-summary'] });
           loadVisitorStats();
         }
       )
@@ -148,6 +158,7 @@ export default function AdminDashboardPage() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'visitor_visits' },
         () => {
+          queryClient.invalidateQueries({ queryKey: ['visitor-stats-summary'] });
           loadVisitorStats();
         }
       )
@@ -161,11 +172,12 @@ export default function AdminDashboardPage() {
   }, [queryClient]);
 
   // --- STATS CALCULATIONS (Client-Side Aggregation for Speed & Consistency) ---
-  const totalCount = registrations.length;
+  const totalCount = visitorStats?.registered ?? registrations.length;
   
   const donorsList = registrations.filter(r => r.wants_to_donate);
 
   const dinnerList = registrations.filter(r => r.interested_to_dinner);
+  const dinnerCount = visitorStats?.dinner_count ?? dinnerList.length;
 
   const volunteersList = registrations.filter(r => r.interested_to_volunteer);
   const volunteersCount = volunteersList.length;
@@ -178,9 +190,9 @@ export default function AdminDashboardPage() {
       regDate.getFullYear() === today.getFullYear();
   });
 
-  // Visitor check-in metrics calculated from unified registrations query (joined visitor_visits)
-  const visitedCount = registrations.filter(r => r.visitor_visits && r.visitor_visits.length > 0).length;
-  const volunteerVisitedCount = registrations.filter(r => r.interested_to_volunteer && r.visitor_visits && r.visitor_visits.length > 0).length;
+  // Visitor check-in metrics mapped directly to the shared visitorStats query
+  const visitedCount = visitorStats?.visited ?? 0;
+  const volunteerVisitedCount = visitorStats?.volunteer_visited ?? 0;
 
   const studentsCount = registrations.filter(r => r.occupation === 'Student').length;
   const workingCount = registrations.filter(r => r.occupation === 'Working').length;
@@ -438,7 +450,7 @@ export default function AdminDashboardPage() {
         >
           <div>
             <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Dinner Count</span>
-            <span className="text-lg md:text-3xl font-extrabold text-slate-100 mt-1 md:mt-2 block">{dinnerList.length}</span>
+            <span className="text-lg md:text-3xl font-extrabold text-slate-100 mt-1 md:mt-2 block">{dinnerCount}</span>
           </div>
           <span className="text-[9px] md:text-[10px] text-purple-600 dark:text-purple-400 font-bold mt-2 md:mt-4 flex items-center gap-1">
             Click to view list <ExternalLink className="w-3 h-3" />
