@@ -60,7 +60,13 @@ export async function GET(req: Request) {
     .select(`
       id, registration_id, operator_id, assigned_at, called_at,
       status, remarks, is_active, created_at, updated_at,
-      registrations!registration_id (*)
+      registrations!registration_id (
+        *,
+        volunteer_slots (
+          id,
+          slot_time
+        )
+      )
     `, { count: 'exact' })
     .eq('operator_id', session.operatorId)  // CRITICAL security filter
     .eq('is_active', true)

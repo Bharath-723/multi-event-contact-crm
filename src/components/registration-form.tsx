@@ -304,7 +304,8 @@ export default function RegistrationForm() {
       const selectedSlot = slots.find((s: { id: string; slot_time: string }) => s.id === data.volunteerSlotId);
       sessionStorage.setItem('rathayatra_last_registration', JSON.stringify({
         interestedToVolunteer: data.interestedToVolunteer,
-        volunteerSlotTime: selectedSlot?.slot_time || ''
+        volunteerSlotTime: selectedSlot?.slot_time || '',
+        gender: data.gender
       }));
 
       // Clear draft form and flags

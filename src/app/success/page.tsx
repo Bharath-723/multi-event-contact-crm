@@ -4,9 +4,10 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { CheckCircle2, Calendar, Sparkles, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
+import { COMMUNITY_LINKS } from '@/lib/constants/community-links';
 
 export default function SuccessPage() {
-  const [lastReg, setLastReg] = useState<{ interestedToVolunteer: 'Yes' | 'No'; volunteerSlotTime: string } | null>(null);
+  const [lastReg, setLastReg] = useState<{ interestedToVolunteer: 'Yes' | 'No'; volunteerSlotTime: string; gender?: string } | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -21,6 +22,8 @@ export default function SuccessPage() {
       }
     }
   }, []);
+
+  const communityLink = lastReg?.gender === 'Female' ? COMMUNITY_LINKS.female : COMMUNITY_LINKS.male;
 
   return (
     <div className="dark min-h-screen bg-[#030014] text-slate-100 overflow-x-hidden">
@@ -117,7 +120,7 @@ export default function SuccessPage() {
               </div>
 
               <a
-                href="https://chat.whatsapp.com/G10hiJTbjjX5ALAkLeNBI2"
+                href={communityLink}
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="Join our official WhatsApp community"

@@ -41,6 +41,12 @@ interface RegistrationData {
   occupation?: string | null;
   company_college?: string;
   created_at: string;
+  interested_to_volunteer?: boolean;
+  volunteer_slot_id?: string | null;
+  volunteer_slots?: {
+    id: string;
+    slot_time: string;
+  } | null;
 }
 
 interface Assignment {
@@ -163,8 +169,20 @@ function ContactCard({
       {/* Header: Name + Status Badge */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className="font-bold text-slate-100 text-sm leading-snug truncate">{reg.full_name}</p>
-          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 mt-0.5">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-bold text-slate-100 text-sm leading-snug truncate">{reg.full_name}</span>
+            {reg.interested_to_volunteer && (
+              <span className="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded bg-green-50 border border-green-200 text-green-700 shrink-0">
+                🟢 Volunteer
+              </span>
+            )}
+          </div>
+          {reg.interested_to_volunteer && reg.volunteer_slots?.slot_time && (
+            <p className="text-xs text-slate-400 font-medium mt-1">
+              {reg.volunteer_slots.slot_time}
+            </p>
+          )}
+          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 mt-1.5">
             {reg.age && reg.gender && (
               <span className="text-[11px] text-slate-500">{reg.age} · {reg.gender}</span>
             )}

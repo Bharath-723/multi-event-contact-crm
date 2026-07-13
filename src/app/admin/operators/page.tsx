@@ -52,7 +52,24 @@ function OperatorCard({
           <div className="min-w-0">
             <p className="font-bold text-slate-100 text-sm truncate">{op.name}</p>
             <p className="text-xs text-slate-500 truncate">{op.email}</p>
-            {op.phone && <p className="text-xs text-slate-500">{op.phone}</p>}
+            {op.phone ? (
+              <a
+                href={`tel:+91${op.phone}`}
+                className="inline-flex items-center gap-1.5 mt-1.5 text-xs text-purple-400 hover:text-purple-300 font-semibold transition-colors"
+                title="Call Operator"
+              >
+                <PhoneCall className="w-3.5 h-3.5" />
+                <span>+91 {op.phone}</span>
+              </a>
+            ) : (
+              <button
+                onClick={() => onEdit(op)}
+                className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full border border-amber-500/30 bg-amber-950/20 text-amber-400 hover:bg-amber-950/40 hover:text-amber-300 text-[10px] font-bold transition-all cursor-pointer"
+              >
+                <Plus className="w-3 h-3" />
+                <span>Add Mobile No.</span>
+              </button>
+            )}
           </div>
         </div>
         <span className={`text-[10px] font-bold px-2 py-1 rounded-lg border shrink-0 ${statusColor}`}>
@@ -613,13 +630,20 @@ export default function ContactOperatorsPage() {
     setAutoAssignError(null);
   };
 
-  // Realtime subscription for contact assignments status/count updates
+  // Realtime subscription for contact assignments and operator updates
   useEffect(() => {
     const channel = supabase
       .channel('admin_operators_realtime')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'contact_assignments' },
+        () => {
+          loadOperators();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'contact_operators' },
         () => {
           loadOperators();
         }
