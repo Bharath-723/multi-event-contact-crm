@@ -52,8 +52,9 @@ export default function QRModal({ isOpen, onClose }: QRModalProps) {
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (isOpen) {
-      // Use the configured env URL, or fall back to the current browser origin
-      const url = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
+      // Point feedback registration QR code explicitly to /feedback route
+      const origin = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
+      const url = `${origin}/feedback`;
       setQrUrl(url);
       generateQRCodes(url);
     }

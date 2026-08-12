@@ -1,6 +1,8 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { MAX_CONTACTS_PER_OPERATOR } from '@/lib/constants/operator-config';
 
-export const MAX_CONTACTS_PER_OPERATOR = 30;
+// Re-export so existing server-side importers don't need to change
+export { MAX_CONTACTS_PER_OPERATOR };
 
 /**
  * Attempts to automatically assign a registration to an active operator
@@ -28,6 +30,24 @@ export async function assignOperator(registrationId: string): Promise<string | n
 
     if (reg.gender === 'Female') {
       console.log(`Assignment skipped: Female registration.`);
+      return null;
+    }
+
+    // Check if the registration has ever been marked 'Not Coming' (active or inactive)
+    const { data: wasNotComing, error: statusCheckError } = await supabaseAdmin
+      .from('contact_assignments')
+      .select('id')
+      .eq('registration_id', registrationId)
+      .eq('status', 'Not Coming')
+      .limit(1)
+      .maybeSingle();
+
+    if (statusCheckError) {
+      console.error('Auto-assignment: Error checking historical Not Coming status:', statusCheckError);
+    }
+
+    if (wasNotComing) {
+      console.log(`Assignment skipped: Registration ${registrationId} has been marked 'Not Coming'.`);
       return null;
     }
 

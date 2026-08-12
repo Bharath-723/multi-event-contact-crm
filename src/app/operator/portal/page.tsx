@@ -1,27 +1,29 @@
 'use client';
 
+/* eslint-disable react-hooks/set-state-in-effect */
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
-  Phone, Search, Loader2, Clock, PhoneCall,
+  Phone, Search, Loader2, Clock,
   Users, MessageSquare, Save, X, RefreshCw,
   ChevronLeft, ChevronRight, MessageCircle,
-  CheckCircle2, XCircle, PhoneMissed, Filter
+  CheckCircle2, XCircle, Sparkles, GraduationCap, GitBranch, Laptop, Star
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import type { AssignmentStatus } from '@/lib/types';
+import { motion } from 'framer-motion';
+import type { FeedbackAssignmentStatus, FeedbackContact } from '@/lib/types';
 import Link from 'next/link';
 
-// ─── New 4-Status System ──────────────────────────────────────────────────────
-const STATUS_OPTIONS: AssignmentStatus[] = [
-  'Pending', 'Coming', 'Not Coming', 'Callback Required',
+const STATUS_OPTIONS: FeedbackAssignmentStatus[] = [
+  'Assigned', 'Contacted', 'Interested', 'Not Interested', 'Not Coming', 'Completed',
 ];
 
-const STATUS_META: Record<AssignmentStatus, { label: string; color: string; bg: string; border: string; icon: React.ReactNode }> = {
-  'Pending':           { label: 'Pending',           color: 'text-yellow-400',  bg: 'bg-yellow-950/30',  border: 'border-yellow-500/30', icon: <Clock className="w-3 h-3" /> },
-  'Coming':            { label: 'Coming',             color: 'text-green-400',   bg: 'bg-green-950/30',   border: 'border-green-500/30',  icon: <CheckCircle2 className="w-3 h-3" /> },
-  'Not Coming':        { label: 'Not Coming',         color: 'text-red-400',     bg: 'bg-red-950/30',     border: 'border-red-500/30',    icon: <XCircle className="w-3 h-3" /> },
-  'Callback Required': { label: 'Callback Required',  color: 'text-blue-400',    bg: 'bg-blue-950/30',    border: 'border-blue-500/30',   icon: <PhoneMissed className="w-3 h-3" /> },
+const STATUS_META: Record<FeedbackAssignmentStatus, { label: string; color: string; bg: string; border: string; icon: React.ReactNode }> = {
+  'Assigned':       { label: 'Assigned',       color: 'text-blue-400',    bg: 'bg-blue-950/30',    border: 'border-blue-500/30',   icon: <Clock className="w-3 h-3" /> },
+  'Contacted':      { label: 'Contacted',      color: 'text-amber-400',   bg: 'bg-amber-950/30',   border: 'border-amber-500/30',  icon: <Clock className="w-3 h-3" /> },
+  'Interested':     { label: 'Interested',     color: 'text-emerald-400', bg: 'bg-emerald-950/30', border: 'border-emerald-500/30', icon: <CheckCircle2 className="w-3 h-3" /> },
+  'Not Interested': { label: 'Not Interested', color: 'text-rose-400',    bg: 'bg-rose-950/30',    border: 'border-rose-500/30',   icon: <XCircle className="w-3 h-3" /> },
+  'Not Coming':     { label: 'Not Coming',     color: 'text-red-400',     bg: 'bg-red-950/30',     border: 'border-red-500/30',    icon: <XCircle className="w-3 h-3" /> },
+  'Completed':      { label: 'Completed',      color: 'text-purple-400',  bg: 'bg-purple-950/30',  border: 'border-purple-500/30', icon: <CheckCircle2 className="w-3 h-3" /> },
 };
 
 interface OperatorInfo {
@@ -31,46 +33,27 @@ interface OperatorInfo {
   phone?: string | null;
 }
 
-interface RegistrationData {
+interface FeedbackAssignmentData {
   id: string;
-  full_name: string;
-  phone: string;
-  age?: number;
-  gender?: string;
-  area_of_stay?: string | null;
-  occupation?: string | null;
-  company_college?: string;
-  created_at: string;
-  interested_to_volunteer?: boolean;
-  volunteer_slot_id?: string | null;
-  volunteer_slots?: {
-    id: string;
-    slot_time: string;
-  } | null;
-}
-
-interface Assignment {
-  id: string;
-  registration_id: string;
+  feedback_contact_id: string;
   operator_id: string;
   assigned_at: string;
-  called_at?: string | null;
-  status: AssignmentStatus;
-  remarks?: string | null;
+  status: FeedbackAssignmentStatus;
+  notes?: string | null;
   is_active: boolean;
   updated_at: string;
-  registrations: RegistrationData | null;
+  feedback_contact: FeedbackContact | null;
 }
 
 interface Stats {
   total_assigned: number;
-  total_pending: number;
-  total_coming: number;
+  total_contacted: number;
+  total_interested: number;
+  total_not_interested: number;
   total_not_coming: number;
-  total_callback: number;
+  total_completed: number;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 function sanitizePhone(phone: string): string {
   return phone.replace(/\D/g, '').slice(-10);
 }
@@ -80,19 +63,19 @@ function waLink(phone: string): string {
   return `https://wa.me/91${digits}`;
 }
 
-// ─── Remarks Modal ────────────────────────────────────────────────────────────
-function RemarksModal({
+// ─── Notes Modal ────────────────────────────────────────────────────────────
+function NotesModal({
   assignmentId,
-  currentRemarks,
+  currentNotes,
   onSave,
   onClose,
 }: {
   assignmentId: string;
-  currentRemarks: string;
-  onSave: (id: string, remarks: string) => Promise<void>;
+  currentNotes: string;
+  onSave: (id: string, notes: string) => Promise<void>;
   onClose: () => void;
 }) {
-  const [text, setText] = useState(currentRemarks);
+  const [text, setText] = useState(currentNotes);
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
@@ -117,7 +100,7 @@ function RemarksModal({
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="e.g. Coming with family, Needs transport, Will call back after 6pm..."
+          placeholder="e.g. Interested in online workshop, Available on weekends, Sent details on WhatsApp..."
           rows={4}
           className="w-full px-3 py-2.5 rounded-xl glass-input text-sm text-foreground placeholder-slate-500 resize-none"
         />
@@ -138,26 +121,27 @@ function RemarksModal({
 function ContactCard({
   assignment,
   onStatusChange,
-  onRemarks,
+  onNotes,
 }: {
-  assignment: Assignment;
-  onStatusChange: (id: string, status: AssignmentStatus) => Promise<void>;
-  onRemarks: (id: string, current: string) => void;
+  assignment: FeedbackAssignmentData;
+  onStatusChange: (id: string, status: FeedbackAssignmentStatus) => Promise<void>;
+  onNotes: (id: string, current: string) => void;
 }) {
-  const reg = assignment.registrations;
+  const fc = assignment.feedback_contact;
   const [updating, setUpdating] = useState(false);
-  const meta = STATUS_META[assignment.status] ?? STATUS_META['Pending'];
+  const meta = STATUS_META[assignment.status] ?? STATUS_META['Assigned'];
 
-  const handleStatus = async (status: AssignmentStatus) => {
+  const handleStatus = async (status: FeedbackAssignmentStatus) => {
     if (status === assignment.status) return;
     setUpdating(true);
     try { await onStatusChange(assignment.id, status); }
     finally { setUpdating(false); }
   };
 
-  if (!reg) return null;
+  if (!fc) return null;
 
-  const cleanPhone = sanitizePhone(reg.phone);
+  const cleanPhone = sanitizePhone(fc.phone);
+  const isOnlineWorkshop = Boolean(fc.interested_online_workshop ?? fc.interested_online_work);
 
   return (
     <motion.div
@@ -170,30 +154,46 @@ function ContactCard({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-bold text-slate-100 text-sm leading-snug truncate">{reg.full_name}</span>
-            {reg.interested_to_volunteer && (
-              <span className="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded bg-green-50 border border-green-200 text-green-700 shrink-0">
-                🟢 Volunteer
+            <span className="font-bold text-slate-100 text-sm leading-snug truncate">{fc.full_name}</span>
+            {isOnlineWorkshop && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-950/60 border border-indigo-500/30 text-indigo-300 shrink-0">
+                <Laptop className="w-3 h-3 text-indigo-400" /> Online Workshop
               </span>
             )}
           </div>
-          {reg.interested_to_volunteer && reg.volunteer_slots?.slot_time && (
-            <p className="text-xs text-slate-400 font-medium mt-1">
-              {reg.volunteer_slots.slot_time}
-            </p>
-          )}
-          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 mt-1.5">
-            {reg.age && reg.gender && (
-              <span className="text-[11px] text-slate-500">{reg.age} · {reg.gender}</span>
-            )}
-            {reg.occupation && (
-              <span className="text-[11px] text-slate-500 truncate max-w-[140px]">{reg.occupation}</span>
-            )}
-            {reg.area_of_stay && (
-              <span className="text-[11px] text-purple-400 truncate max-w-[140px]">{reg.area_of_stay}</span>
-            )}
+
+          {/* Academic Info */}
+          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1.5 text-xs text-slate-300">
+            <span className="flex items-center gap-1">
+              <GraduationCap className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+              {fc.college_name}
+            </span>
+            <span className="flex items-center gap-1 text-slate-400">
+              <GitBranch className="w-3 h-3 text-indigo-400 shrink-0" />
+              {fc.branch}
+            </span>
           </div>
+
+          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 mt-1">
+            <span className="text-[11px] text-slate-400">{fc.gender}</span>
+            <span className="text-[11px] text-slate-400">· {fc.current_stay}</span>
+            <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-0.5">
+              <Star className="w-3 h-3 text-emerald-400 fill-emerald-400/30" /> {fc.feedback}
+            </span>
+          </div>
+
+          {/* Skills */}
+          {fc.skills && fc.skills.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-2">
+              {fc.skills.map((skill) => (
+                <span key={skill} className="px-2 py-0.5 rounded bg-purple-950/40 border border-purple-500/20 text-[10px] text-purple-300 font-medium">
+                  {skill}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
+
         {/* Status Badge */}
         <span className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg border shrink-0 ${meta.color} ${meta.bg} ${meta.border}`}>
           {meta.icon} {meta.label}
@@ -201,9 +201,9 @@ function ContactCard({
       </div>
 
       {/* Notes */}
-      {assignment.remarks && (
-        <p className="text-[11px] text-slate-400 italic bg-slate-900/30 rounded-lg px-3 py-2 border border-slate-800/30 leading-relaxed">
-          &ldquo;{assignment.remarks}&rdquo;
+      {assignment.notes && (
+        <p className="text-[11px] text-slate-300 italic bg-slate-900/50 rounded-lg px-3 py-2 border border-slate-800/40 leading-relaxed">
+          &ldquo;{assignment.notes}&rdquo;
         </p>
       )}
 
@@ -212,8 +212,8 @@ function ContactCard({
         {/* Call */}
         <a
           href={`tel:+91${cleanPhone}`}
-          className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-green-950/30 border border-green-500/25 text-green-400 text-xs font-bold hover:bg-green-950/50 active:bg-green-950/70 transition-all"
-          aria-label={`Call ${reg.full_name}`}
+          className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-green-950/40 border border-green-500/30 text-green-400 text-xs font-bold hover:bg-green-950/60 active:bg-green-950/80 transition-all"
+          aria-label={`Call ${fc.full_name}`}
         >
           <Phone className="w-3.5 h-3.5 shrink-0" />
           <span className="truncate">+91 {cleanPhone}</span>
@@ -221,11 +221,11 @@ function ContactCard({
 
         {/* WhatsApp */}
         <a
-          href={waLink(reg.phone)}
+          href={waLink(fc.phone)}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-emerald-950/30 border border-emerald-500/25 text-emerald-400 text-xs font-bold hover:bg-emerald-950/50 active:bg-emerald-950/70 transition-all"
-          aria-label={`WhatsApp ${reg.full_name}`}
+          className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-emerald-400 text-xs font-bold hover:bg-emerald-950/60 active:bg-emerald-950/80 transition-all"
+          aria-label={`WhatsApp ${fc.full_name}`}
         >
           <MessageCircle className="w-3.5 h-3.5 shrink-0" />
           <span>WhatsApp</span>
@@ -240,326 +240,381 @@ function ContactCard({
           )}
           <select
             value={assignment.status}
-            onChange={(e) => handleStatus(e.target.value as AssignmentStatus)}
             disabled={updating}
-            className={`w-full px-3 py-2.5 rounded-xl glass-input text-xs font-semibold cursor-pointer disabled:opacity-60 ${meta.color}`}
+            onChange={(e) => handleStatus(e.target.value as FeedbackAssignmentStatus)}
+            className="w-full px-3 py-2 rounded-xl glass-input text-xs font-semibold text-slate-200 cursor-pointer disabled:opacity-50 appearance-none pr-8"
           >
-            {STATUS_OPTIONS.map((s) => (
-              <option key={s} value={s} className="text-slate-100 bg-slate-900 font-normal">{s}</option>
+            {STATUS_OPTIONS.map((st) => (
+              <option key={st} value={st} className="bg-slate-950 text-white">
+                {st}
+              </option>
             ))}
           </select>
         </div>
-
-        {/* Notes Button */}
-        <button
-          onClick={() => onRemarks(assignment.id, assignment.remarks || '')}
-          className="col-span-2 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900/50 border border-slate-700/30 text-slate-400 text-xs font-semibold hover:text-slate-100 hover:border-slate-600/40 active:bg-slate-900/80 transition-all cursor-pointer"
-        >
-          <MessageSquare className="w-3.5 h-3.5" />
-          {assignment.remarks ? 'Edit Notes' : 'Add Notes'}
-        </button>
       </div>
+
+      {/* Add Notes Button */}
+      <button
+        onClick={() => onNotes(assignment.id, assignment.notes || '')}
+        className="w-full text-left text-xs text-purple-400 hover:text-purple-300 font-semibold flex items-center justify-between pt-1 border-t border-slate-800/40 cursor-pointer"
+      >
+        <span className="flex items-center gap-1.5">
+          <MessageSquare className="w-3.5 h-3.5" />
+          {assignment.notes ? 'Edit Notes' : '+ Add Notes'}
+        </span>
+        {assignment.notes && <span className="text-[10px] text-slate-500 truncate max-w-[150px]">{assignment.notes}</span>}
+      </button>
     </motion.div>
   );
 }
 
-// ─── Stat Card ────────────────────────────────────────────────────────────────
-function StatCard({ label, value, color, icon }: { label: string; value: number | string; color: string; icon: React.ReactNode }) {
-  return (
-    <div className="glass-card rounded-xl p-4 text-center flex flex-col items-center gap-1.5">
-      <div className={color}>{icon}</div>
-      <p className={`text-xl font-extrabold ${color}`}>{value}</p>
-      <p className="text-[10px] text-slate-500 leading-tight">{label}</p>
-    </div>
-  );
-}
-
-// ─── Filter Tab Bar ───────────────────────────────────────────────────────────
-const FILTER_TABS: { label: string; value: string; color: string; activeClass: string }[] = [
-  { label: 'All',               value: '',                  color: 'text-slate-400',  activeClass: 'bg-slate-700/50 text-slate-100 border-slate-600/50' },
-  { label: 'Pending',           value: 'Pending',           color: 'text-yellow-400', activeClass: 'bg-yellow-950/40 text-yellow-300 border-yellow-500/40' },
-  { label: 'Coming',            value: 'Coming',            color: 'text-green-400',  activeClass: 'bg-green-950/40 text-green-300 border-green-500/40' },
-  { label: 'Not Coming',        value: 'Not Coming',        color: 'text-red-400',    activeClass: 'bg-red-950/40 text-red-300 border-red-500/40' },
-  { label: 'Callback',          value: 'Callback Required', color: 'text-blue-400',   activeClass: 'bg-blue-950/40 text-blue-300 border-blue-500/40' },
-];
-
-// ─── Main Portal Page ─────────────────────────────────────────────────────────
+// ─── Main Operator Portal Page ────────────────────────────────────────────────
 export default function OperatorPortalPage() {
   const [operator, setOperator] = useState<OperatorInfo | null>(null);
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [stats, setStats] = useState<Stats>({ total_assigned: 0, total_pending: 0, total_coming: 0, total_not_coming: 0, total_callback: 0 });
-  const [loading, setLoading] = useState(true);
+  const [loadingOp, setLoadingOp] = useState(true);
+  const [assignments, setAssignments] = useState<FeedbackAssignmentData[]>([]);
+  const [loadingData, setLoadingData] = useState(false);
+
+  // Filters & Pagination
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [activeTab, setActiveTab] = useState<'ACTIVE' | 'NOT_COMING'>('ACTIVE');
   const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
-  const [remarksModal, setRemarksModal] = useState<{ id: string; current: string } | null>(null);
   const LIMIT = 20;
-  const realtimeRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  const loadData = useCallback(async (searchVal = search, pageVal = page, statusVal = statusFilter) => {
+  // Notes Modal State
+  const [notesModal, setNotesModal] = useState<{ open: boolean; assignmentId: string; notes: string }>({
+    open: false,
+    assignmentId: '',
+    notes: '',
+  });
+
+  // 1. Fetch Current Operator Profile
+  const fetchProfile = useCallback(async () => {
     try {
-      const params = new URLSearchParams({ page: String(pageVal), limit: String(LIMIT) });
-      if (searchVal.trim()) params.set('search', searchVal.trim());
-      if (statusVal) params.set('status', statusVal);
-      const res = await fetch(`/api/assignments/my?${params}`);
-      if (!res.ok) return;
-      const d = await res.json();
-      setAssignments(d.assignments ?? []);
-      setStats({
-        total_assigned:   d.stats?.total_assigned   ?? 0,
-        total_pending:    d.stats?.total_pending    ?? 0,
-        total_coming:     d.stats?.total_coming     ?? 0,
-        total_not_coming: d.stats?.total_not_coming ?? 0,
-        total_callback:   d.stats?.total_callback   ?? 0,
-      });
-      setTotal(d.total ?? 0);
+      const res = await fetch('/api/operators/me');
+      const json = await res.json();
+      if (res.ok && json.operator) {
+        setOperator(json.operator);
+      } else {
+        setOperator(null);
+      }
+    } catch {
+      setOperator(null);
     } finally {
-      setLoading(false);
+      setLoadingOp(false);
     }
-  }, [search, page, statusFilter]);
-
-  // Load operator info
-  useEffect(() => {
-    fetch('/api/operators/me').then(r => r.ok ? r.json() : null).then(d => {
-      if (d?.operator) setOperator(d.operator);
-    });
   }, []);
 
-  // Initial load
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setLoading(true); loadData(); }, [loadData]);
-
-  // Realtime subscription to contact_assignments
   useEffect(() => {
-    realtimeRef.current = supabase
-      .channel('operator_assignments_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'contact_assignments' }, () => {
-        loadData();
-      })
+    fetchProfile();
+  }, [fetchProfile]);
+
+  // 2. Fetch Assignments for Current Operator
+  const loadAssignments = useCallback(async () => {
+    if (!operator) return;
+    setLoadingData(true);
+
+    try {
+      const isActiveParam = activeTab === 'ACTIVE' ? 'true' : 'false';
+      let url = `/api/assignments/feedback?operator_id=${operator.id}&is_active=${isActiveParam}`;
+      if (statusFilter !== 'ALL') url += `&status=${encodeURIComponent(statusFilter)}`;
+
+      const res = await fetch(url);
+      const json = await res.json();
+
+      if (res.ok && json.assignments) {
+        setAssignments((json.assignments as FeedbackAssignmentData[]).filter(a => a.feedback_contact?.gender !== 'Female'));
+      }
+    } catch (err) {
+      console.error('Failed to fetch operator assignments:', err);
+    } finally {
+      setLoadingData(false);
+    }
+  }, [operator, activeTab, statusFilter]);
+
+  useEffect(() => {
+    if (operator) loadAssignments();
+  }, [operator, loadAssignments]);
+
+  // 3. Supabase Realtime Subscription on feedback_contact_assignments
+  const loadAssignmentsRef = useRef(loadAssignments);
+  useEffect(() => {
+    loadAssignmentsRef.current = loadAssignments;
+  }, [loadAssignments]);
+
+  useEffect(() => {
+    if (!operator) return;
+
+    const channel = supabase
+      .channel(`fca-operator-${operator.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'feedback_contact_assignments',
+          filter: `operator_id=eq.${operator.id}`,
+        },
+        () => {
+          loadAssignmentsRef.current();
+        }
+      )
       .subscribe();
+
     return () => {
-      if (realtimeRef.current) supabase.removeChannel(realtimeRef.current);
+      supabase.removeChannel(channel);
     };
-  }, [loadData]);
+  }, [operator]);
 
-  const handleStatusChange = async (id: string, status: AssignmentStatus) => {
-    const res = await fetch(`/api/assignments/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
-    });
-    if (res.ok) {
-      setAssignments(prev => prev.map(a => a.id === id ? { ...a, status } : a));
-      // Optimistic stats update
-      const old = assignments.find(a => a.id === id)?.status;
-      setStats(prev => {
-        const s = { ...prev };
-        if (old === 'Pending') s.total_pending = Math.max(0, s.total_pending - 1);
-        if (old === 'Coming') s.total_coming = Math.max(0, s.total_coming - 1);
-        if (old === 'Not Coming') s.total_not_coming = Math.max(0, s.total_not_coming - 1);
-        if (old === 'Callback Required') s.total_callback = Math.max(0, s.total_callback - 1);
-        if (status === 'Pending') s.total_pending++;
-        if (status === 'Coming') s.total_coming++;
-        if (status === 'Not Coming') s.total_not_coming++;
-        if (status === 'Callback Required') s.total_callback++;
-        return s;
+  // 4. Update Status Handler
+  const handleStatusChange = async (assignmentId: string, status: FeedbackAssignmentStatus) => {
+    try {
+      const res = await fetch(`/api/assignments/feedback/${assignmentId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
       });
+
+      if (res.ok) {
+        loadAssignments();
+      }
+    } catch (err) {
+      console.error('Failed to update status:', err);
     }
   };
 
-  const handleRemarksSave = async (id: string, remarks: string) => {
-    const res = await fetch(`/api/assignments/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ remarks }),
-    });
-    if (res.ok) {
-      setAssignments(prev => prev.map(a => a.id === id ? { ...a, remarks } : a));
+  // 5. Save Notes Handler
+  const handleSaveNotes = async (assignmentId: string, notes: string) => {
+    try {
+      const res = await fetch(`/api/assignments/feedback/${assignmentId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes }),
+      });
+
+      if (res.ok) {
+        loadAssignments();
+      }
+    } catch (err) {
+      console.error('Failed to save notes:', err);
     }
   };
 
-  const handleSearch = (val: string) => {
-    setSearch(val);
-    setPage(1);
-    setLoading(true);
-    loadData(val, 1, statusFilter);
+  // Stats calculation
+  const stats: Stats = {
+    total_assigned: assignments.filter(a => a.is_active).length,
+    total_contacted: assignments.filter(a => a.status === 'Contacted' && a.is_active).length,
+    total_interested: assignments.filter(a => a.status === 'Interested' && a.is_active).length,
+    total_not_interested: assignments.filter(a => a.status === 'Not Interested' && a.is_active).length,
+    total_not_coming: assignments.filter(a => a.status === 'Not Coming').length,
+    total_completed: assignments.filter(a => a.status === 'Completed' && a.is_active).length,
   };
 
-  const handleFilterTab = (val: string) => {
-    setStatusFilter(val);
-    setPage(1);
-    setLoading(true);
-    loadData(search, 1, val);
-  };
+  // Filtered contacts list based on search string
+  const filteredList = assignments.filter((a) => {
+    const fc = a.feedback_contact;
+    if (!fc) return false;
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return (
+      fc.full_name.toLowerCase().includes(q) ||
+      fc.phone.includes(q) ||
+      fc.college_name.toLowerCase().includes(q) ||
+      fc.branch.toLowerCase().includes(q)
+    );
+  });
 
-  const totalPages = Math.ceil(total / LIMIT);
+  const totalPages = Math.ceil(filteredList.length / LIMIT) || 1;
+  const paginatedList = filteredList.slice((page - 1) * LIMIT, page * LIMIT);
 
-  // Completion gauge (Coming / Assigned)
-  const completionPct = stats.total_assigned > 0
-    ? Math.round((stats.total_coming / stats.total_assigned) * 100)
-    : 0;
+  if (loadingOp) {
+    return (
+      <div className="min-h-screen bg-[#030014] text-slate-100 flex items-center justify-center p-4">
+        <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
+      </div>
+    );
+  }
+
+  if (!operator) {
+    return (
+      <div className="min-h-screen bg-[#030014] text-slate-100 flex flex-col items-center justify-center p-4">
+        <div className="glass-card rounded-2xl p-6 max-w-sm text-center space-y-4">
+          <Users className="w-12 h-12 mx-auto text-purple-400" />
+          <h2 className="text-xl font-bold">Operator Session Required</h2>
+          <p className="text-sm text-slate-400">Please log in to your Contact Operator portal to view your assigned workload.</p>
+          <Link href="/operator/login">
+            <button className="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold text-sm cursor-pointer">
+              Go to Login
+            </button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4 pb-8">
-      {/* ── Welcome Header ── */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="glass-card rounded-2xl p-5"
-      >
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Welcome back</p>
-            <h1 className="text-xl font-extrabold text-slate-100 truncate">{operator?.name ?? '...'}</h1>
-            {operator?.email && <p className="text-xs text-slate-500 mt-0.5 truncate">{operator.email}</p>}
+    <div className="dark min-h-screen bg-[#030014] text-slate-100 pb-16">
+      {/* --- Top Header Bar --- */}
+      <header className="sticky top-0 z-30 bg-[#030014]/90 backdrop-blur-md border-b border-purple-500/20 px-4 py-3">
+        <div className="max-w-3xl mx-auto flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center font-black text-white shadow-md">
+              {operator.name.charAt(0)}
+            </div>
+            <div>
+              <h1 className="font-bold text-sm text-slate-100 flex items-center gap-1.5 leading-snug">
+                {operator.name}
+              </h1>
+              <p className="text-[11px] text-purple-400 font-semibold">Feedback Operator Portal</p>
+            </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <Link
-              href="/operator/visitor"
-              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-purple-950/40 border border-purple-500/25 text-purple-400 hover:text-purple-300 text-xs font-bold transition-all"
+
+          <button
+            onClick={() => loadAssignments()}
+            disabled={loadingData}
+            className="p-2 rounded-xl bg-slate-900/60 border border-slate-800 text-slate-400 hover:text-slate-100 cursor-pointer disabled:opacity-50"
+            title="Refresh List"
+          >
+            <RefreshCw className={`w-4 h-4 ${loadingData ? 'animate-spin text-purple-400' : ''}`} />
+          </button>
+        </div>
+      </header>
+
+      <main className="max-w-3xl mx-auto px-4 pt-4 space-y-4">
+        {/* --- Metric Overview Cards --- */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          <div className="glass-card rounded-xl p-3 border-purple-500/20">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Active Workload</p>
+            <p className="text-xl font-extrabold text-purple-400 mt-0.5">{stats.total_assigned}</p>
+          </div>
+          <div className="glass-card rounded-xl p-3 border-emerald-500/20">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Interested</p>
+            <p className="text-xl font-extrabold text-emerald-400 mt-0.5">{stats.total_interested}</p>
+          </div>
+          <div className="glass-card rounded-xl p-3 border-amber-500/20">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Contacted</p>
+            <p className="text-xl font-extrabold text-amber-400 mt-0.5">{stats.total_contacted}</p>
+          </div>
+          <div className="glass-card rounded-xl p-3 border-red-500/20">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Not Coming</p>
+            <p className="text-xl font-extrabold text-red-400 mt-0.5">{stats.total_not_coming}</p>
+          </div>
+        </div>
+
+        {/* --- Workload View Tabs & Filters --- */}
+        <div className="space-y-3">
+          {/* Active vs Not Coming Toggle */}
+          <div className="flex rounded-xl bg-slate-950/60 p-1 border border-slate-800">
+            <button
+              onClick={() => { setActiveTab('ACTIVE'); setPage(1); }}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                activeTab === 'ACTIVE'
+                  ? 'bg-purple-950/80 border border-purple-500/40 text-purple-300 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
             >
-              Visitor Check-In
-            </Link>
-            {/* Completion Gauge */}
-            {stats.total_assigned > 0 && (
-              <div className="hidden sm:flex flex-col items-center">
-                <div className="relative w-12 h-12">
-                  <svg className="w-12 h-12 -rotate-90" viewBox="0 0 44 44">
-                    <circle cx="22" cy="22" r="18" fill="none" stroke="rgb(30,41,59)" strokeWidth="4" />
-                    <circle cx="22" cy="22" r="18" fill="none" stroke="rgb(34,197,94)" strokeWidth="4"
-                      strokeDasharray={`${2 * Math.PI * 18}`}
-                      strokeDashoffset={`${2 * Math.PI * 18 * (1 - completionPct / 100)}`}
-                      strokeLinecap="round" className="transition-all duration-700" />
-                  </svg>
-                  <span className="absolute inset-0 flex items-center justify-center text-[10px] font-extrabold text-green-400">{completionPct}%</span>
-                </div>
-                <span className="text-[9px] text-slate-500 mt-0.5">Coming</span>
-              </div>
-            )}
-            <button onClick={() => { setLoading(true); loadData(); }}
-              className="p-2.5 rounded-xl bg-slate-900/50 border border-slate-700/40 text-slate-400 hover:text-purple-400 transition-all cursor-pointer">
-              <RefreshCw className="w-4 h-4" />
+              Active Assigned ({stats.total_assigned})
+            </button>
+            <button
+              onClick={() => { setActiveTab('NOT_COMING'); setPage(1); }}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                activeTab === 'NOT_COMING'
+                  ? 'bg-red-950/80 border border-red-500/40 text-red-300 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Not Coming / Archived ({stats.total_not_coming})
             </button>
           </div>
-        </div>
-      </motion.div>
 
-      {/* ── Stats Grid: 4 Cards ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatCard label="Assigned"    value={stats.total_assigned}    color="text-purple-400"  icon={<Users className="w-5 h-5" />} />
-        <StatCard label="Pending"     value={stats.total_pending}     color="text-yellow-400" icon={<Clock className="w-5 h-5" />} />
-        <StatCard label="Coming"      value={stats.total_coming}      color="text-green-400"  icon={<CheckCircle2 className="w-5 h-5" />} />
-        <StatCard label="Not Coming"  value={stats.total_not_coming}  color="text-red-400"    icon={<XCircle className="w-5 h-5" />} />
-      </div>
-
-      {/* ── Search ── */}
-      <div className="relative">
-        <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-500 pointer-events-none">
-          <Search className="w-4 h-4" />
-        </span>
-        <input
-          type="search"
-          value={search}
-          onChange={(e) => handleSearch(e.target.value)}
-          placeholder="Search by name or phone..."
-          className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-950/90 border border-slate-800 focus:border-purple-500/50 text-slate-100 placeholder-slate-500 text-sm focus:outline-none backdrop-blur-sm shadow-lg"
-        />
-      </div>
-
-      {/* ── Filter Tabs ── */}
-      <div className="flex gap-1.5 flex-wrap">
-        <Filter className="w-3.5 h-3.5 text-slate-500 self-center shrink-0 ml-0.5" />
-        {FILTER_TABS.map(tab => (
-          <button
-            key={tab.value}
-            onClick={() => handleFilterTab(tab.value)}
-            className={`px-3 py-1.5 rounded-lg border text-[11px] font-bold transition-all cursor-pointer ${
-              statusFilter === tab.value
-                ? tab.activeClass
-                : `bg-slate-900/40 border-slate-800/40 ${tab.color} hover:border-slate-700/50`
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* ── Contact List ── */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-xs text-slate-500 font-semibold">
-            {total} contact{total !== 1 ? 's' : ''}
-            {search && ` · "${search}"`}
-            {statusFilter && ` · ${statusFilter}`}
-          </p>
-          <div className="flex items-center gap-1">
-            <PhoneCall className="w-3.5 h-3.5 text-purple-400" />
-            <span className="text-xs text-purple-400 font-semibold">Your Contacts Only</span>
+          {/* Search Bar & Status Filter */}
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 absolute left-3 top-3 text-slate-500 pointer-events-none" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                placeholder="Search assigned contacts..."
+                className="w-full pl-9 pr-3 py-2 rounded-xl glass-input text-xs text-foreground placeholder-slate-500"
+              />
+            </div>
+            <select
+              value={statusFilter}
+              onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+              className="px-3 py-2 rounded-xl glass-input text-xs text-slate-300 font-semibold cursor-pointer"
+            >
+              <option value="ALL" className="bg-slate-950 text-white">All Statuses</option>
+              {STATUS_OPTIONS.map((st) => (
+                <option key={st} value={st} className="bg-slate-950 text-white">{st}</option>
+              ))}
+            </select>
           </div>
         </div>
 
-        {loading ? (
-          <div className="flex justify-center py-12">
-            <Loader2 className="w-7 h-7 animate-spin text-purple-400" />
+        {/* --- Assigned Contacts List --- */}
+        {loadingData ? (
+          <div className="py-16 text-center text-slate-500 space-y-2">
+            <Loader2 className="w-6 h-6 animate-spin mx-auto text-purple-400" />
+            <p className="text-xs font-medium">Loading assigned feedback contacts...</p>
           </div>
-        ) : assignments.length === 0 ? (
-          <div className="glass-card rounded-2xl p-10 text-center">
-            <PhoneCall className="w-10 h-10 text-slate-700 mx-auto mb-3" />
-            <p className="text-slate-400 font-semibold">
-              {search || statusFilter ? 'No contacts match your filter.' : 'No contacts assigned to you yet.'}
+        ) : paginatedList.length === 0 ? (
+          <div className="glass-card rounded-2xl p-8 text-center space-y-3">
+            <Sparkles className="w-8 h-8 text-purple-400 mx-auto" />
+            <h3 className="font-bold text-slate-200 text-sm">No Contacts Found</h3>
+            <p className="text-xs text-slate-500">
+              {activeTab === 'ACTIVE'
+                ? 'You currently have no active assigned feedback contacts matching this filter.'
+                : 'No archived / not coming feedback contacts.'}
             </p>
-            {!search && !statusFilter && (
-              <p className="text-slate-600 text-sm mt-1">Ask your admin to assign contacts.</p>
-            )}
           </div>
         ) : (
           <div className="space-y-3">
-            {assignments.map((a) => (
+            {paginatedList.map((assignment) => (
               <ContactCard
-                key={a.id}
-                assignment={a}
+                key={assignment.id}
+                assignment={assignment}
                 onStatusChange={handleStatusChange}
-                onRemarks={(id, current) => setRemarksModal({ id, current })}
+                onNotes={(id, current) => setNotesModal({ open: true, assignmentId: id, notes: current })}
               />
             ))}
           </div>
         )}
 
-        {/* Pagination */}
+        {/* --- Pagination Controls --- */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between mt-4 py-2">
+          <div className="flex items-center justify-between pt-2">
             <button
-              onClick={() => { const p = Math.max(1, page - 1); setPage(p); loadData(search, p, statusFilter); }}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
-              className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-100 disabled:opacity-40 cursor-pointer"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300 disabled:opacity-40 cursor-pointer"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="w-3.5 h-3.5" /> Previous
             </button>
-            <span className="text-xs text-slate-400 font-semibold">Page {page} of {totalPages}</span>
+            <span className="text-xs text-slate-500 font-semibold">
+              Page {page} of {totalPages}
+            </span>
             <button
-              onClick={() => { const p = Math.min(totalPages, page + 1); setPage(p); loadData(search, p, statusFilter); }}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
-              className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-100 disabled:opacity-40 cursor-pointer"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300 disabled:opacity-40 cursor-pointer"
             >
-              <ChevronRight className="w-4 h-4" />
+              Next <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
         )}
-      </div>
+      </main>
 
-      {/* Remarks Modal */}
-      <AnimatePresence>
-        {remarksModal && (
-          <RemarksModal
-            key="remarks-modal"
-            assignmentId={remarksModal.id}
-            currentRemarks={remarksModal.current}
-            onSave={handleRemarksSave}
-            onClose={() => setRemarksModal(null)}
-          />
-        )}
-      </AnimatePresence>
+      {/* --- Notes Modal --- */}
+      {notesModal.open && (
+        <NotesModal
+          assignmentId={notesModal.assignmentId}
+          currentNotes={notesModal.notes}
+          onSave={handleSaveNotes}
+          onClose={() => setNotesModal({ open: false, assignmentId: '', notes: '' })}
+        />
+      )}
     </div>
   );
 }

@@ -52,6 +52,9 @@ function OperatorCard({
           <div className="min-w-0">
             <p className="font-bold text-slate-100 text-sm truncate">{op.name}</p>
             <p className="text-xs text-slate-500 truncate">{op.email}</p>
+            <span className="inline-block mt-1.5 text-[9px] font-bold text-purple-400 bg-purple-950/30 border border-purple-500/20 px-1.5 py-0.5 rounded uppercase tracking-wider">
+              {op.operator_type === 'coordinator' ? 'Co-ordinator' : 'Operator'}
+            </span>
             {op.phone ? (
               <a
                 href={`tel:+91${op.phone}`}
@@ -174,6 +177,7 @@ function OperatorFormModal({
     password: '',
     confirmPassword: '',
     is_active: operator?.is_active ?? true,
+    operator_type: operator?.operator_type ?? 'operator',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -193,6 +197,7 @@ function OperatorFormModal({
       const auth = await getAuthHeader();
       const body: Record<string, unknown> = {
         name: form.name, email: form.email, phone: form.phone, is_active: form.is_active,
+        operator_type: form.operator_type,
       };
       if (form.password) body.password = form.password;
 
@@ -263,6 +268,16 @@ function OperatorFormModal({
               placeholder="Phone (optional)" className="w-full pl-10 pr-4 py-2.5 rounded-xl glass-input text-sm text-foreground placeholder-slate-500"
             />
           </div>
+          <div>
+            <label className="text-[10px] uppercase font-bold tracking-wider text-slate-500 block mb-1.5 ml-1">Type of Operator *</label>
+            <select
+              value={form.operator_type} onChange={(e) => set('operator_type', e.target.value)}
+              className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 text-sm focus:outline-none focus:border-indigo-500/50 cursor-pointer"
+            >
+              <option value="operator">Operator</option>
+              <option value="coordinator">Co-ordinator</option>
+            </select>
+          </div>
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
             <input
@@ -328,14 +343,11 @@ function ViewAssignedModal({
 
   const loadAssignments = useCallback(async () => {
     try {
-      const auth = await getAuthHeader();
-      const res = await fetch(`/api/assignments?operator_id=${operator.id}&limit=100`, {
-        headers: { Authorization: auth },
-      });
+      const res = await fetch(`/api/assignments/feedback?operator_id=${operator.id}&is_active=true`);
       if (res.ok) {
         const d = await res.json();
         setAssignments(d.assignments ?? []);
-        setTotalCount(d.total ?? 0);
+        setTotalCount((d.assignments ?? []).length);
       }
     } finally {
       setLoading(false);
@@ -351,10 +363,10 @@ function ViewAssignedModal({
     setUnassigning(true);
     setErrorUnassign(null);
     try {
-      const auth = await getAuthHeader();
-      const res = await fetch(`/api/assignments/${unassignId}`, {
-        method: 'DELETE',
-        headers: { Authorization: auth },
+      const res = await fetch(`/api/assignments/feedback/${unassignId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: false, status: 'Not Coming' }),
       });
       if (!res.ok) {
         const d = await res.json();
@@ -410,21 +422,21 @@ function ViewAssignedModal({
             <p className="text-slate-500 text-sm text-center py-8">No contacts assigned yet.</p>
           )}
           {assignments.map((a) => {
-            const reg = a.registrations as Record<string, unknown> | null;
+            const fc = (a.feedback_contact || a.registrations) as Record<string, unknown> | null;
             const statusClass = statusColors[(a.status as string)] ?? 'text-slate-400 bg-slate-900/40 border-slate-700/30';
-            const remarksText = typeof a.remarks === 'string' ? a.remarks : null;
+            const notesText: string | null = typeof a.notes === 'string' ? a.notes : typeof a.remarks === 'string' ? a.remarks : null;
             return (
               <div key={a.id as string} className="flex items-center justify-between gap-3 p-3 bg-slate-900/30 rounded-xl border border-slate-800/40">
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-slate-100 truncate">{String(reg?.full_name ?? '—')}</p>
-                  <p className="text-xs text-slate-500">{String(reg?.phone ?? '—')} · {String(reg?.area_of_stay ?? '—')}</p>
-                  {remarksText && <p className="text-xs text-slate-600 italic mt-0.5 truncate">{remarksText}</p>}
+                  <p className="text-sm font-semibold text-slate-100 truncate">{String(fc?.full_name ?? '—')}</p>
+                  <p className="text-xs text-slate-400">{String(fc?.phone ?? '—')}{fc?.college_name ? ` · ${String(fc.college_name)} (${String(fc.branch ?? '')})` : ''}</p>
+                  {notesText && <p className="text-xs text-slate-500 italic mt-0.5 truncate">&ldquo;{notesText}&rdquo;</p>}
                 </div>
                 <div className="flex items-center gap-2.5 shrink-0">
                   <button
                     onClick={() => {
                       setUnassignId(a.id as string);
-                      setUnassignName(String(reg?.full_name ?? 'Contact'));
+                      setUnassignName(String(fc?.full_name ?? 'Contact'));
                       setErrorUnassign(null);
                     }}
                     className="px-2.5 py-1 rounded-lg border border-slate-700 hover:border-orange-500/50 hover:bg-orange-950/20 text-slate-400 hover:text-orange-400 text-[10px] font-semibold transition-all cursor-pointer flex items-center gap-1"
@@ -518,6 +530,7 @@ interface BatchReport {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ContactOperatorsPage() {
   const [operators, setOperators] = useState<ContactOperator[]>([]);
+  const [filterType, setFilterType] = useState<'all' | 'operator' | 'coordinator'>('all');
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [editOp, setEditOp] = useState<ContactOperator | null>(null);
@@ -585,15 +598,35 @@ export default function ContactOperatorsPage() {
     setAutoAssignError(null);
     setDryRunSummary(null);
     try {
-      const auth = await getAuthHeader();
-      const res = await fetch('/api/assignments/auto', {
+      const res = await fetch('/api/assignments/feedback', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: auth },
-        body: JSON.stringify({ dry_run: true }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'dry_run' }),
       });
       const d = await res.json();
-      if (!res.ok) { setAutoAssignError(d.error || 'Failed to fetch dry-run summary'); setAutoAssignStep('idle'); return; }
-      setDryRunSummary(d.summary);
+      if (!res.ok || !d.dryRun) { setAutoAssignError(d.error || 'Failed to fetch dry-run summary'); setAutoAssignStep('idle'); return; }
+      
+      const dr = d.dryRun;
+      setDryRunSummary({
+        total_unassigned: dr.totalUnassigned,
+        skipped_female: dr.eligibleFemale,
+        eligible_male: dr.eligibleMale,
+        active_operators: dr.activeOperatorsCount,
+        total_capacity: dr.activeOperatorsCount * 40,
+        currently_assigned: dr.operatorCapacities.reduce((a: number, c: { assignedCount: number }) => a + c.assignedCount, 0),
+        available_slots: dr.totalAvailableSlots,
+        will_assign: dr.willAssign,
+        will_skip_capacity: Math.max(0, dr.totalUnassigned - dr.totalAvailableSlots),
+        will_skip: dr.eligibleFemale,
+        capacity_warning: dr.capacityWarning,
+        operator_breakdown: dr.operatorCapacities.map((op: { id: string; name: string; assignedCount: number; capacity: number; remaining: number }) => ({
+          id: op.id,
+          name: op.name,
+          current: op.assignedCount,
+          capacity: op.capacity,
+          available: op.remaining,
+        })),
+      });
       setAutoAssignStep('dry-run');
     } catch {
       setAutoAssignError('Network error. Please try again.');
@@ -605,16 +638,22 @@ export default function ContactOperatorsPage() {
     setAutoAssignStep('assigning');
     setAutoAssignError(null);
     try {
-      const auth = await getAuthHeader();
-      const res = await fetch('/api/assignments/auto', {
+      const res = await fetch('/api/assignments/feedback', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: auth },
-        body: JSON.stringify({ dry_run: false }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'auto_assign_all' }),
       });
       const d = await res.json();
-      if (res.status === 409) { setAutoAssignError('Batch assignment already in progress. Please wait.'); setAutoAssignStep('dry-run'); return; }
-      if (!res.ok) { setAutoAssignError(d.error || 'Batch assignment failed'); setAutoAssignStep('dry-run'); return; }
-      setBatchReport(d.report);
+      if (!res.ok) { setAutoAssignError(d.error || 'Feedback auto-assignment failed'); setAutoAssignStep('dry-run'); return; }
+      
+      setBatchReport({
+        total_unassigned: d.totalUnassigned ?? d.assignedCount ?? 0,
+        successfully_assigned: d.assignedCount ?? 0,
+        skipped_female: 0,
+        skipped_no_capacity: Math.max(0, (d.totalUnassigned ?? 0) - (d.assignedCount ?? 0)),
+        failed: 0,
+        distribution: [],
+      });
       setAutoAssignStep('report');
       loadOperators();
     } catch {
@@ -636,7 +675,7 @@ export default function ContactOperatorsPage() {
       .channel('admin_operators_realtime')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'contact_assignments' },
+        { event: '*', schema: 'public', table: 'feedback_contact_assignments' },
         () => {
           loadOperators();
         }
@@ -676,6 +715,11 @@ export default function ContactOperatorsPage() {
   const totalComing = operators.reduce((s, o) => s + (o.total_coming ?? 0), 0);
   const totalNotComing = operators.reduce((s, o) => s + (o.total_not_coming ?? 0), 0);
 
+  const filteredOperators = operators.filter(op => {
+    if (filterType === 'all') return true;
+    return op.operator_type === filterType;
+  });
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -696,6 +740,15 @@ export default function ContactOperatorsPage() {
           >
             <LogIn className="w-4 h-4" /> Operator Portal
           </a>
+          <select
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value as 'all' | 'operator' | 'coordinator')}
+            className="px-4 py-2.5 rounded-xl bg-slate-900/50 border border-slate-700/40 text-slate-400 text-sm font-semibold focus:outline-none cursor-pointer"
+          >
+            <option value="all">All Types</option>
+            <option value="operator">Operators Only</option>
+            <option value="coordinator">Co-ordinators Only</option>
+          </select>
           <button
             onClick={loadOperators}
             className="p-2.5 rounded-xl bg-slate-900/50 border border-slate-700/40 text-slate-400 hover:text-slate-100 transition-all cursor-pointer"
@@ -747,15 +800,14 @@ export default function ContactOperatorsPage() {
         <div className="flex items-center justify-center py-16">
           <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
         </div>
-      ) : operators.length === 0 ? (
+      ) : filteredOperators.length === 0 ? (
         <div className="glass-card rounded-2xl p-12 text-center">
           <Headset className="w-12 h-12 text-slate-700 mx-auto mb-4" />
-          <p className="text-slate-400 font-semibold">No contact operators yet.</p>
-          <p className="text-slate-600 text-sm mt-1">Click &ldquo;Add Operator&rdquo; to create your first operator.</p>
+          <p className="text-slate-400 font-semibold">No operators found for this type.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {operators.map((op) => (
+          {filteredOperators.map((op) => (
             <OperatorCard
               key={op.id}
               op={op}

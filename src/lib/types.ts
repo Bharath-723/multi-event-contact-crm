@@ -4,6 +4,19 @@ export interface VolunteerSlot {
   display_order: number;
 }
 
+export interface Service {
+  id: string;
+  name: string;
+  description?: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  // Computed in API response — count of assigned volunteers
+  assigned_count?: number;
+  // Computed in API response — list of assigned volunteers (for dashboard widget)
+  assigned_volunteers?: Array<{ id: string; full_name: string; phone: string; slot_time?: string | null }> | null;
+}
+
 export interface Skill {
   id: string;
   name: string;
@@ -27,6 +40,8 @@ export interface Registration {
   donation_status: 'Pending' | 'User Opted to Donate' | 'Completed' | 'Failed';
   transportation_required?: string | null;
   registration_no?: string;
+  service_id?: string | null;
+  services?: Service | null;
   created_at: string;
   skills?: Skill[];
   visitor_visits?: VisitorVisit[];
@@ -45,6 +60,7 @@ export interface Registration {
       name: string;
       email: string;
       phone?: string | null;
+      operator_type?: 'operator' | 'coordinator';
     } | null;
   }>;
 }
@@ -146,6 +162,7 @@ export interface ContactOperator {
   email: string;
   phone?: string | null;
   is_active: boolean;
+  operator_type: 'operator' | 'coordinator';
   last_login_at?: string | null;
   created_at: string;
   updated_at: string;
@@ -204,3 +221,37 @@ export interface OperatorSession {
   iat?: number;
   exp?: number;
 }
+
+export interface FeedbackContact {
+  id: string;
+  full_name: string;
+  phone: string;
+  college_name: string;
+  branch: string;
+  gender: 'Male' | 'Female';
+  current_stay: 'With Parents' | 'In Hostel';
+  skills: string[];
+  feedback: 'Excellent' | 'Good' | 'Not Applicable';
+  interested_online_workshop: boolean;
+  interested_online_work?: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type FeedbackAssignmentStatus = 'Assigned' | 'Contacted' | 'Interested' | 'Not Interested' | 'Not Coming' | 'Completed';
+
+export interface FeedbackContactAssignment {
+  id: string;
+  feedback_contact_id: string;
+  operator_id: string;
+  assigned_by?: string | null;
+  assigned_at: string;
+  status: FeedbackAssignmentStatus;
+  notes?: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  feedback_contact?: FeedbackContact;
+  operator?: ContactOperator;
+}
+

@@ -59,6 +59,9 @@ export async function PATCH(
       return NextResponse.json({ error: `Invalid status: ${body.status}` }, { status: 400 });
     }
     updates.status = body.status;
+    if (body.status === 'Not Coming') {
+      updates.is_active = false;
+    }
     // Record when contact was first actioned
     if (body.status !== 'Pending' && !assignment.status) {
       updates.called_at = new Date().toISOString();

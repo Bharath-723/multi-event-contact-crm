@@ -75,8 +75,9 @@ export async function POST(req: Request) {
   // ── 1. Fetch active operators ────────────────────────────────────────────────
   const { data: operators, error: opsError } = await supabaseAdmin
     .from('contact_operators')
-    .select('id, name, is_active')
+    .select('id, name, is_active, operator_type')
     .eq('is_active', true)
+    .eq('operator_type', 'operator')
     .order('created_at', { ascending: true });
 
   if (opsError) {
@@ -85,11 +86,13 @@ export async function POST(req: Request) {
 
   const activeOperators = operators ?? [];
 
-  // ── 2. Fetch current assignment counts per operator ──────────────────────────
+  // ── 2. Fetch current active (non-Not-Coming) assignment counts per operator ──
+  // "Not Coming" contacts are considered resolved — they do not consume capacity.
   const { data: assignmentCounts, error: countError } = await supabaseAdmin
     .from('contact_assignments')
     .select('operator_id')
-    .eq('is_active', true);
+    .eq('is_active', true)
+    .neq('status', 'Not Coming');
 
   if (countError) {
     return NextResponse.json({ error: 'Failed to fetch assignment counts: ' + countError.message }, { status: 500 });
@@ -119,8 +122,19 @@ export async function POST(req: Request) {
     .select('registration_id')
     .eq('is_active', true);
 
+  // Get all registration IDs ever marked as 'Not Coming' (inactive or active)
+  const { data: notComingRows } = await supabaseAdmin
+    .from('contact_assignments')
+    .select('registration_id')
+    .eq('status', 'Not Coming');
+
   const assignedSet = new Set((assignedRows ?? []).map((r) => r.registration_id));
-  const unassigned = (unassignedRegs ?? []).filter((r) => !assignedSet.has(r.id));
+  const notComingSet = new Set((notComingRows ?? []).map((r) => r.registration_id));
+  
+  // Exclude both active assignments and any registrations that were ever marked 'Not Coming'
+  const unassigned = (unassignedRegs ?? []).filter(
+    (r) => !assignedSet.has(r.id) && !notComingSet.has(r.id)
+  );
 
   // ── 4. Compute capacity summary ──────────────────────────────────────────────
   const totalCapacity = activeOperators.length * MAX_CONTACTS_PER_OPERATOR;

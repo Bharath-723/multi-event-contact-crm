@@ -3,10 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import { Registration, VolunteerSlot } from '@/lib/types';
+import { Registration, VolunteerSlot, Service } from '@/lib/types';
 import { 
-  Users, Soup, Clock, Loader2, X, Phone, 
-  User, CheckCircle, ExternalLink, Building, Briefcase
+  Users, Soup, Loader2, X, Phone, Search,
+  User, CheckCircle, ExternalLink, Building, Briefcase, Wrench
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -46,6 +46,46 @@ export default function AdminDashboardPage() {
   const [realtimeStatus, setRealtimeStatus] = useState<string>('SUBSCRIBED');
 
   const [recentCheckIns, setRecentCheckIns] = useState<DashboardVisitorLog[]>([]);
+  const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [searchVal, setSearchVal] = useState('');
+
+  // 0. Service Allocation query
+  const { data: services = [] } = useQuery<Service[]>({
+    queryKey: ['services-dashboard'],
+    queryFn: async () => {
+      // Fetch services with volunteer lists via registrations join
+      const [svcRes, regRes] = await Promise.all([
+        supabase.from('services').select('*').order('name'),
+        supabase
+          .from('registrations')
+          .select('id, full_name, phone, service_id, volunteer_slots (slot_time)')
+          .not('service_id', 'is', null),
+      ]);
+      if (svcRes.error) throw svcRes.error;
+
+      interface VolWithSlot {
+        id: string;
+        full_name: string;
+        phone: string;
+        service_id: string | null;
+        volunteer_slots: { slot_time: string } | null;
+      }
+
+      const volunteers = (regRes.data || []) as unknown as VolWithSlot[];
+      return (svcRes.data || []).map((s) => ({
+        ...s,
+        assigned_count: volunteers.filter((v) => v.service_id === s.id).length,
+        assigned_volunteers: volunteers
+          .filter((v) => v.service_id === s.id)
+          .map((v) => ({
+            id: v.id,
+            full_name: v.full_name,
+            phone: v.phone,
+            slot_time: v.volunteer_slots?.slot_time || 'N/A'
+          })),
+      })) as Service[];
+    },
+  });
 
   // 1. Query all registrations with joint data
   const { data: registrations = [], isLoading: isLoadingRegs } = useQuery<Registration[]>({
@@ -151,6 +191,7 @@ export default function AdminDashboardPage() {
         () => {
           queryClient.invalidateQueries({ queryKey: ['registrations-summary'] });
           queryClient.invalidateQueries({ queryKey: ['visitor-stats-summary'] });
+          queryClient.invalidateQueries({ queryKey: ['services-dashboard'] });
           loadVisitorStats();
         }
       )
@@ -160,6 +201,13 @@ export default function AdminDashboardPage() {
         () => {
           queryClient.invalidateQueries({ queryKey: ['visitor-stats-summary'] });
           loadVisitorStats();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'services' },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['services-dashboard'] });
         }
       )
       .subscribe((status) => {
@@ -358,6 +406,29 @@ export default function AdminDashboardPage() {
       </div>
     );
   }
+
+  // ─── Service Allocation Drill-down modal helpers ───
+  const activeModalService = services.find((s) => s.id === selectedService?.id);
+  const modalVolunteers = activeModalService?.assigned_volunteers || [];
+
+  const filteredModalVols = modalVolunteers.filter((v) => {
+    const term = searchVal.trim().toLowerCase();
+    if (!term) return true;
+    return (
+      v.full_name.toLowerCase().includes(term) ||
+      v.phone.includes(term) ||
+      (v.slot_time || '').toLowerCase().includes(term)
+    );
+  });
+
+  const sortedModalVols = [...filteredModalVols].sort((a, b) => {
+    const slotA = a.slot_time || 'N/A';
+    const slotB = b.slot_time || 'N/A';
+    if (slotA !== slotB) {
+      return slotA.localeCompare(slotB);
+    }
+    return a.full_name.localeCompare(b.full_name);
+  });
 
   return (
     <div className="space-y-6 md:space-y-8">
@@ -613,40 +684,32 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
-        {/* Volunteer Slots Grouped by Time */}
+        {/* Service Allocation Widget — replaces Volunteer Slots Allocation */}
         <div className="glass-card rounded-2xl p-6 flex flex-col h-[400px]">
           <h3 className="text-sm font-bold text-slate-300 border-b border-slate-900 pb-3 mb-4 flex items-center gap-2">
-            <Clock className="w-4.5 h-4.5 text-purple-400" /> Volunteer Slots Allocation
+            <Wrench className="w-4.5 h-4.5 text-indigo-400" /> Service Allocation
           </h3>
-          <div className="flex-1 overflow-y-auto divide-y divide-slate-900/60 pr-1 space-y-3">
-            {volunteersCount === 0 ? (
+          <div className="flex-1 overflow-y-auto pr-1 space-y-3">
+            {services.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-slate-500 py-8 text-center">
-                <Clock className="w-8 h-8 text-slate-600 mb-2 animate-pulse" />
-                <p className="text-xs font-semibold">No volunteers registered yet.</p>
+                <Wrench className="w-8 h-8 text-slate-600 mb-2" />
+                <p className="text-xs font-semibold">No services created yet.</p>
               </div>
             ) : (
-              volunteersBySlot.map((group) => (
-                <div key={group.slotName} className="space-y-2 pt-2 border-none">
-                  <div className="flex justify-between items-center text-xs bg-slate-900/40 px-3 py-1.5 rounded-lg border border-slate-850">
-                    <span className="font-semibold text-purple-400">{group.slotName}</span>
-                    <span className="font-bold text-slate-300">{group.count} {group.count === 1 ? 'vol' : 'vols'}</span>
+              services.map((svc) => (
+                <div
+                  key={svc.id}
+                  onClick={() => setSelectedService(svc)}
+                  className="flex justify-between items-center text-xs bg-slate-900/40 px-3 py-2.5 rounded-lg border border-slate-850 cursor-pointer hover:bg-slate-900/80 transition-all"
+                  title="Click to view volunteer drill-down list"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${svc.is_active ? 'bg-green-400' : 'bg-yellow-400'}`} />
+                    <span className="font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[200px]">{svc.name}</span>
                   </div>
-                  {group.count === 0 ? (
-                    <p className="text-[10px] text-slate-500 italic pl-3">No volunteers allocated</p>
-                  ) : (
-                    <div className="flex flex-wrap gap-1.5 pl-2">
-                      {group.volunteers.map((v) => (
-                        <div 
-                          key={v.id}
-                          className="text-[10px] bg-purple-950/40 text-purple-300 px-2 py-0.5 rounded border border-purple-500/10 flex items-center gap-1 font-medium"
-                          title={`Phone: ${v.phone}${v.skills?.length ? ` | Skills: ${v.skills.map(s => s.name).join(', ')}` : ''}`}
-                        >
-                          <User className="w-2.5 h-2.5 shrink-0" />
-                          <span>{v.full_name.split(' ')[0]}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <span className="font-extrabold text-indigo-700 dark:text-indigo-400 shrink-0">
+                    {svc.assigned_count ?? 0} Volunteers
+                  </span>
                 </div>
               ))
             )}
@@ -978,6 +1041,96 @@ export default function AdminDashboardPage() {
               </div>
             </motion.div>
           </motion.div>
+        )}
+
+        {/* Service Allocation Drill-down Detail Modal */}
+        {selectedService && activeModalService && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-md glass-card rounded-2xl p-6 relative flex flex-col max-h-[85vh] shadow-2xl border border-slate-800"
+            >
+              <button
+                onClick={() => { setSelectedService(null); setSearchVal(''); }}
+                className="absolute top-4 right-4 text-slate-500 hover:text-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-indigo-950/50 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+                  <Wrench className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-extrabold text-slate-100">{activeModalService.name}</h2>
+                  <p className="text-xs text-indigo-400 font-bold">Total Volunteers: {activeModalService.assigned_count ?? 0}</p>
+                </div>
+              </div>
+
+              {/* Search input */}
+              <div className="relative mb-4">
+                <Search className="w-4.5 h-4.5 text-slate-505 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchVal}
+                  onChange={(e) => setSearchVal(e.target.value)}
+                  placeholder="Search by name, phone, or slot..."
+                  className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-slate-900/60 border border-slate-850 text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:border-indigo-500/40 transition-all"
+                />
+                {searchVal && (
+                  <button
+                    onClick={() => setSearchVal('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-100"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* List */}
+              <div className="flex-1 overflow-y-auto pr-1 space-y-2 mb-4">
+                {sortedModalVols.length === 0 ? (
+                  <div className="text-center py-8 text-slate-500">
+                    <User className="w-8 h-8 text-slate-650 mx-auto mb-2" />
+                    <p className="text-xs font-semibold">No volunteers found</p>
+                    {searchVal && <p className="text-[10px] text-slate-600 mt-0.5">Try a different search query</p>}
+                  </div>
+                ) : (
+                  sortedModalVols.map((v, i) => (
+                    <div
+                      key={v.id}
+                      className="p-3 rounded-xl bg-slate-900/40 border border-slate-850 flex justify-between items-center gap-2 hover:bg-slate-900/60 transition-colors"
+                    >
+                      <div>
+                        <div className="font-bold text-slate-200 text-xs flex items-center gap-1.5">
+                          <span className="text-[10px] text-slate-555 font-mono">{i + 1}.</span>
+                          {v.full_name}
+                        </div>
+                        <div className="text-[10px] text-slate-500 font-mono mt-0.5">{v.phone}</div>
+                      </div>
+                      <div className="self-center shrink-0">
+                        <span className="text-[9px] font-bold text-indigo-400 bg-indigo-950/40 border border-indigo-500/10 px-2 py-0.5 rounded">
+                          {v.slot_time || 'N/A'}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="border-t border-slate-900 pt-4 flex justify-end shrink-0">
+                <button
+                  onClick={() => { setSelectedService(null); setSearchVal(''); }}
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-slate-400 hover:text-slate-100 text-xs font-bold transition-all cursor-pointer text-center"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 

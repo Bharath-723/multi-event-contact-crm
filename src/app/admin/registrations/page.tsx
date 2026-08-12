@@ -1,17 +1,230 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import { Registration, VolunteerSlot, Skill } from '@/lib/types';
+import { Registration, VolunteerSlot, Skill, Service, ContactOperator } from '@/lib/types';
 import { formatDate, sanitizeText } from '@/lib/utils';
+import { MAX_CONTACTS_PER_OPERATOR } from '@/lib/constants/operator-config';
 import { 
   Search, Filter, Download, Printer, QrCode, Edit2, Trash2, 
   ChevronLeft, ChevronRight, X, Eye, Loader2, AlertTriangle, Check,
-  PhoneCall, UserCheck, AlertCircle
+  PhoneCall, UserCheck, AlertCircle, Wrench, Plus, CheckCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import QRModal from '@/components/qr-modal';
+
+// ─── Inline Service Assignment Cell ──────────────────────────────────────────
+function ServiceCell({
+  registration,
+  services,
+  onAssigned,
+}: {
+  registration: Registration;
+  services: Service[];
+  onAssigned: () => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [newSvcName, setNewSvcName] = useState('');
+  const [newSvcDesc, setNewSvcDesc] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [selectOpen, setSelectOpen] = useState(false);
+
+  if (!registration.interested_to_volunteer) {
+    return (
+      <span className="text-[10px] font-semibold text-slate-600 italic">Not Eligible</span>
+    );
+  }
+
+  const assigned = registration.services;
+  const activeServices = services.filter((s) => s.is_active);
+
+  const handleAssign = async (serviceId: string | null) => {
+    setSaving(true);
+    setSelectOpen(false);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const auth = session?.access_token ? `Bearer ${session.access_token}` : '';
+      const res = await fetch(`/api/registrations/${registration.id}/service`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: auth },
+        body: JSON.stringify({ service_id: serviceId }),
+      });
+      if (res.ok) onAssigned();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCreateService = async () => {
+    const name = newSvcName.trim();
+    if (!name) { setCreateError('Service name is required'); return; }
+    setCreating(true); setCreateError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const auth = session?.access_token ? `Bearer ${session.access_token}` : '';
+      const res = await fetch('/api/services', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: auth },
+        body: JSON.stringify({ name, description: newSvcDesc.trim() || null }),
+      });
+      const d = await res.json();
+      if (!res.ok) { setCreateError(d.error || 'Failed to create service'); return; }
+      setAddModalOpen(false);
+      setNewSvcName('');
+      setNewSvcDesc('');
+      onAssigned(); // triggers realtime refetch
+    } catch { setCreateError('Network error'); }
+    finally { setCreating(false); }
+  };
+
+  if (saving) {
+    return <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />;
+  }
+
+  if (assigned) {
+    return (
+      <div className="relative group inline-block">
+        <button
+          onClick={() => setSelectOpen(!selectOpen)}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-green-950/40 border border-green-500/30 text-green-400 text-xs font-bold whitespace-nowrap hover:bg-green-950/60 transition-all cursor-pointer"
+        >
+          <CheckCircle className="w-3 h-3 shrink-0" />
+          <span className="max-w-[100px] truncate">{assigned.name}</span>
+        </button>
+        {selectOpen && (
+          <div className="absolute left-0 top-full mt-1 z-50 bg-slate-950 border border-slate-800 rounded-xl shadow-2xl py-1 min-w-[180px] max-h-52 overflow-y-auto">
+            <button
+              onClick={() => handleAssign(null)}
+              className="w-full text-left px-3 py-2 text-xs font-semibold text-red-400 hover:bg-red-950/30 transition-all cursor-pointer"
+            >✕ Clear Assignment</button>
+            <div className="border-t border-slate-800 my-1" />
+            {activeServices.map((svc) => (
+              <button
+                key={svc.id}
+                onClick={() => handleAssign(svc.id)}
+                className={`w-full text-left px-3 py-2 text-xs font-semibold transition-all cursor-pointer ${
+                  svc.id === registration.service_id
+                    ? 'bg-indigo-950/40 text-indigo-300'
+                    : 'text-slate-300 hover:bg-slate-900'
+                }`}
+              >{svc.name}</button>
+            ))}
+            <div className="border-t border-slate-800 my-1" />
+            <button
+              onClick={() => { setSelectOpen(false); setAddModalOpen(true); }}
+              className="w-full text-left px-3 py-2 text-xs font-bold text-indigo-400 hover:bg-indigo-950/30 transition-all cursor-pointer flex items-center gap-1.5"
+            >
+              <Plus className="w-3 h-3" /> Add New Service
+            </button>
+          </div>
+        )}
+        {addModalOpen && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+            <motion.div initial={{opacity:0,scale:0.95}} animate={{opacity:1,scale:1}} className="glass-card rounded-2xl p-6 w-full max-w-sm relative">
+              <button onClick={() => setAddModalOpen(false)} className="absolute top-4 right-4 text-slate-500 hover:text-slate-100 cursor-pointer"><X className="w-4 h-4" /></button>
+              <div className="flex items-center gap-2 mb-4">
+                <Wrench className="w-5 h-5 text-indigo-400" />
+                <h3 className="text-sm font-extrabold text-slate-100">Add New Service</h3>
+              </div>
+              {createError && <p className="text-xs text-red-400 mb-3">{createError}</p>}
+              <div className="space-y-3">
+                <input
+                  type="text" value={newSvcName} onChange={(e) => setNewSvcName(e.target.value)}
+                  placeholder="Service Name *"
+                  autoFocus
+                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-indigo-500/50"
+                />
+                <input
+                  type="text" value={newSvcDesc} onChange={(e) => setNewSvcDesc(e.target.value)}
+                  placeholder="Description (optional)"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-indigo-500/50"
+                />
+              </div>
+              <div className="flex gap-2 mt-4">
+                <button onClick={handleCreateService} disabled={creating}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold cursor-pointer disabled:opacity-60">
+                  {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                  {creating ? 'Creating...' : 'Create'}
+                </button>
+                <button onClick={() => setAddModalOpen(false)} className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 text-sm font-semibold cursor-pointer">Cancel</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Not yet assigned
+  return (
+    <div className="relative inline-block">
+      <button
+        onClick={() => setSelectOpen(!selectOpen)}
+        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-950/30 border border-indigo-500/20 text-indigo-400 text-xs font-bold hover:bg-indigo-950/50 transition-all cursor-pointer whitespace-nowrap"
+      >
+        <Plus className="w-3 h-3" /> Assign Service
+      </button>
+      {selectOpen && (
+        <div className="absolute left-0 top-full mt-1 z-50 bg-slate-950 border border-slate-800 rounded-xl shadow-2xl py-1 min-w-[180px] max-h-52 overflow-y-auto">
+          {activeServices.length === 0 ? (
+            <p className="px-3 py-2 text-xs text-slate-500">No active services</p>
+          ) : (
+            activeServices.map((svc) => (
+              <button
+                key={svc.id}
+                onClick={() => handleAssign(svc.id)}
+                className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-900 transition-all cursor-pointer"
+              >{svc.name}</button>
+            ))
+          )}
+          <div className="border-t border-slate-800 my-1" />
+          <button
+            onClick={() => { setSelectOpen(false); setAddModalOpen(true); }}
+            className="w-full text-left px-3 py-2 text-xs font-bold text-indigo-400 hover:bg-indigo-950/30 transition-all cursor-pointer flex items-center gap-1.5"
+          >
+            <Plus className="w-3 h-3" /> Add New Service
+          </button>
+        </div>
+      )}
+      {addModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <motion.div initial={{opacity:0,scale:0.95}} animate={{opacity:1,scale:1}} className="glass-card rounded-2xl p-6 w-full max-w-sm relative">
+            <button onClick={() => setAddModalOpen(false)} className="absolute top-4 right-4 text-slate-500 hover:text-slate-100 cursor-pointer"><X className="w-4 h-4" /></button>
+            <div className="flex items-center gap-2 mb-4">
+              <Wrench className="w-5 h-5 text-indigo-400" />
+              <h3 className="text-sm font-extrabold text-slate-100">Add New Service</h3>
+            </div>
+            {createError && <p className="text-xs text-red-400 mb-3">{createError}</p>}
+            <div className="space-y-3">
+              <input
+                type="text" value={newSvcName} onChange={(e) => setNewSvcName(e.target.value)}
+                placeholder="Service Name *"
+                autoFocus
+                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-indigo-500/50"
+              />
+              <input
+                type="text" value={newSvcDesc} onChange={(e) => setNewSvcDesc(e.target.value)}
+                placeholder="Description (optional)"
+                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-indigo-500/50"
+              />
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button onClick={handleCreateService} disabled={creating}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold cursor-pointer disabled:opacity-60">
+                {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                {creating ? 'Creating...' : 'Create'}
+              </button>
+              <button onClick={() => setAddModalOpen(false)} className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 text-sm font-semibold cursor-pointer">Cancel</button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── Assign Contact Modal ─────────────────────────────────────────────────────
 function AssignContactModal({
@@ -23,7 +236,7 @@ function AssignContactModal({
   onClose: () => void;
   onAssigned: () => void;
 }) {
-  const [operators, setOperators] = React.useState<Array<{id:string;name:string;email:string;is_active:boolean;total_assigned?:number}>>([]);
+  const [operators, setOperators] = React.useState<Array<{id:string;name:string;email:string;is_active:boolean;operator_type?:string;total_assigned?:number}>>([]);
   const [existing, setExisting] = React.useState<{id:string;status:string;contact_operators:{name:string;email:string}|null} | null>(null);
   const [loadingCheck, setLoadingCheck] = React.useState(true);
   const [selectedOp, setSelectedOp] = React.useState('');
@@ -44,7 +257,14 @@ function AssignContactModal({
           fetch(`/api/assignments/check?registration_id=${registration.id}`, { headers: { Authorization: auth } }),
         ]);
         if (opsRes.ok) { const d = await opsRes.json(); setOperators((d.operators ?? []).filter((o: {is_active:boolean}) => o.is_active)); }
-        if (checkRes.ok) { const d = await checkRes.json(); setExisting(d.assignment); }
+        if (checkRes.ok) {
+          const d = await checkRes.json();
+          setExisting(d.assignment);
+          if (d.assignment?.operator_id) {
+            setSelectedOp(d.assignment.operator_id);
+            setReassignMode(true);
+          }
+        }
       } finally { setLoadingCheck(false); }
     }
     load();
@@ -138,10 +358,9 @@ function AssignContactModal({
                 ) : (
                   <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
                     {operators.map(op => {
-                      const MAX_CAP = 30;
                       const assigned = op.total_assigned ?? 0;
-                      const pct = Math.round((assigned / MAX_CAP) * 100);
-                      const isFull = assigned >= MAX_CAP;
+                      const pct = Math.round((assigned / MAX_CONTACTS_PER_OPERATOR) * 100);
+                      const isFull = assigned >= MAX_CONTACTS_PER_OPERATOR;
                       const barColor = isFull ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-green-500';
                       const badgeColor = isFull
                         ? 'text-red-400 bg-red-950/30 border-red-500/25'
@@ -162,9 +381,11 @@ function AssignContactModal({
                           }`}
                         >
                           <div className="flex items-center justify-between gap-2 mb-1.5">
-                            <p className="text-xs font-semibold text-slate-100 truncate">{op.name}</p>
+                            <p className="text-xs font-semibold text-slate-100 truncate">
+                              {op.name} <span className="text-[10px] text-slate-500 font-normal">({op.operator_type === 'coordinator' ? 'Co-ordinator' : 'Operator'})</span>
+                            </p>
                             <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${badgeColor}`}>
-                              {isFull ? 'FULL' : `${assigned}/${MAX_CAP}`}
+                              {isFull ? 'FULL' : `${assigned}/${MAX_CONTACTS_PER_OPERATOR}`}
                             </span>
                           </div>
                           <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
@@ -189,7 +410,7 @@ function AssignContactModal({
                 <button onClick={handleAssign} disabled={assigning || !selectedOp}
                   className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm font-bold transition-all cursor-pointer disabled:opacity-60">
                   {assigning ? <Loader2 className="w-4 h-4 animate-spin" /> : <PhoneCall className="w-4 h-4" />}
-                  {assigning ? 'Assigning...' : reassignMode ? 'Confirm Reassign' : 'Assign'}
+                  {assigning ? 'Assigning...' : existing ? 'Confirm Change' : 'Assign'}
                 </button>
               )}
               <button onClick={onClose} className="px-4 py-2.5 rounded-xl bg-slate-900/60 border border-slate-700/40 text-slate-400 text-sm font-semibold hover:text-slate-100 transition-all cursor-pointer">Cancel</button>
@@ -219,6 +440,9 @@ export default function RegistrationsPage() {
   const [filterSkill, setFilterSkill] = useState('');
   const [filterDate, setFilterDate] = useState('');
   const [filterTransportation, setFilterTransportation] = useState('');
+  const [filterService, setFilterService] = useState('');
+  const [filterOperator, setFilterOperator] = useState('');
+  const [filterOperatorType, setFilterOperatorType] = useState('');
 
   // --- PAGINATION STATE ---
   const [currentPage, setCurrentPage] = useState(1);
@@ -258,6 +482,28 @@ export default function RegistrationsPage() {
   const [editSelectedSkills, setEditSelectedSkills] = useState<string[]>([]);
 
   // --- DATA QUERIES ---
+  const { data: services = [] } = useQuery<Service[]>({
+    queryKey: ['services-list'],
+    queryFn: async () => {
+      const res = await fetch('/api/services');
+      if (!res.ok) return [];
+      const d = await res.json();
+      return d.services ?? [];
+    },
+  });
+
+  const { data: operators = [] } = useQuery<ContactOperator[]>({
+    queryKey: ['operators-list-admin'],
+    queryFn: async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const auth = session?.access_token ? `Bearer ${session.access_token}` : '';
+      const res = await fetch('/api/operators', { headers: { Authorization: auth } });
+      if (!res.ok) return [];
+      const d = await res.json();
+      return d.operators ?? [];
+    },
+  });
+
   const { data: registrations = [], isLoading: isLoadingRegs } = useQuery<Registration[]>({
     queryKey: ['registrations-list'],
     queryFn: async () => {
@@ -287,8 +533,14 @@ export default function RegistrationsPage() {
             contact_operators (
               id,
               name,
-              email
+              email,
+              operator_type
             )
+          ),
+          services (
+            id,
+            name,
+            is_active
           )
         `)
         .order('created_at', { ascending: false });
@@ -357,6 +609,14 @@ export default function RegistrationsPage() {
           queryClient.invalidateQueries({ queryKey: ['registrations-list'] });
         }
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'services' },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['services-list'] });
+          queryClient.invalidateQueries({ queryKey: ['registrations-list'] });
+        }
+      )
       .subscribe();
 
     return () => {
@@ -381,6 +641,9 @@ export default function RegistrationsPage() {
           const sk = sessionStorage.getItem('regs_filterSkill');
       const dt = sessionStorage.getItem('regs_filterDate');
       const tr = sessionStorage.getItem('regs_filterTransportation');
+      const sv = sessionStorage.getItem('regs_filterService');
+      const op = sessionStorage.getItem('regs_filterOperator');
+      const opt = sessionStorage.getItem('regs_filterOperatorType');
  
       if (q) setSearchQuery(q);
       if (p) setSearchPhone(p);
@@ -395,6 +658,9 @@ export default function RegistrationsPage() {
       if (sk) setFilterSkill(sk);
       if (dt) setFilterDate(dt);
       if (tr) setFilterTransportation(tr);
+      if (sv) setFilterService(sv);
+      if (op) setFilterOperator(op);
+      if (opt) setFilterOperatorType(opt);
     }
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -413,6 +679,9 @@ export default function RegistrationsPage() {
   useEffect(() => { sessionStorage.setItem('regs_filterSkill', filterSkill); }, [filterSkill]);
   useEffect(() => { sessionStorage.setItem('regs_filterDate', filterDate); }, [filterDate]);
   useEffect(() => { sessionStorage.setItem('regs_filterTransportation', filterTransportation); }, [filterTransportation]);
+  useEffect(() => { sessionStorage.setItem('regs_filterService', filterService); }, [filterService]);
+  useEffect(() => { sessionStorage.setItem('regs_filterOperator', filterOperator); }, [filterOperator]);
+  useEffect(() => { sessionStorage.setItem('regs_filterOperatorType', filterOperatorType); }, [filterOperatorType]);
 
   const highlightText = (text: string, query: string) => {
     if (!query.trim()) return text;
@@ -528,6 +797,38 @@ export default function RegistrationsPage() {
       if (val !== filterTransportation) return false;
     }
 
+    // 14. Service filter
+    if (filterService) {
+      if (filterService === '__unassigned__') {
+        if (reg.service_id) return false;
+      } else {
+        if (reg.service_id !== filterService) return false;
+      }
+    }
+
+    // 15. Operator filter
+    if (filterOperator) {
+      const activeAssignment = reg.contact_assignments?.find((a) => a.is_active);
+      const notComingAssignment = reg.contact_assignments?.find((a) => a.status === 'Not Coming');
+
+      if (filterOperator === '__unassigned__') {
+        if (activeAssignment || notComingAssignment) return false;
+      } else if (filterOperator === '__not_coming__') {
+        if (!notComingAssignment) return false;
+      } else {
+        if (!activeAssignment || activeAssignment.operator_id !== filterOperator) return false;
+      }
+    }
+
+    // 16. Operator Type filter
+    if (filterOperatorType) {
+      const activeAssignment = reg.contact_assignments?.find((a) => a.is_active);
+      if (!activeAssignment) return false;
+      const op = activeAssignment.contact_operators;
+      const opType = Array.isArray(op) ? op[0]?.operator_type : op?.operator_type;
+      if (opType !== filterOperatorType) return false;
+    }
+
     return true;
   });
 
@@ -549,7 +850,7 @@ export default function RegistrationsPage() {
     setCurrentPage(1);
   }, [
     searchQuery, searchPhone, filterGender, filterVolunteer, filterSlot, filterOccupation,
-    filterDonation, filterPrasadam, filterArea, filterCompany, filterSkill, filterDate
+    filterDonation, filterPrasadam, filterArea, filterCompany, filterSkill, filterDate, filterService, filterOperator, filterOperatorType
   ]);
 
   // --- ACTIONS HANDLERS ---
@@ -706,7 +1007,7 @@ export default function RegistrationsPage() {
     const headers = [
       'Name', 'Phone', 'Age', 'Gender', 'Area', 'Company', 'PG', 
       'Skills', 'Volunteer', 'Volunteer Slot', 'Dinner Prasadam', 
-      'Donation Status', 'Registered Date', 'Occupation', 'Transportation Required'
+      'Donation Status', 'Registered Date', 'Occupation', 'Transportation Required', 'Service'
     ];
 
     const rows = filteredRegistrations.map(r => [
@@ -724,7 +1025,8 @@ export default function RegistrationsPage() {
       r.donation_status,
       formatDate(r.created_at),
       `"${(r.occupation || '').replace(/"/g, '""')}"`,
-      r.transportation_required || 'No'
+      r.transportation_required || 'No',
+      `"${(r.services?.name || 'Unassigned').replace(/"/g, '""')}"`
     ]);
 
     const csvContent = "data:text/csv;charset=utf-8," 
@@ -757,6 +1059,7 @@ export default function RegistrationsPage() {
         <td>${r.interested_to_dinner ? 'Yes' : 'No'}</td>
         <td>${r.donation_status}</td>
         <td>${formatDate(r.created_at).split(',')[0]}</td>
+        <td>${r.services?.name || 'Unassigned'}</td>
       </tr>
     `).join('');
 
@@ -789,6 +1092,7 @@ export default function RegistrationsPage() {
                 <th>Dinner</th>
                 <th>Donation</th>
                 <th>Date</th>
+                <th>Service</th>
               </tr>
             </thead>
             <tbody>
@@ -825,7 +1129,16 @@ export default function RegistrationsPage() {
     setFilterCompany('');
     setFilterSkill('');
     setFilterDate('');
+    setFilterService('');
+    setFilterOperator('');
+    setFilterOperatorType('');
   };
+
+  // Callback passed to ServiceCell so it can trigger refetch
+  const handleServiceAssigned = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['registrations-list'] });
+    queryClient.invalidateQueries({ queryKey: ['services-list'] });
+  }, [queryClient]);
 
   if (isLoadingRegs) {
     return (
@@ -908,7 +1221,7 @@ export default function RegistrationsPage() {
           <h3 className="font-bold text-sm text-slate-300 flex items-center gap-2">
             <Filter className="w-4.5 h-4.5 text-purple-400" /> Filters & Query Search
           </h3>
-          {(searchQuery || searchPhone || filterGender || filterVolunteer || filterSlot || filterDonation || filterPrasadam || filterArea || filterCompany || filterSkill || filterDate) && (
+          {(searchQuery || searchPhone || filterGender || filterVolunteer || filterSlot || filterDonation || filterPrasadam || filterArea || filterCompany || filterSkill || filterDate || filterService || filterOperator || filterOperatorType) && (
             <button
               onClick={handleResetFilters}
               className="text-[10px] uppercase font-bold tracking-wider text-purple-400 hover:text-purple-300 flex items-center gap-1 cursor-pointer"
@@ -989,17 +1302,28 @@ export default function RegistrationsPage() {
             <option value="No">Non-Volunteers Only</option>
           </select>
 
-          {/* Volunteer Slot — always visible */}
+          {/* Volunteer Slot — hidden on mobile */}
           <select
             value={filterSlot}
             onChange={(e) => setFilterSlot(e.target.value)}
-            className="px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-800 text-slate-300 focus:outline-none cursor-pointer"
+            className="hidden sm:block px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-800 text-slate-300 focus:outline-none cursor-pointer"
             disabled={filterVolunteer === 'No'}
           >
             <option value="">Time Slot (All)</option>
             {slots.map(s => (
               <option key={s.id} value={s.id}>{s.slot_time}</option>
             ))}
+          </select>
+
+          {/* Type of Operator Filter */}
+          <select
+            value={filterOperatorType}
+            onChange={(e) => setFilterOperatorType(e.target.value)}
+            className="px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-800 text-slate-300 focus:outline-none cursor-pointer"
+          >
+            <option value="">Type of Operator (All)</option>
+            <option value="operator">Operator</option>
+            <option value="coordinator">Co-ordinator</option>
           </select>
 
           {/* Occupation Filter — always visible */}
@@ -1037,6 +1361,33 @@ export default function RegistrationsPage() {
             <option value="">Transportation (All)</option>
             <option value="Yes">Yes Only</option>
             <option value="No">No Only</option>
+          </select>
+
+          {/* Service Filter */}
+          <select
+            value={filterService}
+            onChange={(e) => setFilterService(e.target.value)}
+            className="px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-800 text-slate-300 focus:outline-none cursor-pointer"
+          >
+            <option value="">Service (All)</option>
+            <option value="__unassigned__">— Unassigned</option>
+            {services.filter(s => s.is_active).map(s => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+
+          {/* Operator Filter */}
+          <select
+            value={filterOperator}
+            onChange={(e) => setFilterOperator(e.target.value)}
+            className="px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-800 text-slate-300 focus:outline-none cursor-pointer"
+          >
+            <option value="">Operator Assignment (All)</option>
+            <option value="__unassigned__">— Unassigned</option>
+            <option value="__not_coming__">— Not Coming</option>
+            {operators.map((op: ContactOperator) => (
+              <option key={op.id} value={op.id}>{op.name}</option>
+            ))}
           </select>
 
           {/* Donation Status — hidden on mobile */}
@@ -1115,6 +1466,7 @@ export default function RegistrationsPage() {
                 <th className="px-5 py-4">Dinner</th>
                 <th className="px-5 py-4">Donation Status</th>
                 <th className="px-5 py-4">Transport</th>
+                <th className="px-5 py-4">Service</th>
                 <th className="px-5 py-4">Assign</th>
                 <th className="px-5 py-4 text-center">Actions</th>
               </tr>
@@ -1225,6 +1577,15 @@ export default function RegistrationsPage() {
                       </span>
                     </td>
 
+                    {/* Service Assignment */}
+                    <td className="px-5 py-4">
+                      <ServiceCell
+                        registration={reg}
+                        services={services}
+                        onAssigned={handleServiceAssigned}
+                      />
+                    </td>
+
                     {/* Assign */}
                     <td className="px-5 py-4">
                       {(() => {
@@ -1250,6 +1611,34 @@ export default function RegistrationsPage() {
                         }
 
                         const activeAssignment = reg.contact_assignments?.find((a) => a.is_active);
+                        const notComingAssignment = reg.contact_assignments?.find((a) => a.status === 'Not Coming');
+
+                        // 1. If registration is marked Not Coming: display NOT COMING badge with NO Change button
+                        if (notComingAssignment) {
+                          const op = notComingAssignment.contact_operators;
+                          const opName = Array.isArray(op) ? op[0]?.name : op?.name;
+                          const assignDate = notComingAssignment.assigned_at
+                            ? new Date(notComingAssignment.assigned_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+                            : '—';
+
+                          return (
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <div className="relative group inline-block">
+                                <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-950/40 border border-red-500/30 text-red-400 text-xs font-bold whitespace-nowrap select-none">
+                                  <X className="w-3.5 h-3.5" /> NOT COMING
+                                </span>
+                                <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block z-50 w-48 p-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 text-[10px] leading-relaxed shadow-2xl pointer-events-none">
+                                  <p className="font-semibold text-slate-100 border-b border-slate-800 pb-1 mb-1">Assignment Info</p>
+                                  <p><span className="text-slate-500 font-medium">Last Operator:</span> {opName || '—'}</p>
+                                  <p><span className="text-slate-500 font-medium">Status:</span> <span className="text-red-400">Not Coming</span></p>
+                                  <p><span className="text-slate-500 font-medium">Date:</span> {assignDate}</p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        // 2. If registration has active assignment: display operator name + Change button
                         if (activeAssignment) {
                           const op = activeAssignment.contact_operators;
                           const opName = Array.isArray(op) ? op[0]?.name : op?.name;
@@ -1259,16 +1648,25 @@ export default function RegistrationsPage() {
                           const assignType = activeAssignment.assigned_by ? 'Manual' : 'System';
 
                           return (
-                            <div className="relative group inline-block">
-                              <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-950/40 border border-green-500/30 text-green-400 text-xs font-bold whitespace-nowrap select-none">
-                                <Check className="w-3.5 h-3.5" /> Assigned
-                              </span>
-                              <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block z-50 w-48 p-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 text-[10px] leading-relaxed shadow-2xl pointer-events-none">
-                                <p className="font-semibold text-slate-100 border-b border-slate-800 pb-1 mb-1">Assignment Info</p>
-                                <p><span className="text-slate-500 font-medium">Assigned to:</span> {opName || '—'}</p>
-                                <p><span className="text-slate-500 font-medium">Date:</span> {assignDate}</p>
-                                <p><span className="text-slate-500 font-medium">Type:</span> {assignType}</p>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <div className="relative group inline-block">
+                                <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-950/40 border border-green-500/30 text-green-400 text-xs font-bold whitespace-nowrap select-none">
+                                  <Check className="w-3.5 h-3.5" /> {opName || 'Assigned'}
+                                </span>
+                                <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block z-50 w-48 p-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 text-[10px] leading-relaxed shadow-2xl pointer-events-none">
+                                  <p className="font-semibold text-slate-100 border-b border-slate-800 pb-1 mb-1">Assignment Info</p>
+                                  <p><span className="text-slate-500 font-medium">Assigned to:</span> {opName || '—'}</p>
+                                  <p><span className="text-slate-500 font-medium">Date:</span> {assignDate}</p>
+                                  <p><span className="text-slate-500 font-medium">Type:</span> {assignType}</p>
+                                </div>
                               </div>
+                              <button
+                                onClick={() => setAssignReg({ id: reg.id, full_name: reg.full_name, phone: reg.phone, gender: reg.gender })}
+                                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-100 text-[10px] font-semibold transition-all cursor-pointer whitespace-nowrap"
+                                title="Change assigned operator"
+                              >
+                                <Edit2 className="w-3 h-3" /> Change
+                              </button>
                             </div>
                           );
                         }

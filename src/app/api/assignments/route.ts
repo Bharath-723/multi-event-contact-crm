@@ -43,6 +43,7 @@ export async function GET(req: Request) {
       registrations!registration_id (*)
     `, { count: 'exact' })
     .eq('is_active', true)
+    .neq('status', 'Not Coming')
     .order('assigned_at', { ascending: false })
     .range(from, to);
 
@@ -71,7 +72,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const { operator_id, reassign = false } = body;
+  const { operator_id } = body;
   const regIds: string[] = body.registration_ids?.length
     ? body.registration_ids
     : body.registration_id
@@ -112,35 +113,58 @@ export async function POST(req: Request) {
   const results: Array<{ registration_id: string; status: string; message: string; assignment?: unknown }> = [];
 
   for (const regId of regIds) {
-    // Check for existing active assignment
-    const { data: existing } = await supabaseAdmin
+    // Check if registration has ever been marked as Not Coming (inactive or active)
+    const { data: notComingCheck } = await supabaseAdmin
       .from('contact_assignments')
-      .select('id, operator_id, contact_operators!operator_id(name)')
+      .select('id')
       .eq('registration_id', regId)
-      .eq('is_active', true)
+      .eq('status', 'Not Coming')
+      .limit(1)
       .maybeSingle();
 
-    if (existing && !reassign) {
-      const opJoin = existing.contact_operators as unknown;
-      const existingOpName = (Array.isArray(opJoin) ? (opJoin as {name:string}[])[0]?.name : (opJoin as {name:string}|null)?.name) ?? 'Unknown';
+    if (notComingCheck) {
       results.push({
         registration_id: regId,
-        status: 'already_assigned',
-        message: `This registration is already assigned to ${existingOpName}.`,
+        status: 'blocked',
+        message: 'This registration is marked as Not Coming and cannot be assigned/reassigned.',
       });
       continue;
     }
 
-    // If reassigning: deactivate old assignment
-    if (existing && reassign) {
+    // Check for existing active assignment
+    const { data: existing } = await supabaseAdmin
+      .from('contact_assignments')
+      .select('id, operator_id, status, contact_operators!operator_id(name)')
+      .eq('registration_id', regId)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    // If already assigned to the same operator, return early to prevent duplicates
+    if (existing && existing.operator_id === operator_id) {
+      results.push({
+        registration_id: regId,
+        status: 'already_assigned',
+        message: `This registration is already assigned to this operator.`,
+      });
+      continue;
+    }
+
+    // If reassigning (or any existing active assignment for a different operator): deactivate old assignment
+    if (existing) {
       const opJoin2 = existing.contact_operators as unknown;
       const oldOpName = (Array.isArray(opJoin2) ? (opJoin2 as {name:string}[])[0]?.name : (opJoin2 as {name:string}|null)?.name) ?? 'Unknown';
-      await supabaseAdmin
+      
+      const { error: deactivateError } = await supabaseAdmin
         .from('contact_assignments')
         .update({ is_active: false })
         .eq('id', existing.id);
 
-      // Audit reassignment
+      if (deactivateError) {
+        results.push({ registration_id: regId, status: 'error', message: deactivateError.message });
+        continue;
+      }
+
+      // Audit reassignment with ASSIGNMENT_REASSIGNED action
       await supabaseAdmin.from('audit_logs').insert({
         admin_id: userId,
         action: 'ASSIGNMENT_REASSIGNED',
@@ -150,6 +174,7 @@ export async function POST(req: Request) {
           old_operator_name: oldOpName,
           new_operator_id: operator_id,
           new_operator_name: operator.name,
+          timestamp: new Date().toISOString(),
         },
       });
     }

@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { registrationSchema } from '@/lib/validation';
 import { assignOperator } from '@/lib/assignment-engine';
+import { REGISTRATION_STATUS } from '@/lib/constants/app-status';
+import { isPrasadamAllowedForSlot } from '@/lib/constants/prasadam-rules';
 
-// Basic in-memory rate limiting (Note: in serverless environments, this is per-instance. 
-// For distributed rate-limiting, Vercel KV or Upstash Redis is recommended).
+// Basic in-memory rate limiting
 const rateLimitMap = new Map<string, { count: number; lastReset: number }>();
 const LIMIT = 5; // Allow maximum 5 registration submissions per minute per IP
 const WINDOW_MS = 60 * 1000; // 1 minute window
@@ -33,6 +34,16 @@ function checkRateLimit(ip: string): boolean {
 
 export async function POST(request: NextRequest) {
   try {
+    // 0. Registration Status Protection
+    if (REGISTRATION_STATUS !== 'OPEN') {
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'Registrations for Krishnashtami 2026 have been closed. Thank you for your support.',
+        },
+        { status: 403 }
+      );
+    }
     // 1. Rate Limiting Check
     const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'anonymous';
     if (!checkRateLimit(ip)) {
@@ -68,11 +79,23 @@ export async function POST(request: NextRequest) {
       pgName,
       interestedToVolunteer,
       volunteerSlotId,
+      volunteerSlotTime,
       interestedToDinner,
+      prasadamOption,
       wantsToDonate,
       transportationRequired,
       skills,
     } = validationResult.data;
+
+    // Strict Backend Validation: Validate Prasadam Selection Against Time Slot
+    if (interestedToDinner === 'Yes' && prasadamOption && volunteerSlotTime) {
+      if (!isPrasadamAllowedForSlot(volunteerSlotTime, prasadamOption)) {
+        return NextResponse.json(
+          { error: `Selected prasadam option (${prasadamOption}) is not permitted for slot (${volunteerSlotTime}).` },
+          { status: 400 }
+        );
+      }
+    }
 
     // 3. Database operation calling the atomic Postgres function 'register_volunteer'
     const { data: registrationId, error } = await supabase.rpc('register_volunteer', {

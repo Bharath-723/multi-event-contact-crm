@@ -65,11 +65,16 @@ export async function GET(req: Request) {
         volunteer_slots (
           id,
           slot_time
+        ),
+        services (
+          id,
+          name
         )
       )
     `, { count: 'exact' })
     .eq('operator_id', session.operatorId)  // CRITICAL security filter
     .eq('is_active', true)
+    .neq('status', 'Not Coming')
     .order('assigned_at', { ascending: false })
     .range(from, to);
 

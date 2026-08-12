@@ -27,7 +27,7 @@ export async function PUT(
 
   const { id } = await params;
 
-  let body: { name?: string; phone?: string; is_active?: boolean; password?: string };
+  let body: { name?: string; phone?: string; is_active?: boolean; password?: string; operator_type?: string };
   try {
     body = await req.json();
   } catch {
@@ -39,6 +39,12 @@ export async function PUT(
   if (body.phone !== undefined)     updates.phone = body.phone?.trim() || null;
   if (body.is_active !== undefined) updates.is_active = body.is_active;
   if (body.password)                updates.password_hash = await hashPassword(body.password);
+  if (body.operator_type !== undefined) {
+    if (!['operator', 'coordinator'].includes(body.operator_type)) {
+      return NextResponse.json({ error: 'Invalid operator_type' }, { status: 400 });
+    }
+    updates.operator_type = body.operator_type;
+  }
 
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
@@ -48,7 +54,7 @@ export async function PUT(
     .from('contact_operators')
     .update(updates)
     .eq('id', id)
-    .select('id, name, email, phone, is_active, updated_at')
+    .select('id, name, email, phone, is_active, operator_type, updated_at')
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

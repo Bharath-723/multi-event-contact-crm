@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isPrasadamAllowedForSlot } from './constants/prasadam-rules';
 
 export const ALLOWED_AREAS = [
   'Kokapet',
@@ -37,9 +38,11 @@ export const registrationSchema = z.object({
     message: 'Please select a volunteering preference',
   }),
   volunteerSlotId: z.string().optional().or(z.literal('')),
+  volunteerSlotTime: z.string().optional().or(z.literal('')),
   interestedToDinner: z.enum(['Yes', 'No'], {
-    message: 'Please select a dinner preference',
+    message: 'Please select a prasadam preference',
   }),
+  prasadamOption: z.string().optional().or(z.literal('')),
   wantsToDonate: z.enum(['Yes', 'No'], {
     message: 'Please select a donation preference',
   }),
@@ -73,8 +76,53 @@ export const registrationSchema = z.object({
       path: ['volunteerSlotId'],
     });
   }
+
+  // Strict Prasadam Slot Restriction Validation
+  if (data.interestedToDinner === 'Yes' && data.prasadamOption && data.volunteerSlotTime) {
+    if (!isPrasadamAllowedForSlot(data.volunteerSlotTime, data.prasadamOption)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Selected prasadam (${data.prasadamOption}) is not available for the slot (${data.volunteerSlotTime})`,
+        path: ['prasadamOption'],
+      });
+    }
+  }
 });
 
 export type RegistrationFormInput = z.infer<typeof registrationSchema>;
 export type RegistrationSchemaInput = z.input<typeof registrationSchema>;
 export type RegistrationFormRaw = Omit<RegistrationFormInput, 'age'> & { age: string };
+
+// --- FEEDBACK REGISTRATION SCHEMA (v2.0.0) ---
+export const feedbackSchema = z.object({
+  fullName: z.string()
+    .min(2, 'Full Name must be at least 2 characters')
+    .max(100, 'Full Name must be less than 100 characters')
+    .regex(/^[a-zA-Z\s.-]+$/, 'Name can only contain letters, spaces, dots, and hyphens')
+    .trim(),
+  phone: z.string()
+    .length(10, 'Phone number must be exactly 10 digits')
+    .regex(/^[0-9]+$/, 'Phone number must contain only numbers'),
+  collegeName: z.enum(['MGIT', 'CBIT'], {
+    message: 'Please select a college',
+  }),
+  branch: z.enum(['CSE', 'ECE', 'EEE', 'Mechanical', 'Civil'], {
+    message: 'Please select a branch',
+  }),
+  gender: z.enum(['Male', 'Female'], {
+    message: 'Please select a gender',
+  }),
+  currentStay: z.enum(['With Parents', 'In Hostel'], {
+    message: 'Please select your current stay',
+  }),
+  skills: z.array(z.string()).optional().default([]),
+  feedback: z.enum(['Excellent', 'Good', 'Not Applicable'], {
+    message: 'Please select feedback rating',
+  }),
+  interestedOnlineWork: z.enum(['Yes', 'No'], {
+    message: 'Please select your interest in online workshop',
+  }),
+});
+
+export type FeedbackFormInput = z.infer<typeof feedbackSchema>;
+export type FeedbackSchemaInput = z.input<typeof feedbackSchema>;
