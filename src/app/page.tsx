@@ -1,29 +1,13 @@
 import React from 'react';
 import RathayatraRegistrationForm from '@/components/rathayatra-registration-form';
-import RathayatraCompletePage from '@/app/rathayatra-complete/page';
 
-// FESTIVAL_MODE env controls which page to render:
-//   - 'KRISHNASHTAMI' (krishnashtami-2026.vercel.app) → Krishnashtami registration form
-//   - 'RATHAYATRA_COMPLETE' (rathayatra-three.vercel.app) → Festival complete/thank-you page
-//   - unset / anything else → defaults to Krishnashtami registration form
-const FESTIVAL_MODE = process.env.NEXT_PUBLIC_FESTIVAL_MODE;
-const IS_RATHAYATRA_COMPLETE = FESTIVAL_MODE === 'RATHAYATRA_COMPLETE';
-
-export const metadata = IS_RATHAYATRA_COMPLETE
-  ? {
-      title: 'Ratha Yatra 2026 — Festival Completed | Hare Krishna Movement',
-      description: 'Ratha Yatra 2026 has been completed. Thank you to all volunteers, devotees and participants. Relive the festival memories.',
-    }
-  : {
-      title: 'Krishnashtami 2026 | Volunteer Registration | Hare Krishna Movement',
-      description: 'Register as a volunteer for Krishnashtami 2026 on 04-September-2026. Join the grand celebrations with Hare Krishna Movement.',
-    };
+export const metadata = {
+  title: 'Krishnashtami 2026 | Volunteer Registration | Hare Krishna Movement',
+  description:
+    'Register as a volunteer for Krishnashtami 2026 on 04-September-2026. Join the grand celebrations with Hare Krishna Movement.',
+};
 
 export default function HomePage() {
-  if (IS_RATHAYATRA_COMPLETE) {
-    return <RathayatraCompletePage />;
-  }
-
   return (
     <div className="dark min-h-screen bg-[#030014] text-slate-100 overflow-x-hidden">
       <main className="relative min-h-screen flex items-center justify-center py-12 px-4 bg-gradient-purple overflow-hidden">
