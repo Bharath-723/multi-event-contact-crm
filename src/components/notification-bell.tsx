@@ -6,30 +6,41 @@ import { supabase } from '@/lib/supabase';
 import { Notification } from '@/lib/types';
 import { formatDate } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useFestival } from '@/lib/contexts/FestivalContext';
 
 export default function NotificationBell() {
+  const { selectedEventId } = useFestival();
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+  const selectedEventIdRef = useRef<string | null>(selectedEventId);
 
-  // 1. Fetch initial unread count and list of recent registrations
-  const fetchNotifications = async () => {
+  useEffect(() => {
+    selectedEventIdRef.current = selectedEventId;
+  }, [selectedEventId]);
+
+  // Fetch initial unread count and list of recent registrations scoped by festival
+  const fetchNotifications = React.useCallback(async () => {
+    if (!selectedEventId) return;
     try {
       setIsLoading(true);
       
-      // Fetch unread count
+      // Fetch unread count scoped by festival_event_id
       const { count, error: countErr } = await supabase
         .from('notifications')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_read', false);
+        .select('*, registrations!inner(festival_event_id)', { count: 'exact', head: true })
+        .eq('is_read', false)
+        .eq('registrations.festival_event_id', selectedEventId);
 
       if (!countErr && count !== null) {
         setUnreadCount(count);
+      } else {
+        setUnreadCount(0);
       }
 
-      // Fetch recent notifications (join with registrations)
+      // Fetch recent notifications (join with registrations, scoped by selectedEventId)
       const { data, error: dataErr } = await supabase
         .from('notifications')
         .select(`
@@ -37,48 +48,57 @@ export default function NotificationBell() {
           registration_id,
           is_read,
           created_at,
-          registrations (
+          registrations!inner (
             full_name,
             phone,
-            created_at
+            created_at,
+            festival_event_id
           )
         `)
+        .eq('registrations.festival_event_id', selectedEventId)
         .order('created_at', { ascending: false })
         .limit(20);
 
       if (!dataErr && data) {
-        // Cast to Notification[] since Supabase join types can be dynamic
         setNotifications(data as unknown as Notification[]);
+      } else {
+        setNotifications([]);
       }
     } catch (err) {
       console.error('Error fetching notifications:', err);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [selectedEventId]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // Reset state and fetch whenever selectedEventId changes
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setNotifications([]);
+    setUnreadCount(0);
+    /* eslint-enable react-hooks/set-state-in-effect */
     fetchNotifications();
 
-    // 2. Subscribe to Supabase Realtime insert events on 'notifications' table
+    if (!selectedEventId) return;
+
+    // Subscribe to Supabase Realtime insert events on 'notifications' table
     const channel = supabase
-      .channel('realtime_notifications')
+      .channel(`realtime_notifications_${selectedEventId}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'notifications' },
         async (payload) => {
-          // Increment unread counter
-          setUnreadCount((prev) => prev + 1);
-
-          // Fetch the details of the new registration associated with this notification
+          // Fetch registration details including festival_event_id
           const { data: newReg, error } = await supabase
             .from('registrations')
-            .select('full_name, phone, created_at')
+            .select('full_name, phone, created_at, festival_event_id')
             .eq('id', payload.new.registration_id)
             .single();
 
-          if (!error && newReg) {
+          // Only process notification if it matches the current active festival
+          if (!error && newReg && newReg.festival_event_id === selectedEventIdRef.current) {
+            setUnreadCount((prev) => prev + 1);
+
             const newNotification: Notification = {
               id: payload.new.id,
               registration_id: payload.new.registration_id,
@@ -91,7 +111,6 @@ export default function NotificationBell() {
               },
             };
 
-            // Prepend new notification to state
             setNotifications((prev) => [newNotification, ...prev].slice(0, 20));
           }
         }
@@ -101,9 +120,9 @@ export default function NotificationBell() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [selectedEventId, fetchNotifications]);
 
-  // 3. Mark notifications as read when opening panel
+  // Mark notifications as read when opening panel
   const handleTogglePanel = async () => {
     const nextState = !isOpen;
     setIsOpen(nextState);

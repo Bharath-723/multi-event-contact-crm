@@ -247,6 +247,13 @@ export default function AdminDashboardPage() {
     };
   }, [loadVisitorStats, queryClient]);
 
+  // Reset open modal when selected festival changes
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    setActiveModal(null);
+  }, [selectedEventId]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
   // --- STATS CALCULATIONS (Client-Side Aggregation for Speed & Consistency) ---
   const totalCount = visitorStats?.registered ?? registrations.length;
   
@@ -267,7 +274,33 @@ export default function AdminDashboardPage() {
   };
 
   const prasadamList = registrations.filter(r => getPrasadamDisplay(r) !== 'No');
-  const dinnerCount = visitorStats?.dinner_count ?? prasadamList.length;
+
+  // Breakdown calculations from registration_prasadam
+  const breakfastCount = registrations.reduce((acc, r) => {
+    if (r.registration_prasadam && r.registration_prasadam.length > 0) {
+      return acc + r.registration_prasadam.filter(p => p.prasadam_type === 'Breakfast').length;
+    }
+    return acc;
+  }, 0);
+
+  const lunchCount = registrations.reduce((acc, r) => {
+    if (r.registration_prasadam && r.registration_prasadam.length > 0) {
+      return acc + r.registration_prasadam.filter(p => p.prasadam_type === 'Lunch').length;
+    }
+    return acc;
+  }, 0);
+
+  const dinnerCountFromTable = registrations.reduce((acc, r) => {
+    if (r.registration_prasadam && r.registration_prasadam.length > 0) {
+      return acc + r.registration_prasadam.filter(p => p.prasadam_type === 'Dinner').length;
+    }
+    if (r.interested_to_dinner) {
+      return acc + 1;
+    }
+    return acc;
+  }, 0);
+
+  const overallPrasadamCount = visitorStats?.dinner_count ?? (breakfastCount + lunchCount + dinnerCountFromTable);
 
   const volunteersList = registrations.filter(r => r.interested_to_volunteer);
   const volunteersCount = volunteersList.length;
@@ -532,16 +565,17 @@ export default function AdminDashboardPage() {
           <CheckCircle className="w-9 h-9 md:w-16 md:h-16 opacity-8 md:opacity-12 absolute right-2 top-2 text-slate-400 dark:text-slate-700 group-hover:text-green-400/80 transition-colors" />
         </div>
 
-        {/* Volunteers Registered (replaced Remaining) */}
+        {/* Volunteers Registered */}
         <div 
-          className="glass-card rounded-2xl p-3.5 md:p-6 hover:border-yellow-500/40 hover:shadow-[0_0_20px_rgba(241,168,23,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[105px] md:min-h-[140px]"
+          onClick={() => setActiveModal('volunteers')}
+          className="glass-card rounded-2xl p-3.5 md:p-6 cursor-pointer hover:border-yellow-500/40 hover:shadow-[0_0_20px_rgba(241,168,23,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[105px] md:min-h-[140px]"
         >
           <div>
             <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Volunteers Registered</span>
             <span className="text-lg md:text-3xl font-extrabold text-yellow-450 mt-1 md:mt-2 block">{volunteersCount}</span>
           </div>
-          <span className="text-[9px] md:text-[10px] text-yellow-600 dark:text-yellow-450 font-bold mt-2 md:mt-4">
-            Interested to Volunteer
+          <span className="text-[9px] md:text-[10px] text-yellow-600 dark:text-yellow-450 font-bold mt-2 md:mt-4 flex items-center gap-1">
+            Click for slot breakdown <ExternalLink className="w-3 h-3" />
           </span>
           <Users className="w-9 h-9 md:w-16 md:h-16 opacity-8 md:opacity-12 absolute right-2 top-2 text-slate-400 dark:text-slate-700 group-hover:text-yellow-450/80 transition-colors" />
         </div>
@@ -561,17 +595,17 @@ export default function AdminDashboardPage() {
           <Users className="w-9 h-9 md:w-16 md:h-16 opacity-8 md:opacity-12 absolute right-2 top-2 text-slate-400 dark:text-slate-700 group-hover:text-purple-400/80 transition-colors" />
         </div>
 
-        {/* Dinner Count */}
+        {/* Prasadam Count */}
         <div 
           onClick={() => setActiveModal('prasadam')}
           className="glass-card rounded-2xl p-3.5 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[105px] md:min-h-[140px]"
         >
           <div>
             <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Prasadam Count</span>
-            <span className="text-lg md:text-3xl font-extrabold text-slate-100 mt-1 md:mt-2 block">{dinnerCount}</span>
+            <span className="text-lg md:text-3xl font-extrabold text-slate-100 mt-1 md:mt-2 block">{overallPrasadamCount}</span>
           </div>
           <span className="text-[9px] md:text-[10px] text-purple-600 dark:text-purple-400 font-bold mt-2 md:mt-4 flex items-center gap-1">
-            Click to view list <ExternalLink className="w-3 h-3" />
+            Click for meal breakdown <ExternalLink className="w-3 h-3" />
           </span>
           <Soup className="w-9 h-9 md:w-16 md:h-16 opacity-8 md:opacity-12 absolute right-2 top-2 text-slate-400 dark:text-slate-700 group-hover:text-purple-400/80 transition-colors" />
         </div>
@@ -800,8 +834,8 @@ export default function AdminDashboardPage() {
                 <h3 className="font-bold text-base sm:text-lg text-slate-100">
                   {activeModal === 'total' && 'All Registrations'}
                   {activeModal === 'donors' && 'Interested Donors'}
-                  {activeModal === 'prasadam' && 'Prasadam List'}
-                  {activeModal === 'volunteers' && 'Volunteers Grouped By Time Slot'}
+                  {activeModal === 'prasadam' && 'Prasadam Count & Meal Breakdown'}
+                  {activeModal === 'volunteers' && 'Volunteers Registered & Slot Breakdown'}
                   {activeModal === 'todays' && "Today's Registrations"}
                   {activeModal === 'occupation' && 'Occupation Summary & Details'}
                   {activeModal === 'transportation' && 'Transportation Summary'}
@@ -897,31 +931,59 @@ export default function AdminDashboardPage() {
                 )}
  
                 {activeModal === 'prasadam' && (
-                  <div className="space-y-3.5">
+                  <div className="space-y-4">
+                    {/* Compact Meal Breakdown Header Cards */}
+                    <div className="grid grid-cols-3 gap-2.5 p-3.5 bg-slate-900/60 rounded-xl border border-slate-800 text-center">
+                      <div className="p-2 rounded-lg bg-slate-950/60 border border-slate-800">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Breakfast</span>
+                        <span className="text-base font-extrabold text-amber-400">{breakfastCount}</span>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-950/60 border border-slate-800">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Lunch</span>
+                        <span className="text-base font-extrabold text-purple-400">{lunchCount}</span>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-950/60 border border-slate-800">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Dinner</span>
+                        <span className="text-base font-extrabold text-indigo-400">{dinnerCountFromTable}</span>
+                      </div>
+                    </div>
+
                     {prasadamList.length === 0 ? (
                       <p className="text-slate-500 text-sm text-center py-8">No prasadam requests.</p>
                     ) : (
-                      prasadamList.map(reg => (
-                        <div key={reg.id} className="py-2.5 flex justify-between items-center">
-                          <div>
-                            <p className="font-semibold text-slate-100 text-sm flex items-center gap-1.5">
-                              <User className="w-4 h-4 text-purple-600 dark:text-purple-400" /> {reg.full_name}
-                            </p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1.5">
-                              <Phone className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" /> {reg.phone}
-                            </p>
+                      <div className="divide-y divide-slate-900/60">
+                        {prasadamList.map(reg => (
+                          <div key={reg.id} className="py-2.5 flex justify-between items-center">
+                            <div>
+                              <p className="font-semibold text-slate-100 text-sm flex items-center gap-1.5">
+                                <User className="w-4 h-4 text-purple-600 dark:text-purple-400" /> {reg.full_name}
+                              </p>
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1.5">
+                                <Phone className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" /> {reg.phone}
+                              </p>
+                            </div>
+                            <span className="text-[10px] font-semibold text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-950/20 border border-green-500/30 px-2.5 py-1 rounded-full flex items-center gap-1">
+                              <CheckCircle className="w-3 h-3 animate-pulse" /> {getPrasadamDisplay(reg)}
+                            </span>
                           </div>
-                          <span className="text-[10px] font-semibold text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-950/20 border border-green-500/30 px-2.5 py-1 rounded-full flex items-center gap-1">
-                            <CheckCircle className="w-3 h-3 animate-pulse" /> {getPrasadamDisplay(reg)}
-                          </span>
-                        </div>
-                      ))
+                        ))}
+                      </div>
                     )}
                   </div>
                 )}
  
                 {activeModal === 'volunteers' && (
-                  <div className="space-y-5">
+                  <div className="space-y-4">
+                    {/* Compact Volunteer Slot Breakdown Header Cards */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 bg-slate-900/60 rounded-xl border border-slate-800 text-center">
+                      {volunteersBySlot.map(group => (
+                        <div key={group.slotName} className="p-2 rounded-lg bg-slate-950/60 border border-slate-850">
+                          <span className="text-[9px] font-bold text-slate-400 uppercase block truncate" title={group.slotName}>{group.slotName}</span>
+                          <span className="text-base font-extrabold text-yellow-450">{group.count}</span>
+                        </div>
+                      ))}
+                    </div>
+
                     {volunteersCount === 0 ? (
                       <p className="text-slate-500 text-sm text-center py-8">No volunteers registered yet.</p>
                     ) : (
