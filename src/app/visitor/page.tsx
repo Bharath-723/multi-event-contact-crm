@@ -374,7 +374,7 @@ export default function AdminVisitorPage() {
               { label: 'Checked In', value: stats.visited, color: 'text-green-400', bg: 'bg-green-950/20 border-green-500/10' },
               { label: 'Remaining', value: stats.remaining, color: 'text-yellow-450', bg: 'bg-yellow-950/20 border-yellow-500/10' },
               { label: 'Volunteers Checked In', value: stats.volunteer_visited, color: 'text-blue-400', bg: 'bg-blue-950/20 border-blue-500/10' },
-              { label: 'Dinner Count', value: stats.dinner_count, color: 'text-indigo-400', bg: 'bg-indigo-950/20 border-indigo-500/10' },
+              { label: 'Prasadam Count', value: stats.dinner_count, color: 'text-indigo-400', bg: 'bg-indigo-950/20 border-indigo-500/10' },
             ].map((card) => (
               <div key={card.label} className={`glass-card rounded-xl p-3 text-center border ${card.bg}`}>
                 {loadingStats
@@ -523,7 +523,7 @@ export default function AdminVisitorPage() {
                       </p>
                     </div>
                     <div>
-                      <p className="text-slate-500 font-bold uppercase text-[9px]">Prasadam Dinner</p>
+                      <p className="text-slate-500 font-bold uppercase text-[9px]">Prasadam</p>
                       <p className="text-slate-200 mt-0.5">{selectedVisitor.interested_to_dinner ? 'Yes' : 'No'}</p>
                     </div>
                     <div>

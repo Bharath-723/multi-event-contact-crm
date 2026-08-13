@@ -329,7 +329,7 @@ export default function OperatorVisitorPage() {
               </p>
             </div>
             <div>
-              <p className="text-slate-500 font-bold uppercase text-[9px]">Prasadam Dinner</p>
+              <p className="text-slate-500 font-bold uppercase text-[9px]">Prasadam</p>
               <p className="text-slate-200 mt-0.5">{selectedVisitor.interested_to_dinner ? 'Yes' : 'No'}</p>
             </div>
             <div>

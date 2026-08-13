@@ -540,6 +540,10 @@ export default function RegistrationsPage() {
             id,
             name
           ),
+          registration_prasadam (
+            id,
+            prasadam_type
+          ),
           contact_assignments (
             id,
             operator_id,
@@ -732,6 +736,21 @@ export default function RegistrationsPage() {
     'Student', 'Working', 'Business', 'Others'
   ];
 
+  // --- PRASADAM DISPLAY HELPER ---
+  const getPrasadamDisplay = (reg: Registration) => {
+    if (reg.registration_prasadam && reg.registration_prasadam.length > 0) {
+      const order = ['Breakfast', 'Lunch', 'Dinner'];
+      const sorted = [...reg.registration_prasadam]
+        .map(p => p.prasadam_type)
+        .sort((a, b) => order.indexOf(a) - order.indexOf(b));
+      return sorted.join(', ');
+    }
+    if (reg.interested_to_dinner) {
+      return 'Dinner';
+    }
+    return 'No';
+  };
+
   const customOccupations = Array.from(
     new Set(
       registrations
@@ -781,8 +800,12 @@ export default function RegistrationsPage() {
 
     // 7. Prasadam filter
     if (filterPrasadam) {
-      const isPrasadam = filterPrasadam === 'Yes';
-      if (reg.interested_to_dinner !== isPrasadam) return false;
+      const pText = getPrasadamDisplay(reg);
+      if (filterPrasadam === 'No') {
+        if (pText !== 'No') return false;
+      } else {
+        if (!pText.includes(filterPrasadam)) return false;
+      }
     }
 
     // 8. Area filter
@@ -1029,7 +1052,7 @@ export default function RegistrationsPage() {
 
     const headers = [
       'Name', 'Phone', 'Age', 'Gender', 'Area', 'Company', 'PG', 
-      'Skills', 'Volunteer', 'Volunteer Slot', 'Dinner Prasadam', 
+      'Skills', 'Volunteer', 'Volunteer Slot', 'Prasadam', 
       'Donation Status', 'Registered Date', 'Occupation', 'Transportation Required', 'Service'
     ];
 
@@ -1044,7 +1067,7 @@ export default function RegistrationsPage() {
       `"${(r.skills || []).map(s => s.name).join(', ')}"`,
       r.interested_to_volunteer ? 'Yes' : 'No',
       r.volunteer_slots?.slot_time || 'N/A',
-      r.interested_to_dinner ? 'Yes' : 'No',
+      getPrasadamDisplay(r),
       r.donation_status,
       formatDate(r.created_at),
       `"${(r.occupation || '').replace(/"/g, '""')}"`,
@@ -1079,7 +1102,7 @@ export default function RegistrationsPage() {
         <td>${r.company_college}</td>
         <td>${r.skills?.map(s => s.name).join(', ') || 'N/A'}</td>
         <td>${r.interested_to_volunteer ? `Yes (${r.volunteer_slots?.slot_time})` : 'No'}</td>
-        <td>${r.interested_to_dinner ? 'Yes' : 'No'}</td>
+        <td>${getPrasadamDisplay(r)}</td>
         <td>${r.donation_status}</td>
         <td>${formatDate(r.created_at).split(',')[0]}</td>
         <td>${r.services?.name || 'Unassigned'}</td>
@@ -1112,7 +1135,7 @@ export default function RegistrationsPage() {
                 <th>Company/College</th>
                 <th>Skills</th>
                 <th>Volunteer</th>
-                <th>Dinner</th>
+                <th>Prasadam</th>
                 <th>Donation</th>
                 <th>Date</th>
                 <th>Service</th>
@@ -1364,15 +1387,17 @@ export default function RegistrationsPage() {
             ))}
           </select>
 
-          {/* Dinner Prasadam — hidden on mobile */}
+          {/* Prasadam — hidden on mobile */}
           <select
             value={filterPrasadam}
             onChange={(e) => setFilterPrasadam(e.target.value)}
             className="hidden sm:block px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-800 text-slate-300 focus:outline-none cursor-pointer"
           >
-            <option value="">Dinner Prasadam (All)</option>
-            <option value="Yes">Yes</option>
-            <option value="No">No</option>
+            <option value="">Prasadam (All)</option>
+            <option value="Breakfast">Breakfast</option>
+            <option value="Lunch">Lunch</option>
+            <option value="Dinner">Dinner</option>
+            <option value="No">No Prasadam</option>
           </select>
 
           {/* Transportation Filter — always visible */}
@@ -1486,7 +1511,7 @@ export default function RegistrationsPage() {
                 <th className="px-5 py-4">Company/College</th>
                 <th className="px-5 py-4">Skills</th>
                 <th className="px-5 py-4">Volunteer Slot</th>
-                <th className="px-5 py-4">Dinner</th>
+                <th className="px-5 py-4">Prasadam</th>
                 <th className="px-5 py-4">Donation Status</th>
                 <th className="px-5 py-4">Transport</th>
                 <th className="px-5 py-4">Service</th>
@@ -1571,10 +1596,10 @@ export default function RegistrationsPage() {
                       )}
                     </td>
 
-                    {/* Dinner */}
+                    {/* Prasadam */}
                     <td className="px-5 py-4">
-                      <span className={`text-xs font-semibold ${reg.interested_to_dinner ? 'text-green-400' : 'text-slate-500'}`}>
-                        {reg.interested_to_dinner ? 'Yes' : 'No'}
+                      <span className={`text-xs font-semibold ${getPrasadamDisplay(reg) !== 'No' ? 'text-green-400' : 'text-slate-500'}`}>
+                        {getPrasadamDisplay(reg)}
                       </span>
                     </td>
 
@@ -1867,9 +1892,9 @@ export default function RegistrationsPage() {
                   </div>
                   
                   <div>
-                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Dinner Prasadam</span>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Prasadam</span>
                     <span className="font-semibold text-slate-100 mt-0.5 block">
-                      {selectedReg.interested_to_dinner ? 'Yes' : 'No'}
+                      {getPrasadamDisplay(selectedReg)}
                     </span>
                   </div>
 
@@ -2110,9 +2135,9 @@ export default function RegistrationsPage() {
 
                 {/* Prasadam & Donation */}
                 <div className="grid grid-cols-3 gap-4 border-t border-slate-900 pt-3">
-                  {/* Dinner */}
+                  {/* Prasadam */}
                   <div className="space-y-1.5">
-                    <label className="text-xs text-slate-400 font-semibold block">Prasadam Dinner</label>
+                    <label className="text-xs text-slate-400 font-semibold block">Prasadam</label>
                     <div className="flex gap-2">
                       <button
                         type="button"

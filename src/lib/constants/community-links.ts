@@ -1,7 +1,11 @@
 /**
  * Centralized WhatsApp Community & Festival Links Configuration
- * Replace KRISHNASHTAMI_WHATSAPP_COMMUNITY_URL when official links are provided.
  */
+export const KRISHNASHTAMI_WHATSAPP_COMMUNITY = {
+  male: "https://chat.whatsapp.com/E2ooUB7eTaW3wJeyDZxxPU",
+  female: "https://chat.whatsapp.com/Lt3c9eoCjttAeInE9r2vGP",
+};
+
 export const KRISHNASHTAMI_WHATSAPP_COMMUNITY_URL = process.env.NEXT_PUBLIC_KRISHNASHTAMI_WHATSAPP_URL || '';
 
 export const FESTIVAL_INFO = {

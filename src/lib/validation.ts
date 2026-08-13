@@ -42,7 +42,7 @@ export const registrationSchema = z.object({
   interestedToDinner: z.enum(['Yes', 'No'], {
     message: 'Please select a prasadam preference',
   }),
-  prasadamOption: z.string().optional().or(z.literal('')),
+  prasadamSelections: z.array(z.enum(['Breakfast', 'Lunch', 'Dinner'])).optional().default([]),
   wantsToDonate: z.enum(['Yes', 'No'], {
     message: 'Please select a donation preference',
   }),
@@ -68,22 +68,72 @@ export const registrationSchema = z.object({
     });
   }
 
-  // If interestedToVolunteer is Yes, volunteerSlotId is required
-  if (data.interestedToVolunteer === 'Yes' && (!data.volunteerSlotId || data.volunteerSlotId.trim() === '')) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'Please select a volunteer time slot',
-      path: ['volunteerSlotId'],
-    });
-  }
-
-  // Strict Prasadam Slot Restriction Validation
-  if (data.interestedToDinner === 'Yes' && data.prasadamOption && data.volunteerSlotTime) {
-    if (!isPrasadamAllowedForSlot(data.volunteerSlotTime, data.prasadamOption)) {
+  // A. Volunteer = Yes
+  if (data.interestedToVolunteer === 'Yes') {
+    if (!data.volunteerSlotId || data.volunteerSlotId.trim() === '') {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: `Selected prasadam (${data.prasadamOption}) is not available for the slot (${data.volunteerSlotTime})`,
-        path: ['prasadamOption'],
+        message: 'Please select a volunteer time slot',
+        path: ['volunteerSlotId'],
+      });
+    }
+
+    if (data.interestedToDinner === 'Yes') {
+      const selections = data.prasadamSelections ?? [];
+
+      if (!data.volunteerSlotTime || data.volunteerSlotTime.trim() === '') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Please select a volunteer time slot above to view available prasadam options',
+          path: ['prasadamSelections'],
+        });
+        return;
+      }
+
+      if (selections.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Please select at least one prasadam option',
+          path: ['prasadamSelections'],
+        });
+        return;
+      }
+
+      for (const meal of selections) {
+        if (!isPrasadamAllowedForSlot(data.volunteerSlotTime, meal)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `${meal} is not available for the selected time slot (${data.volunteerSlotTime})`,
+            path: ['prasadamSelections'],
+          });
+        }
+      }
+    }
+  }
+
+  // B. Volunteer = No
+  if (data.interestedToVolunteer === 'No') {
+    if (data.interestedToDinner === 'Yes') {
+      const selections = data.prasadamSelections ?? [];
+      if (selections.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Please select at least one prasadam option',
+          path: ['prasadamSelections'],
+        });
+      }
+      // Any combination of Breakfast, Lunch, Dinner is valid when Volunteer = No
+    }
+  }
+
+  // C. Prasadam = No
+  if (data.interestedToDinner === 'No') {
+    const selections = data.prasadamSelections ?? [];
+    if (selections.length > 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Prasadam selections must be empty when prasadam interest is No',
+        path: ['prasadamSelections'],
       });
     }
   }

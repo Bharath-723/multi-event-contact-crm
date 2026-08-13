@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { registrationSchema } from '@/lib/validation';
 import { assignOperator } from '@/lib/assignment-engine';
 import { REGISTRATION_STATUS } from '@/lib/constants/app-status';
-import { isPrasadamAllowedForSlot } from '@/lib/constants/prasadam-rules';
+import { arePrasadamSelectionsValidForSlot } from '@/lib/constants/prasadam-rules';
 import { resolveFestivalEventFromHost } from '@/lib/festival-resolver';
 
 // Basic in-memory rate limiting
@@ -82,27 +83,29 @@ export async function POST(request: NextRequest) {
       volunteerSlotId,
       volunteerSlotTime,
       interestedToDinner,
-      prasadamOption,
+      prasadamSelections,
       wantsToDonate,
       transportationRequired,
       skills,
     } = validationResult.data;
 
-    // Strict Backend Validation: Validate Prasadam Selection Against Time Slot
-    if (interestedToDinner === 'Yes' && prasadamOption && volunteerSlotTime) {
-      if (!isPrasadamAllowedForSlot(volunteerSlotTime, prasadamOption)) {
+    // 3. Strict Backend Validation: Validate ALL Prasadam Selections Against Time Slot
+    // This cannot be bypassed by the frontend — backend is the authoritative validator.
+    if (interestedToDinner === 'Yes' && prasadamSelections && prasadamSelections.length > 0 && volunteerSlotTime) {
+      const { valid, invalidItems } = arePrasadamSelectionsValidForSlot(volunteerSlotTime, prasadamSelections);
+      if (!valid) {
         return NextResponse.json(
-          { error: `Selected prasadam option (${prasadamOption}) is not permitted for slot (${volunteerSlotTime}).` },
+          { error: `The following prasadam option(s) are not permitted for slot (${volunteerSlotTime}): ${invalidItems.join(', ')}` },
           { status: 400 }
         );
       }
     }
 
-    // 3. Resolve festival_event_id from Host header
+    // 4. Resolve festival_event_id from Host header
     const hostHeader = request.headers.get('host');
     const festivalEventId = await resolveFestivalEventFromHost(hostHeader);
 
-    // 4. Database operation calling the atomic Postgres function 'register_volunteer'
+    // 5. Database operation calling the atomic Postgres function 'register_volunteer'
     const { data: registrationId, error } = await supabase.rpc('register_volunteer', {
       p_full_name: fullName,
       p_phone: phone,
@@ -147,7 +150,41 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Attempt automatic operator assignment (DO NOT block or fail registration if this fails)
+    // 6. Insert prasadam selections into registration_prasadam table
+    // Transaction Safety: Every registration_prasadam row uses the same festival_event_id.
+    // If prasadam insert fails, roll back the registration to prevent inconsistent partial data.
+    if (interestedToDinner === 'Yes' && prasadamSelections && prasadamSelections.length > 0 && registrationId) {
+      try {
+        const prasadamRows = prasadamSelections.map((meal) => ({
+          registration_id: registrationId,
+          festival_event_id: festivalEventId,
+          prasadam_type: meal,
+        }));
+
+        const { error: prasadamError } = await supabaseAdmin
+          .from('registration_prasadam')
+          .insert(prasadamRows);
+
+        if (prasadamError) {
+          console.error('Failed to insert prasadam selections, rolling back registration:', prasadamError);
+          // Rollback registration to guarantee transaction atomicity
+          await supabaseAdmin.from('registrations').delete().eq('id', registrationId);
+          return NextResponse.json(
+            { error: 'Failed to record prasadam options. Registration rolled back. Please try again.' },
+            { status: 500 }
+          );
+        }
+      } catch (prasadamInsertErr) {
+        console.error('Unexpected error during prasadam insert, rolling back registration:', prasadamInsertErr);
+        await supabaseAdmin.from('registrations').delete().eq('id', registrationId);
+        return NextResponse.json(
+          { error: 'An error occurred while saving prasadam options. Registration rolled back. Please try again.' },
+          { status: 500 }
+        );
+      }
+    }
+
+    // 7. Attempt automatic operator assignment (DO NOT block or fail registration if this fails)
     try {
       await assignOperator(registrationId);
     } catch (assignError) {

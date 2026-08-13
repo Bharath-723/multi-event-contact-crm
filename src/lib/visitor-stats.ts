@@ -91,16 +91,35 @@ export async function getVisitorStats(festivalEventId?: string | null): Promise<
     }
   }
 
-  // ── 4. Dinner Count ───────────────────────────────────────────────────────
-  let query4 = supabaseAdmin
-    .from('registrations')
-    .select('*', { count: 'exact', head: true })
-    .eq('interested_to_dinner', true);
+  // ── 4. Prasadam / Dinner Count ─────────────────────────────────────────────
+  let dinnerCount = 0;
   if (festivalEventId) {
-    query4 = query4.eq('festival_event_id', festivalEventId);
+    const { count: pc, error: pErr } = await supabaseAdmin
+      .from('registration_prasadam')
+      .select('*', { count: 'exact', head: true })
+      .eq('festival_event_id', festivalEventId);
+
+    if (!pErr && pc !== null && pc > 0) {
+      dinnerCount = pc;
+    } else {
+      const query4 = supabaseAdmin
+        .from('registrations')
+        .select('*', { count: 'exact', head: true })
+        .eq('interested_to_dinner', true)
+        .eq('festival_event_id', festivalEventId);
+      const { count: dc, error: err4 } = await query4;
+      if (err4) throw new Error('Failed to fetch dinner count: ' + err4.message);
+      dinnerCount = dc ?? 0;
+    }
+  } else {
+    const query4 = supabaseAdmin
+      .from('registrations')
+      .select('*', { count: 'exact', head: true })
+      .eq('interested_to_dinner', true);
+    const { count: dc, error: err4 } = await query4;
+    if (err4) throw new Error('Failed to fetch dinner count: ' + err4.message);
+    dinnerCount = dc ?? 0;
   }
-  const { count: dinnerCount, error: err4 } = await query4;
-  if (err4) throw new Error('Failed to fetch dinner count: ' + err4.message);
 
   // ── 5. Today's Visits ─────────────────────────────────────────────────────
   const startOfToday = new Date();

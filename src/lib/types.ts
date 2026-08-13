@@ -36,6 +36,14 @@ export interface Skill {
   name: string;
 }
 
+export interface RegistrationPrasadam {
+  id: string;
+  registration_id: string;
+  festival_event_id: string;
+  prasadam_type: 'Breakfast' | 'Lunch' | 'Dinner';
+  created_at?: string;
+}
+
 export interface Registration {
   id: string;
   full_name: string;
@@ -50,6 +58,7 @@ export interface Registration {
   volunteer_slot_id?: string | null;
   volunteer_slots?: VolunteerSlot | null;
   interested_to_dinner: boolean;
+  registration_prasadam?: RegistrationPrasadam[];
   wants_to_donate: boolean;
   donation_status: 'Pending' | 'User Opted to Donate' | 'Completed' | 'Failed';
   transportation_required?: string | null;

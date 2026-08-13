@@ -14,7 +14,7 @@ import { registrationSchema, RegistrationSchemaInput } from '@/lib/validation';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { KRISHNASHTAMI_SLOTS, SLOT_PRASADAM_MAP, FASTING_SUBTITLE_TEXT, PrasadamOption } from '@/lib/constants/prasadam-rules';
+import { KRISHNASHTAMI_SLOTS, SLOT_PRASADAM_MAP, FASTING_SUBTITLE_TEXT, PrasadamOption, filterValidSelectionsForSlot } from '@/lib/constants/prasadam-rules';
 
 const LOCAL_STORAGE_KEY = 'krishnashtami_registration_draft';
 const REDIRECT_FLAG_KEY = 'krishnashtami_donation_redirected';
@@ -215,7 +215,7 @@ export default function RegistrationForm() {
       volunteerSlotId: '',
       volunteerSlotTime: '',
       interestedToDinner: undefined,
-      prasadamOption: '',
+      prasadamSelections: [],
       wantsToDonate: undefined,
       transportationRequired: undefined,
     } as unknown as RegistrationSchemaInput,
@@ -232,12 +232,32 @@ export default function RegistrationForm() {
     areaOfStayValue && 
     !allowedAreas.some(area => area.toLowerCase() === areaOfStayValue.trim().toLowerCase());
 
-  // Determine allowed prasadam options based on selected slot
+  const isVolunteerNo = watchedFields.interestedToVolunteer === 'No';
+  const isPrasadamYes = watchedFields.interestedToDinner === 'Yes';
+
   const selectedSlotTime = watchedFields.volunteerSlotTime;
+
   const allowedPrasadamOptions = useMemo(() => {
+    if (!isPrasadamYes) return [];
+    if (isVolunteerNo) {
+      return ['Breakfast', 'Lunch', 'Dinner'] as PrasadamOption[];
+    }
     if (!selectedSlotTime) return [];
-    return SLOT_PRASADAM_MAP[selectedSlotTime.trim()] || [];
-  }, [selectedSlotTime]);
+    return (SLOT_PRASADAM_MAP[selectedSlotTime.trim()] || []) as PrasadamOption[];
+  }, [isPrasadamYes, isVolunteerNo, selectedSlotTime]);
+
+  // Current prasadam selections
+  const currentPrasadamSelections: string[] = (watchedFields.prasadamSelections as unknown as string[]) ?? [];
+
+  // Toggle a single prasadam meal checkbox on/off
+  const togglePrasadamSelection = (meal: PrasadamOption) => {
+    const current = (getValues('prasadamSelections') as unknown as string[]) ?? [];
+    const updated = current.includes(meal)
+      ? current.filter(m => m !== meal)
+      : [...current, meal];
+    setValue('prasadamSelections', updated as ('Breakfast' | 'Lunch' | 'Dinner')[]);
+    trigger('prasadamSelections');
+  };
 
   // 3. Load Draft from Local Storage on Mount and detect donation success callback
   useEffect(() => {
@@ -422,7 +442,7 @@ export default function RegistrationForm() {
       sessionStorage.setItem('krishnashtami_last_registration', JSON.stringify({
         interestedToVolunteer: data.interestedToVolunteer,
         volunteerSlotTime: selectedSlot?.slot_time || data.volunteerSlotTime || '',
-        prasadamOption: data.prasadamOption || '',
+        prasadamSelections: data.prasadamSelections || [],
         gender: data.gender
       }));
 
@@ -972,7 +992,16 @@ export default function RegistrationForm() {
                         if (opt === 'No') {
                           setValue('volunteerSlotId', '');
                           setValue('volunteerSlotTime', '');
+                        } else if (opt === 'Yes') {
+                          if (getValues('interestedToDinner') === 'Yes' && getValues('volunteerSlotTime')) {
+                            const valid = filterValidSelectionsForSlot(
+                              getValues('volunteerSlotTime'),
+                              (getValues('prasadamSelections') as unknown as string[]) || []
+                            );
+                            setValue('prasadamSelections', valid as ('Breakfast' | 'Lunch' | 'Dinner')[]);
+                          }
                         }
+                        trigger('prasadamSelections');
                       }}
                     />
                     <span>{opt}</span>
@@ -984,7 +1013,7 @@ export default function RegistrationForm() {
               )}
             </div>
 
-            {/* Volunteer Slot selection with Fasting Subtitle */}
+            {/* Time Slot selection — shown ONLY when Volunteer=Yes */}
             <AnimatePresence>
               {watchedFields.interestedToVolunteer === 'Yes' && (
                 <motion.div
@@ -993,7 +1022,9 @@ export default function RegistrationForm() {
                   exit={{ opacity: 0, height: 0 }}
                   className="space-y-3 overflow-hidden"
                 >
-                  <label className="text-sm text-slate-300 block">Available Time Slots (Select One) *</label>
+                  <label className="text-sm text-slate-300 block">
+                    Available Time Slots (Select One) *
+                  </label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {slots.map((slot) => (
                       <label
@@ -1012,10 +1043,13 @@ export default function RegistrationForm() {
                             onChange={() => {
                               setValue('volunteerSlotId', slot.id);
                               setValue('volunteerSlotTime', slot.slot_time);
-                              // Reset prasadam selection if it becomes invalid for new slot
-                              if (watchedFields.prasadamOption && !SLOT_PRASADAM_MAP[slot.slot_time]?.includes(watchedFields.prasadamOption as PrasadamOption)) {
-                                setValue('prasadamOption', '');
-                              }
+                              // On slot change: remove stale prasadam selections not valid for new slot
+                              const validSelections = filterValidSelectionsForSlot(
+                                slot.slot_time,
+                                (getValues('prasadamSelections') as unknown as string[]) ?? []
+                              );
+                              setValue('prasadamSelections', validSelections as ('Breakfast' | 'Lunch' | 'Dinner')[]);
+                              trigger('prasadamSelections');
                             }}
                           />
                           <div className={`w-4 h-4 rounded-full flex items-center justify-center border shrink-0 ${watchedFields.volunteerSlotId === slot.id
@@ -1066,8 +1100,15 @@ export default function RegistrationForm() {
                     onChange={() => {
                       setValue('interestedToDinner', opt as 'Yes' | 'No');
                       if (opt === 'No') {
-                        setValue('prasadamOption', '');
+                        setValue('prasadamSelections', []);
+                      } else if (opt === 'Yes' && watchedFields.interestedToVolunteer === 'Yes' && watchedFields.volunteerSlotTime) {
+                        const valid = filterValidSelectionsForSlot(
+                          watchedFields.volunteerSlotTime,
+                          (getValues('prasadamSelections') as unknown as string[]) || []
+                        );
+                        setValue('prasadamSelections', valid as ('Breakfast' | 'Lunch' | 'Dinner')[]);
                       }
+                      trigger('prasadamSelections');
                     }}
                   />
                   <span>{opt}</span>
@@ -1078,7 +1119,7 @@ export default function RegistrationForm() {
               <p className="text-red-400 text-xs mt-1">{errors.interestedToDinner.message}</p>
             )}
 
-            {/* Conditional Prasadam Selection based on time slot rules */}
+            {/* Prasadam Selection (multi-select checkboxes, based on time slot) */}
             <AnimatePresence>
               {watchedFields.interestedToDinner === 'Yes' && (
                 <motion.div
@@ -1087,35 +1128,40 @@ export default function RegistrationForm() {
                   exit={{ opacity: 0, height: 0 }}
                   className="space-y-2.5 pt-2 overflow-hidden"
                 >
-                  <span className="text-xs text-slate-300 block font-medium">Select Prasadam Option *</span>
+                  <span className="text-xs text-slate-300 block font-medium">Select Prasadam Option(s) *</span>
                   {allowedPrasadamOptions.length > 0 ? (
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                      {allowedPrasadamOptions.map((opt) => (
-                        <label
-                          key={opt}
-                          className={`flex items-center justify-center gap-2 p-3 rounded-xl border text-xs font-semibold cursor-pointer transition-all ${watchedFields.prasadamOption === opt
-                            ? 'bg-purple-950/40 border-purple-500/50 text-white'
-                            : 'bg-slate-950/30 border-slate-900 text-slate-400 hover:border-slate-800 hover:text-white'
-                            }`}
-                        >
-                          <input
-                            type="radio"
-                            value={opt}
-                            className="sr-only"
-                            {...register('prasadamOption')}
-                            onChange={() => setValue('prasadamOption', opt)}
-                          />
-                          <span>{opt}</span>
-                        </label>
-                      ))}
+                      {allowedPrasadamOptions.map((opt) => {
+                        const isSelected = currentPrasadamSelections.includes(opt);
+                        return (
+                          <label
+                            key={opt}
+                            className={`flex items-center justify-center gap-2 p-3 rounded-xl border text-xs font-semibold cursor-pointer transition-all ${isSelected
+                              ? 'bg-purple-950/40 border-purple-500/50 text-white'
+                              : 'bg-slate-950/30 border-slate-900 text-slate-400 hover:border-slate-800 hover:text-white'
+                              }`}
+                          >
+                            <input
+                              type="checkbox"
+                              className="sr-only"
+                              checked={isSelected}
+                              onChange={() => togglePrasadamSelection(opt)}
+                            />
+                            <div className={`w-4 h-4 rounded flex items-center justify-center border shrink-0 ${isSelected ? 'border-purple-400 bg-purple-500' : 'border-slate-700'}`}>
+                              {isSelected && <CheckCircle2 className="w-3.5 h-3.5 stroke-[3] text-slate-950" />}
+                            </div>
+                            <span>{opt}</span>
+                          </label>
+                        );
+                      })}
                     </div>
                   ) : (
                     <p className="text-xs text-amber-400 bg-amber-950/30 border border-amber-500/30 p-3 rounded-xl">
-                      Please select a volunteer time slot above to view available prasadam options.
+                      Please select a time slot above to view available prasadam options.
                     </p>
                   )}
-                  {errors.prasadamOption && (
-                    <p className="text-red-400 text-xs mt-1">{errors.prasadamOption.message}</p>
+                  {errors.prasadamSelections && (
+                    <p className="text-red-400 text-xs mt-1">{String(errors.prasadamSelections.message)}</p>
                   )}
                 </motion.div>
               )}

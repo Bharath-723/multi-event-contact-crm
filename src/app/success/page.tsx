@@ -1,10 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { CheckCircle2, Home, RotateCcw, Sparkles, ExternalLink, Play, MessageCircle } from 'lucide-react';
+import { CheckCircle2, RotateCcw, Sparkles, ExternalLink, Play, MessageCircle } from 'lucide-react';
 import Link from 'next/link';
-import { KRISHNASHTAMI_WHATSAPP_COMMUNITY_URL } from '@/lib/constants/community-links';
+import { KRISHNASHTAMI_WHATSAPP_COMMUNITY } from '@/lib/constants/community-links';
 
 function YoutubeIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
@@ -15,6 +15,38 @@ function YoutubeIcon(props: React.SVGProps<SVGSVGElement>) {
 }
 
 export default function RedoneSuccessPage() {
+  const [gender, setGender] = useState<'Male' | 'Female' | null>(null);
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const rawData = sessionStorage.getItem('krishnashtami_last_registration');
+        if (rawData) {
+          const parsed = JSON.parse(rawData);
+          if (parsed.gender === 'Male' || parsed.gender === 'Female') {
+            setGender(parsed.gender);
+          }
+        }
+      } catch (err) {
+        console.error('Error reading registration session:', err);
+      }
+    }
+  }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  const whatsappUrl = gender === 'Male'
+    ? KRISHNASHTAMI_WHATSAPP_COMMUNITY.male
+    : gender === 'Female'
+    ? KRISHNASHTAMI_WHATSAPP_COMMUNITY.female
+    : null;
+
+  const buttonLabel = gender === 'Male'
+    ? 'Join Male WhatsApp Community'
+    : gender === 'Female'
+    ? 'Join Female WhatsApp Community'
+    : 'Join Krishnashtami WhatsApp Community';
+
   return (
     <div className="dark min-h-screen bg-[#030014] text-slate-100 overflow-x-hidden">
       <main className="relative min-h-screen flex flex-col items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gradient-purple overflow-hidden">
@@ -72,19 +104,19 @@ export default function RedoneSuccessPage() {
               </p>
             </div>
 
-            {/* WhatsApp Community Link Section if Configured */}
-            {KRISHNASHTAMI_WHATSAPP_COMMUNITY_URL ? (
+            {/* Gender-Based WhatsApp Community Link Section */}
+            {whatsappUrl && (
               <a
-                href={KRISHNASHTAMI_WHATSAPP_COMMUNITY_URL}
+                href={whatsappUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-full max-w-md py-3.5 px-5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm flex items-center justify-center gap-2.5 transition-all shadow-lg shadow-emerald-600/20"
               >
                 <MessageCircle className="w-5 h-5" />
-                Join Krishnashtami WhatsApp Community
+                {buttonLabel}
                 <ExternalLink className="w-4 h-4 opacity-80" />
               </a>
-            ) : null}
+            )}
 
             {/* Message Detail Box */}
             <div className="w-full bg-slate-900/60 border border-slate-800 rounded-2xl p-5 text-left text-xs sm:text-sm text-slate-300 space-y-2">
@@ -98,17 +130,11 @@ export default function RedoneSuccessPage() {
             </div>
 
             {/* Action Buttons */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full pt-2">
+            <div className="w-full pt-2">
               <Link href="/register" className="w-full">
                 <button className="w-full py-3.5 px-5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-purple-600/20 active:scale-95 cursor-pointer">
                   <RotateCcw className="w-4 h-4" />
                   Submit Another Response
-                </button>
-              </Link>
-              <Link href="/" className="w-full">
-                <button className="w-full py-3.5 px-5 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-850 hover:border-slate-700 text-slate-200 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer">
-                  <Home className="w-4 h-4 text-purple-400" />
-                  Back to Home Page
                 </button>
               </Link>
             </div>

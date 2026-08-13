@@ -115,6 +115,10 @@ export default function AdminDashboardPage() {
               id,
               name
             )
+          ),
+          registration_prasadam (
+            id,
+            prasadam_type
           )
         `)
         .order('created_at', { ascending: false });
@@ -248,8 +252,22 @@ export default function AdminDashboardPage() {
   
   const donorsList = registrations.filter(r => r.wants_to_donate);
 
-  const dinnerList = registrations.filter(r => r.interested_to_dinner);
-  const dinnerCount = visitorStats?.dinner_count ?? dinnerList.length;
+  const getPrasadamDisplay = (reg: Registration) => {
+    if (reg.registration_prasadam && reg.registration_prasadam.length > 0) {
+      const order = ['Breakfast', 'Lunch', 'Dinner'];
+      const sorted = [...reg.registration_prasadam]
+        .map(p => p.prasadam_type)
+        .sort((a, b) => order.indexOf(a) - order.indexOf(b));
+      return sorted.join(', ');
+    }
+    if (reg.interested_to_dinner) {
+      return 'Dinner';
+    }
+    return 'No';
+  };
+
+  const prasadamList = registrations.filter(r => getPrasadamDisplay(r) !== 'No');
+  const dinnerCount = visitorStats?.dinner_count ?? prasadamList.length;
 
   const volunteersList = registrations.filter(r => r.interested_to_volunteer);
   const volunteersCount = volunteersList.length;
@@ -549,7 +567,7 @@ export default function AdminDashboardPage() {
           className="glass-card rounded-2xl p-3.5 md:p-6 cursor-pointer hover:border-purple-500/40 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all group relative overflow-hidden flex flex-col justify-between h-full min-h-[105px] md:min-h-[140px]"
         >
           <div>
-            <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Dinner Count</span>
+            <span className="text-[9px] md:text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Prasadam Count</span>
             <span className="text-lg md:text-3xl font-extrabold text-slate-100 mt-1 md:mt-2 block">{dinnerCount}</span>
           </div>
           <span className="text-[9px] md:text-[10px] text-purple-600 dark:text-purple-400 font-bold mt-2 md:mt-4 flex items-center gap-1">
@@ -782,7 +800,7 @@ export default function AdminDashboardPage() {
                 <h3 className="font-bold text-base sm:text-lg text-slate-100">
                   {activeModal === 'total' && 'All Registrations'}
                   {activeModal === 'donors' && 'Interested Donors'}
-                  {activeModal === 'prasadam' && 'Dinner Prasadam List'}
+                  {activeModal === 'prasadam' && 'Prasadam List'}
                   {activeModal === 'volunteers' && 'Volunteers Grouped By Time Slot'}
                   {activeModal === 'todays' && "Today's Registrations"}
                   {activeModal === 'occupation' && 'Occupation Summary & Details'}
@@ -880,10 +898,10 @@ export default function AdminDashboardPage() {
  
                 {activeModal === 'prasadam' && (
                   <div className="space-y-3.5">
-                    {dinnerList.length === 0 ? (
+                    {prasadamList.length === 0 ? (
                       <p className="text-slate-500 text-sm text-center py-8">No prasadam requests.</p>
                     ) : (
-                      dinnerList.map(reg => (
+                      prasadamList.map(reg => (
                         <div key={reg.id} className="py-2.5 flex justify-between items-center">
                           <div>
                             <p className="font-semibold text-slate-100 text-sm flex items-center gap-1.5">
@@ -894,7 +912,7 @@ export default function AdminDashboardPage() {
                             </p>
                           </div>
                           <span className="text-[10px] font-semibold text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-950/20 border border-green-500/30 px-2.5 py-1 rounded-full flex items-center gap-1">
-                            <CheckCircle className="w-3 h-3 animate-pulse" /> Dinner Opted
+                            <CheckCircle className="w-3 h-3 animate-pulse" /> {getPrasadamDisplay(reg)}
                           </span>
                         </div>
                       ))
