@@ -2,8 +2,8 @@ import React from 'react';
 import RathayatraRegistrationForm from '@/components/rathayatra-registration-form';
 
 export const metadata = {
-  title: 'Register | Ratha Yatra 2026',
-  description: 'Submit your volunteer registration details for Ratha Yatra 2026. Secure registration with instant confirmation.',
+  title: 'Register | Krishnashtami 2026',
+  description: 'Submit your volunteer registration details for Krishnashtami 2026. Secure registration with instant confirmation.',
 };
 
 export default function RegisterRoutePage() {
