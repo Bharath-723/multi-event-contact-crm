@@ -4,9 +4,7 @@
  * Auth: httpOnly JWT cookie (operator-session).
  * Security: All queries hard-filtered by operator_id from JWT — never trusts URL params.
  *
- * Phase 3B additions:
- *   - ?status filter (Pending | Coming | Not Coming | Callback Required | all)
- *   - Stats now return total_coming, total_not_coming, total_callback
+ * Scoped by optional festival_event_id query param.
  */
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
@@ -36,7 +34,9 @@ export async function GET(req: Request) {
   const page = Math.max(1, parseInt(url.searchParams.get('page') ?? '1', 10));
   const limit = Math.min(100, parseInt(url.searchParams.get('limit') ?? '30', 10));
   const search = (url.searchParams.get('search') ?? '').trim();
-  const statusFilter = (url.searchParams.get('status') ?? '').trim(); // Phase 3B
+  const statusFilter = (url.searchParams.get('status') ?? '').trim();
+  const festivalEventId = (url.searchParams.get('festival_event_id') ?? '').trim() || null;
+
   const from = (page - 1) * limit;
   const to = from + limit - 1;
 
@@ -44,10 +44,16 @@ export async function GET(req: Request) {
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(search);
 
   if (search) {
-    const { data: matchedRegs, error: matchError } = await supabaseAdmin
+    let regMatchQuery = supabaseAdmin
       .from('registrations')
       .select('id')
       .or(`full_name.ilike.%${search}%,phone.ilike.%${search}%`);
+
+    if (festivalEventId) {
+      regMatchQuery = regMatchQuery.eq('festival_event_id', festivalEventId);
+    }
+
+    const { data: matchedRegs, error: matchError } = await regMatchQuery;
 
     if (!matchError && matchedRegs) {
       matchedIds = matchedRegs.map((r) => r.id);
@@ -60,7 +66,7 @@ export async function GET(req: Request) {
     .select(`
       id, registration_id, operator_id, assigned_at, called_at,
       status, remarks, is_active, created_at, updated_at,
-      registrations!registration_id (
+      registrations!registration_id!inner (
         *,
         volunteer_slots (
           id,
@@ -78,6 +84,10 @@ export async function GET(req: Request) {
     .order('assigned_at', { ascending: false })
     .range(from, to);
 
+  if (festivalEventId) {
+    query = query.eq('registrations.festival_event_id', festivalEventId);
+  }
+
   // Phase 3B: Status filter
   if (statusFilter && VALID_STATUSES.includes(statusFilter as AssignmentStatus)) {
     query = query.eq('status', statusFilter);
@@ -89,6 +99,7 @@ export async function GET(req: Request) {
       // No matching registrations found — return empty with fresh stats
       const { data: statsData } = await supabaseAdmin.rpc('get_operator_stats', {
         p_operator_id: session.operatorId,
+        p_festival_event_id: festivalEventId,
       });
       const stats = statsData?.[0] ?? {};
       return NextResponse.json({
@@ -117,6 +128,7 @@ export async function GET(req: Request) {
   // Compute stats for the operator dashboard header
   const { data: statsData } = await supabaseAdmin.rpc('get_operator_stats', {
     p_operator_id: session.operatorId,
+    p_festival_event_id: festivalEventId,
   });
   const stats = statsData?.[0] ?? {};
 

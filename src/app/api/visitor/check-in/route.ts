@@ -36,29 +36,42 @@ async function authenticateUser(req: Request): Promise<{
 export async function POST(req: Request) {
   const auth = await authenticateUser(req);
 
-  let body: { registration_id?: string; remarks?: string } = {};
+  let body: { registration_id?: string; remarks?: string; festival_event_id?: string } = {};
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const { registration_id, remarks = '' } = body;
+  const { registration_id, remarks = '', festival_event_id } = body;
 
   if (!registration_id) {
     return NextResponse.json({ error: 'registration_id is required' }, { status: 400 });
   }
 
-  // 1. Fetch the registration to ensure it exists and get registration_no
+  if (!festival_event_id) {
+    return NextResponse.json({ error: 'festival_event_id is required' }, { status: 400 });
+  }
+
+  // 1. Fetch the registration — verify it exists AND belongs to the specified festival.
   const { data: reg, error: regErr } = await supabaseAdmin
     .from('registrations')
-    .select('id, registration_no, full_name')
+    .select('id, registration_no, full_name, festival_event_id')
     .eq('id', registration_id)
     .single();
 
   if (regErr || !reg) {
     return NextResponse.json({ error: 'Registration record not found' }, { status: 404 });
   }
+
+  // Festival isolation: reject cross-festival check-ins.
+  if (reg.festival_event_id !== festival_event_id) {
+    return NextResponse.json(
+      { error: 'Forbidden: This registration does not belong to the selected festival.' },
+      { status: 403 }
+    );
+  }
+
 
   // Security constraint: If Operator, ensure they only check in a contact assigned to them
   if (auth.role === 'operator') {

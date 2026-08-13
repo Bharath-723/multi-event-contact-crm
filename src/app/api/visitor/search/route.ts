@@ -39,10 +39,21 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const q = (url.searchParams.get('q') ?? '').trim();
+  const festivalEventId = url.searchParams.get('festival_event_id');
 
   if (!q) {
     return NextResponse.json({ error: 'Search query parameter "q" is required' }, { status: 400 });
   }
+
+  // festival_event_id required for admin and public roles.
+  // Operators are scoped by assigned contacts, but we still require it for consistency.
+  if (!festivalEventId) {
+    return NextResponse.json(
+      { error: 'festival_event_id is required' },
+      { status: 400 }
+    );
+  }
+
 
   let assignedIds: string[] = [];
 
@@ -82,6 +93,7 @@ export async function GET(req: Request) {
       transportation_required,
       created_at,
       registration_no,
+      festival_event_id,
       volunteer_slots:volunteer_slot_id (slot_time),
       contact_assignments (
         id,
@@ -100,6 +112,10 @@ export async function GET(req: Request) {
         contact_operators:visited_by (id, name)
       )
     `);
+
+  if (festivalEventId) {
+    query = query.eq('festival_event_id', festivalEventId);
+  }
 
   // Apply operator restriction
   if (auth.role === 'operator') {

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { Registration, VolunteerSlot, Service } from '@/lib/types';
@@ -12,6 +12,7 @@ import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatDate } from '@/lib/utils';
 import Image from 'next/image';
+import { useFestival } from '@/lib/contexts/FestivalContext';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell
 } from 'recharts';
@@ -42,6 +43,8 @@ interface DashboardVisitorLog {
 
 export default function AdminDashboardPage() {
   const queryClient = useQueryClient();
+  const { selectedEventId, selectedFestival } = useFestival();
+
   const [activeModal, setActiveModal] = useState<'total' | 'donors' | 'prasadam' | 'volunteers' | 'todays' | 'occupation' | 'transportation' | null>(null);
   const [realtimeStatus, setRealtimeStatus] = useState<string>('SUBSCRIBED');
 
@@ -51,16 +54,20 @@ export default function AdminDashboardPage() {
 
   // 0. Service Allocation query
   const { data: services = [] } = useQuery<Service[]>({
-    queryKey: ['services-dashboard'],
+    queryKey: ['services-dashboard', selectedEventId],
     queryFn: async () => {
+      if (!selectedEventId) return [];
       // Fetch services with volunteer lists via registrations join
-      const [svcRes, regRes] = await Promise.all([
-        supabase.from('services').select('*').order('name'),
-        supabase
-          .from('registrations')
-          .select('id, full_name, phone, service_id, volunteer_slots (slot_time)')
-          .not('service_id', 'is', null),
-      ]);
+      let svcQuery = supabase.from('services').select('*').order('name');
+      let regQuery = supabase
+        .from('registrations')
+        .select('id, full_name, phone, service_id, volunteer_slots (slot_time)')
+        .not('service_id', 'is', null);
+
+      svcQuery = svcQuery.eq('festival_event_id', selectedEventId);
+      regQuery = regQuery.eq('festival_event_id', selectedEventId);
+
+      const [svcRes, regRes] = await Promise.all([svcQuery, regQuery]);
       if (svcRes.error) throw svcRes.error;
 
       interface VolWithSlot {
@@ -85,13 +92,15 @@ export default function AdminDashboardPage() {
           })),
       })) as Service[];
     },
+    enabled: !!selectedEventId,
   });
 
   // 1. Query all registrations with joint data
   const { data: registrations = [], isLoading: isLoadingRegs } = useQuery<Registration[]>({
-    queryKey: ['registrations-summary'],
+    queryKey: ['registrations-summary', selectedEventId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      if (!selectedEventId) return [];
+      let query = supabase
         .from('registrations')
         .select(`
           *,
@@ -110,6 +119,9 @@ export default function AdminDashboardPage() {
         `)
         .order('created_at', { ascending: false });
 
+      query = query.eq('festival_event_id', selectedEventId);
+
+      const { data, error } = await query;
       if (error) throw error;
       
       interface DBRegistration {
@@ -131,44 +143,56 @@ export default function AdminDashboardPage() {
         } as unknown as Registration;
       });
     },
+    enabled: !!selectedEventId,
   });
 
   // 2. Query volunteer slots to handle grouping references
   const { data: slots = [] } = useQuery<VolunteerSlot[]>({
-    queryKey: ['volunteer-slots-summary'],
+    queryKey: ['volunteer-slots-summary', selectedEventId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      if (!selectedEventId) return [];
+      let query = supabase
         .from('volunteer_slots')
         .select('*')
         .order('display_order');
+      query = query.eq('festival_event_id', selectedEventId);
+      const { data, error } = await query;
       if (error) throw error;
       return data || [];
     },
+    enabled: !!selectedEventId,
   });
 
   // 2B. Query shared visitor stats to synchronize with Visitor Check-In Center
   const { data: visitorStats } = useQuery({
-    queryKey: ['visitor-stats-summary'],
+    queryKey: ['visitor-stats-summary', selectedEventId],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession();
       const headers = {
         'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '',
       };
-      const res = await fetch('/api/visitor/stats', { headers });
+      const url = selectedEventId
+        ? `/api/visitor/stats?festival_event_id=${selectedEventId}`
+        : '/api/visitor/stats';
+      const res = await fetch(url, { headers });
       if (!res.ok) throw new Error('Failed to fetch visitor stats');
       const d = await res.json();
       return d.stats;
     },
+    enabled: !!selectedEventId,
   });
 
-  const loadVisitorStats = async () => {
+  const loadVisitorStats = useCallback(async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const headers = {
         'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '',
       };
 
-      const logsRes = await fetch('/api/visitor/logs?limit=5', { headers });
+      const url = selectedEventId
+        ? `/api/visitor/logs?limit=5&festival_event_id=${selectedEventId}`
+        : '/api/visitor/logs?limit=5';
+      const logsRes = await fetch(url, { headers });
       if (logsRes.ok) {
         const d = await logsRes.json();
         setRecentCheckIns(d.logs ?? []);
@@ -176,7 +200,7 @@ export default function AdminDashboardPage() {
     } catch (err) {
       console.error('Failed to load visitor stats:', err);
     }
-  };
+  }, [selectedEventId]);
 
   // 3. Set up Supabase Realtime subscription to invalidate query keys on new submissions
   useEffect(() => {
@@ -217,7 +241,7 @@ export default function AdminDashboardPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [queryClient]);
+  }, [loadVisitorStats, queryClient]);
 
   // --- STATS CALCULATIONS (Client-Side Aggregation for Speed & Consistency) ---
   const totalCount = visitorStats?.registered ?? registrations.length;
@@ -436,7 +460,12 @@ export default function AdminDashboardPage() {
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-100">Dashboard Overview</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Real-time statistics & activity logs</p>
+          <p className="text-slate-400 text-sm mt-0.5">
+            {selectedFestival
+              ? <><span className="text-purple-400 font-semibold">{selectedFestival.festival_name} {selectedFestival.event_year}</span> · Real-time statistics &amp; activity logs</>
+              : 'Real-time statistics & activity logs'
+            }
+          </p>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-center">
           <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-900/60 border border-slate-850 text-xs">

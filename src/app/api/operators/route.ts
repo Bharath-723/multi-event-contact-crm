@@ -1,8 +1,8 @@
 /**
- * GET  /api/operators   — Admin: list all operators with stats (from feedback_contact_assignments)
+ * GET  /api/operators   — Admin: list all operators with stats (scoped by festival_event_id)
  * POST /api/operators   — Admin: create new operator
  */
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { hashPassword } from '@/lib/operator-auth';
 
@@ -26,9 +26,11 @@ async function requireAdmin(req: Request): Promise<{ error: NextResponse | null 
 }
 
 // ─── GET /api/operators ─────────────────────────────────────────────────────
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   const { error: authError } = await requireAdmin(req);
   if (authError) return authError;
+
+  const festivalEventId = req.nextUrl.searchParams.get('festival_event_id');
 
   // 1. Fetch all operators
   const { data: operators, error } = await supabaseAdmin
@@ -38,13 +40,19 @@ export async function GET(req: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // 2. Fetch feedback assignments for all operators to compute workload stats
-  const { data: feedbackAssignments } = await supabaseAdmin
-    .from('feedback_contact_assignments')
-    .select('id, operator_id, status, is_active');
+  // 2. Fetch contact_assignments scoped by festival_event_id
+  let caQuery = supabaseAdmin
+    .from('contact_assignments')
+    .select('id, operator_id, status, is_active, registrations!inner(festival_event_id)');
 
-  const assignmentsByOp = new Map<string, typeof feedbackAssignments>();
-  (feedbackAssignments || []).forEach((fa) => {
+  if (festivalEventId) {
+    caQuery = caQuery.eq('registrations.festival_event_id', festivalEventId);
+  }
+
+  const { data: assignments } = await caQuery;
+
+  const assignmentsByOp = new Map<string, typeof assignments>();
+  (assignments || []).forEach((fa) => {
     if (!fa.operator_id) return;
     const list = assignmentsByOp.get(fa.operator_id) || [];
     list.push(fa);
@@ -55,8 +63,8 @@ export async function GET(req: Request) {
     const list = assignmentsByOp.get(op.id) || [];
     const activeList = list.filter((a) => a.is_active);
     const total_assigned = activeList.length;
-    const total_pending = activeList.filter((a) => a.status === 'Assigned' || a.status === 'Contacted').length;
-    const total_coming = activeList.filter((a) => a.status === 'Interested' || a.status === 'Completed').length;
+    const total_pending = activeList.filter((a) => a.status === 'Pending').length;
+    const total_coming = activeList.filter((a) => a.status === 'Coming').length;
     const total_not_coming = list.filter((a) => a.status === 'Not Coming').length;
 
     return {
@@ -66,7 +74,7 @@ export async function GET(req: Request) {
       total_coming,
       total_not_coming,
       total_completed: total_coming,
-      total_called: activeList.filter((a) => a.status !== 'Assigned').length,
+      total_called: activeList.filter((a) => a.status !== 'Pending').length,
       call_success_pct: total_assigned > 0 ? Math.round((total_coming / total_assigned) * 100) : 0,
     };
   });

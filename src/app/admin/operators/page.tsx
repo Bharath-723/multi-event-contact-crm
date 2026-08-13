@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { ContactOperator } from '@/lib/types';
+import { useFestival } from '@/lib/contexts/FestivalContext';
 
 // ─── Helper ──────────────────────────────────────────────────────────────────
 async function getAuthHeader(): Promise<string> {
@@ -529,6 +530,7 @@ interface BatchReport {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ContactOperatorsPage() {
+  const { selectedEventId } = useFestival();
   const [operators, setOperators] = useState<ContactOperator[]>([]);
   const [filterType, setFilterType] = useState<'all' | 'operator' | 'coordinator'>('all');
   const [loading, setLoading] = useState(true);
@@ -580,7 +582,8 @@ export default function ContactOperatorsPage() {
     setLoading(true);
     try {
       const auth = await getAuthHeader();
-      const res = await fetch('/api/operators', { headers: { Authorization: auth } });
+      const url = selectedEventId ? `/api/operators?festival_event_id=${selectedEventId}` : '/api/operators';
+      const res = await fetch(url, { headers: { Authorization: auth } });
       if (res.ok) {
         const d = await res.json();
         setOperators(d.operators ?? []);
@@ -588,7 +591,7 @@ export default function ContactOperatorsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedEventId]);
 
   useEffect(() => { loadOperators(); }, [loadOperators]);
 

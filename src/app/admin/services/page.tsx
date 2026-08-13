@@ -10,6 +10,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useFestival } from '@/lib/contexts/FestivalContext';
 
 // ─── Auth helper ─────────────────────────────────────────────────────────────
 async function getAuthHeader() {
@@ -33,6 +34,7 @@ function ServiceFormModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const { selectedEventId } = useFestival();
   const handleSave = async () => {
     const trimmedName = name.trim();
     if (!trimmedName) { setError('Service name is required'); return; }
@@ -42,10 +44,17 @@ function ServiceFormModal({
       const auth = await getAuthHeader();
       const url = isEdit ? `/api/services/${service!.id}` : '/api/services';
       const method = isEdit ? 'PUT' : 'POST';
+      const bodyPayload: Record<string, unknown> = {
+        name: trimmedName,
+        description: description.trim() || null,
+      };
+      if (!isEdit && selectedEventId) {
+        bodyPayload.festival_event_id = selectedEventId;
+      }
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json', Authorization: auth },
-        body: JSON.stringify({ name: trimmedName, description: description.trim() || null }),
+        body: JSON.stringify(bodyPayload),
       });
       const d = await res.json();
       if (!res.ok) { setError(d.error || 'Failed to save service'); return; }
@@ -230,6 +239,7 @@ function ConfirmDeleteModal({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ServicesPage() {
   const queryClient = useQueryClient();
+  const { selectedEventId } = useFestival();
   const [addOpen, setAddOpen] = useState(false);
   const [editService, setEditService] = useState<Service | null>(null);
   const [disableService, setDisableService] = useState<Service | null>(null);
@@ -243,13 +253,15 @@ export default function ServicesPage() {
 
   // ── Query ──────────────────────────────────────────────────────────────────
   const { data: services = [], isLoading, refetch } = useQuery<Service[]>({
-    queryKey: ['services-management'],
+    queryKey: ['services-management', selectedEventId],
     queryFn: async () => {
-      const res = await fetch('/api/services');
+      const url = selectedEventId ? `/api/services?festival_event_id=${selectedEventId}` : '/api/services';
+      const res = await fetch(url);
       if (!res.ok) throw new Error('Failed to fetch services');
       const d = await res.json();
       return d.services ?? [];
     },
+    enabled: !!selectedEventId,
   });
 
   // ── Realtime ───────────────────────────────────────────────────────────────

@@ -1,29 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '@/lib/supabase-admin';
+import { supabase } from '@/lib/supabase';
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+const client = supabaseAdmin || supabase;
 
 // ─── GET /api/services ───────────────────────────────────────────────────────
-// Returns all services with assigned volunteer counts.
-// Public — no auth required (needed for dropdowns).
-export async function GET() {
+// Returns services for the selected festival event with assigned volunteer counts.
+export async function GET(req: NextRequest) {
   try {
-    const { data: services, error } = await supabaseAdmin
-      .from('services')
-      .select('*')
-      .order('name', { ascending: true });
+    const festivalEventId = req.nextUrl.searchParams.get('festival_event_id');
 
+    let query = client.from('services').select('*').order('name', { ascending: true });
+    if (festivalEventId) {
+      query = query.eq('festival_event_id', festivalEventId);
+    }
+
+    const { data: services, error } = await query;
     if (error) throw error;
 
-    // For each service compute assigned_count in a single query
-    const { data: counts, error: countError } = await supabaseAdmin
-      .from('registrations')
-      .select('service_id')
-      .not('service_id', 'is', null);
+    // For each service compute assigned_count
+    let regQuery = client.from('registrations').select('service_id').not('service_id', 'is', null);
+    if (festivalEventId) {
+      regQuery = regQuery.eq('festival_event_id', festivalEventId);
+    }
 
+    const { data: counts, error: countError } = await regQuery;
     if (countError) throw countError;
 
     const countMap: Record<string, number> = {};
@@ -46,7 +47,7 @@ export async function GET() {
 }
 
 // ─── POST /api/services ──────────────────────────────────────────────────────
-// Creates a new service. Requires authenticated admin session.
+// Creates a new service scoped by festival_event_id. Requires authenticated admin session.
 export async function POST(req: NextRequest) {
   try {
     const authHeader = req.headers.get('authorization') || '';
@@ -55,13 +56,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    const { data: { user }, error: authError } = await client.auth.getUser(token);
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Verify admin
-    const { data: adminRecord } = await supabaseAdmin
+    const { data: adminRecord } = await client
       .from('admins')
       .select('id')
       .eq('id', user.id)
@@ -74,14 +75,22 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const name = body.name?.trim();
     const description = body.description?.trim() || null;
+    const festival_event_id = body.festival_event_id;
 
     if (!name) {
       return NextResponse.json({ error: 'Service name is required' }, { status: 400 });
     }
 
-    const { data: service, error: insertError } = await supabaseAdmin
+    if (!festival_event_id) {
+      return NextResponse.json(
+        { error: 'festival_event_id is required when creating a service' },
+        { status: 400 }
+      );
+    }
+
+    const { data: service, error: insertError } = await client
       .from('services')
-      .insert({ name, description, is_active: true })
+      .insert({ name, description, is_active: true, festival_event_id })
       .select()
       .single();
 
@@ -93,13 +102,14 @@ export async function POST(req: NextRequest) {
     }
 
     // Audit log
-    await supabaseAdmin.from('audit_logs').insert({
+    await client.from('audit_logs').insert({
       admin_id: user.id,
       action: 'SERVICE_CREATED',
       details: {
         service_id: service.id,
         service_name: service.name,
         description: service.description,
+        festival_event_id,
         admin_email: user.email,
         timestamp: new Date().toISOString(),
       },

@@ -1,7 +1,20 @@
+export interface FestivalEvent {
+  id: string;
+  festival_name: string;
+  event_year: number;
+  slug: string;
+  registration_url?: string | null;
+  is_active: boolean;
+  registration_open: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface VolunteerSlot {
   id: string;
   slot_time: string;
   display_order: number;
+  festival_event_id?: string;
 }
 
 export interface Service {
@@ -11,6 +24,7 @@ export interface Service {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  festival_event_id?: string;
   // Computed in API response — count of assigned volunteers
   assigned_count?: number;
   // Computed in API response — list of assigned volunteers (for dashboard widget)
@@ -42,6 +56,8 @@ export interface Registration {
   registration_no?: string;
   service_id?: string | null;
   services?: Service | null;
+  festival_event_id?: string;
+  festival_events?: FestivalEvent | null;
   created_at: string;
   skills?: Skill[];
   visitor_visits?: VisitorVisit[];

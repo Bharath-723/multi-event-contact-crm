@@ -1,22 +1,14 @@
 /**
  * POST /api/assignments/auto
  *
- * Phase 3A — Batch Auto-Assignment Engine
+ * Phase 3A — Batch Auto-Assignment Engine (Multi-Festival Scoped)
  *
  * Modes:
  *   dry_run=true  → Returns a summary (total unassigned, operators, capacity) WITHOUT assigning.
  *   dry_run=false → Executes assignment. Processes one registration at a time via the RPC.
  *
- * Concurrency Safety:
- *   A module-level `isBatchRunning` flag prevents concurrent batch executions.
- *   The RPC itself uses row-level locking (FOR UPDATE OF co) to prevent race conditions.
- *
- * Failure Isolation:
- *   Each assignment is attempted independently. Failures are logged and counted as "skipped"
- *   but do NOT abort the remaining assignments.
- *
- * Audit Source:
- *   All assignments created via this route are tagged 'AUTO_ASSIGNMENT' in audit_logs.
+ * Scoping:
+ *   Scopes registrations, capacity, and RPC assignment by festival_event_id.
  */
 
 import { NextResponse } from 'next/server';
@@ -63,7 +55,7 @@ export async function POST(req: Request) {
   const { error: authError, userId } = await requireAdmin(req);
   if (authError) return authError;
 
-  let body: { dry_run?: boolean } = {};
+  let body: { dry_run?: boolean; festival_event_id?: string } = {};
   try {
     body = await req.json();
   } catch {
@@ -71,6 +63,7 @@ export async function POST(req: Request) {
   }
 
   const isDryRun = body.dry_run !== false; // default to dry_run=true for safety
+  const festivalEventId = body.festival_event_id || null;
 
   // ── 1. Fetch active operators ────────────────────────────────────────────────
   const { data: operators, error: opsError } = await supabaseAdmin
@@ -87,12 +80,17 @@ export async function POST(req: Request) {
   const activeOperators = operators ?? [];
 
   // ── 2. Fetch current active (non-Not-Coming) assignment counts per operator ──
-  // "Not Coming" contacts are considered resolved — they do not consume capacity.
-  const { data: assignmentCounts, error: countError } = await supabaseAdmin
+  let countQuery = supabaseAdmin
     .from('contact_assignments')
-    .select('operator_id')
+    .select('operator_id, registrations!inner(festival_event_id)')
     .eq('is_active', true)
     .neq('status', 'Not Coming');
+
+  if (festivalEventId) {
+    countQuery = countQuery.eq('registrations.festival_event_id', festivalEventId);
+  }
+
+  const { data: assignmentCounts, error: countError } = await countQuery;
 
   if (countError) {
     return NextResponse.json({ error: 'Failed to fetch assignment counts: ' + countError.message }, { status: 500 });
@@ -106,11 +104,16 @@ export async function POST(req: Request) {
   }
 
   // ── 3. Fetch unassigned registrations ────────────────────────────────────────
-  // Unassigned = no active contact_assignment exists for the registration_id
-  const { data: unassignedRegs, error: regsError } = await supabaseAdmin
+  let regsQuery = supabaseAdmin
     .from('registrations')
-    .select('id, full_name, gender')
+    .select('id, full_name, gender, festival_event_id')
     .order('created_at', { ascending: true });
+
+  if (festivalEventId) {
+    regsQuery = regsQuery.eq('festival_event_id', festivalEventId);
+  }
+
+  const { data: unassignedRegs, error: regsError } = await regsQuery;
 
   if (regsError) {
     return NextResponse.json({ error: 'Failed to fetch registrations: ' + regsError.message }, { status: 500 });
@@ -122,7 +125,7 @@ export async function POST(req: Request) {
     .select('registration_id')
     .eq('is_active', true);
 
-  // Get all registration IDs ever marked as 'Not Coming' (inactive or active)
+  // Get all registration IDs ever marked as 'Not Coming'
   const { data: notComingRows } = await supabaseAdmin
     .from('contact_assignments')
     .select('registration_id')
@@ -131,7 +134,6 @@ export async function POST(req: Request) {
   const assignedSet = new Set((assignedRows ?? []).map((r) => r.registration_id));
   const notComingSet = new Set((notComingRows ?? []).map((r) => r.registration_id));
   
-  // Exclude both active assignments and any registrations that were ever marked 'Not Coming'
   const unassigned = (unassignedRegs ?? []).filter(
     (r) => !assignedSet.has(r.id) && !notComingSet.has(r.id)
   );
@@ -206,6 +208,7 @@ export async function POST(req: Request) {
           {
             p_registration_id: reg.id,
             p_max_contacts: MAX_CONTACTS_PER_OPERATOR,
+            p_festival_event_id: festivalEventId,
           }
         );
 
@@ -216,18 +219,17 @@ export async function POST(req: Request) {
         }
 
         if (!operatorId) {
-          // No capacity available
           skippedCapacity++;
           continue;
         }
 
-        // Tag with AUTO_ASSIGNMENT in audit_logs
         await supabaseAdmin.from('audit_logs').insert({
           admin_id: userId ?? null,
           action: 'AUTO_ASSIGNMENT',
           details: {
             registration_id: reg.id,
             operator_id: operatorId,
+            festival_event_id: festivalEventId,
             batch: true,
           },
         });

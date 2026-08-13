@@ -4,6 +4,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import QRCode from 'qrcode';
 import { X, Download, Printer, Copy, Check, Loader2, QrCode } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useFestival } from '@/lib/contexts/FestivalContext';
 
 interface QRModalProps {
   isOpen: boolean;
@@ -49,16 +50,17 @@ export default function QRModal({ isOpen, onClose }: QRModalProps) {
     }
   };
 
+  const { selectedFestival } = useFestival();
+
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (isOpen) {
-      // Point feedback registration QR code explicitly to /feedback route
-      const origin = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
-      const url = `${origin}/feedback`;
+      // Use selected festival's explicit registration_url if available, else fallback to origin/feedback
+      const url = selectedFestival?.registration_url || `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/feedback`;
       setQrUrl(url);
       generateQRCodes(url);
     }
-  }, [isOpen]);
+  }, [isOpen, selectedFestival]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleCopyLink = () => {

@@ -13,16 +13,19 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import QRModal from '@/components/qr-modal';
+import { useFestival } from '@/lib/contexts/FestivalContext';
 
 // ─── Inline Service Assignment Cell ──────────────────────────────────────────
 function ServiceCell({
   registration,
   services,
   onAssigned,
+  selectedEventId,
 }: {
   registration: Registration;
   services: Service[];
   onAssigned: () => void;
+  selectedEventId: string | null;
 }) {
   const [saving, setSaving] = useState(false);
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -68,7 +71,11 @@ function ServiceCell({
       const res = await fetch('/api/services', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: auth },
-        body: JSON.stringify({ name, description: newSvcDesc.trim() || null }),
+        body: JSON.stringify({
+          name,
+          description: newSvcDesc.trim() || null,
+          ...(selectedEventId ? { festival_event_id: selectedEventId } : {}),
+        }),
       });
       const d = await res.json();
       if (!res.ok) { setCreateError(d.error || 'Failed to create service'); return; }
@@ -424,9 +431,10 @@ function AssignContactModal({
 
 export default function RegistrationsPage() {
   const queryClient = useQueryClient();
+  const { selectedEventId } = useFestival();
   const [qrOpen, setQrOpen] = useState(false);
 
-  // --- STATE FOR FILTER & SEARCH ---
+  // --- FILTER STATES ---
   const [searchQuery, setSearchQuery] = useState('');
   const [searchPhone, setSearchPhone] = useState('');
   const [filterGender, setFilterGender] = useState('');
@@ -483,31 +491,36 @@ export default function RegistrationsPage() {
 
   // --- DATA QUERIES ---
   const { data: services = [] } = useQuery<Service[]>({
-    queryKey: ['services-list'],
+    queryKey: ['services-list', selectedEventId],
     queryFn: async () => {
-      const res = await fetch('/api/services');
+      const url = selectedEventId ? `/api/services?festival_event_id=${selectedEventId}` : '/api/services';
+      const res = await fetch(url);
       if (!res.ok) return [];
       const d = await res.json();
       return d.services ?? [];
     },
+    enabled: !!selectedEventId,
   });
 
   const { data: operators = [] } = useQuery<ContactOperator[]>({
-    queryKey: ['operators-list-admin'],
+    queryKey: ['operators-list-admin', selectedEventId],
     queryFn: async () => {
       const { data: { session } } = await supabase.auth.getSession();
       const auth = session?.access_token ? `Bearer ${session.access_token}` : '';
-      const res = await fetch('/api/operators', { headers: { Authorization: auth } });
+      const url = selectedEventId ? `/api/operators?festival_event_id=${selectedEventId}` : '/api/operators';
+      const res = await fetch(url, { headers: { Authorization: auth } });
       if (!res.ok) return [];
       const d = await res.json();
       return d.operators ?? [];
     },
+    enabled: !!selectedEventId,
   });
 
   const { data: registrations = [], isLoading: isLoadingRegs } = useQuery<Registration[]>({
-    queryKey: ['registrations-list'],
+    queryKey: ['registrations-list', selectedEventId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      if (!selectedEventId) return [];
+      let query = supabase
         .from('registrations')
         .select(`
           *,
@@ -523,28 +536,31 @@ export default function RegistrationsPage() {
               name
             )
           ),
+          services (
+            id,
+            name
+          ),
           contact_assignments (
             id,
-            is_active,
+            operator_id,
             status,
             assigned_at,
-            assigned_by,
-            operator_id,
+            called_at,
+            is_active,
             contact_operators (
               id,
               name,
               email,
+              phone,
               operator_type
             )
-          ),
-          services (
-            id,
-            name,
-            is_active
           )
         `)
         .order('created_at', { ascending: false });
 
+      query = query.eq('festival_event_id', selectedEventId);
+
+      const { data, error } = await query;
       if (error) throw error;
 
       interface DBRegistration {
@@ -565,18 +581,25 @@ export default function RegistrationsPage() {
         } as unknown as Registration;
       });
     },
+    enabled: !!selectedEventId,
   });
 
   const { data: slots = [] } = useQuery<VolunteerSlot[]>({
-    queryKey: ['volunteer-slots-list'],
+    queryKey: ['volunteer-slots-list', selectedEventId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      if (!selectedEventId) return [];
+      let query = supabase
         .from('volunteer_slots')
         .select('*')
         .order('display_order');
+
+      query = query.eq('festival_event_id', selectedEventId);
+
+      const { data, error } = await query;
       if (error) throw error;
       return data || [];
     },
+    enabled: !!selectedEventId,
   });
 
   const { data: skills = [] } = useQuery<Skill[]>({
@@ -1583,6 +1606,7 @@ export default function RegistrationsPage() {
                         registration={reg}
                         services={services}
                         onAssigned={handleServiceAssigned}
+                        selectedEventId={selectedEventId}
                       />
                     </td>
 

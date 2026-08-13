@@ -2,8 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export async function GET(req: Request) {
-  // Check authorization (admin or operator can read logs, but admins see all check-ins)
-  // Let's verify session via headers or cookies
+  // Check authorization
   const authHeader = req.headers.get('Authorization') || '';
   let isAdmin = false;
 
@@ -32,7 +31,36 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const limit = Math.min(100, parseInt(url.searchParams.get('limit') ?? '50', 10));
+  const festivalEventId = url.searchParams.get('festival_event_id');
 
+  // festival_event_id is required — reject global (unscoped) log requests.
+  if (!festivalEventId) {
+    return NextResponse.json(
+      { error: 'festival_event_id is required' },
+      { status: 400 }
+    );
+  }
+
+  // Step 1: Resolve registration IDs for this festival.
+  // Using .eq('registrations.festival_event_id') on embedded joins is silently
+  // dropped in count/head queries. Use a direct .in() instead.
+  const { data: regRows, error: regErr } = await supabaseAdmin
+    .from('registrations')
+    .select('id')
+    .eq('festival_event_id', festivalEventId);
+
+  if (regErr) {
+    return NextResponse.json({ error: regErr.message }, { status: 500 });
+  }
+
+  const registrationIds = (regRows ?? []).map((r) => r.id);
+
+  // If festival has no registrations yet, return empty logs immediately.
+  if (registrationIds.length === 0) {
+    return NextResponse.json({ logs: [] });
+  }
+
+  // Step 2: Fetch visitor visits scoped to those registration IDs.
   const { data: logs, error: logsErr } = await supabaseAdmin
     .from('visitor_visits')
     .select(`
@@ -41,15 +69,18 @@ export async function GET(req: Request) {
       visit_method,
       visited_by_admin,
       remarks,
-      registrations (
+      registration_id,
+      registrations!inner (
         registration_no,
         full_name,
-        phone
+        phone,
+        festival_event_id
       ),
       contact_operators (
         name
       )
     `)
+    .in('registration_id', registrationIds)
     .order('visited_at', { ascending: false })
     .limit(limit);
 

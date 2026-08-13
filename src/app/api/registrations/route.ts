@@ -4,6 +4,7 @@ import { registrationSchema } from '@/lib/validation';
 import { assignOperator } from '@/lib/assignment-engine';
 import { REGISTRATION_STATUS } from '@/lib/constants/app-status';
 import { isPrasadamAllowedForSlot } from '@/lib/constants/prasadam-rules';
+import { resolveFestivalEventFromHost } from '@/lib/festival-resolver';
 
 // Basic in-memory rate limiting
 const rateLimitMap = new Map<string, { count: number; lastReset: number }>();
@@ -97,7 +98,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 3. Database operation calling the atomic Postgres function 'register_volunteer'
+    // 3. Resolve festival_event_id from Host header
+    const hostHeader = request.headers.get('host');
+    const festivalEventId = await resolveFestivalEventFromHost(hostHeader);
+
+    // 4. Database operation calling the atomic Postgres function 'register_volunteer'
     const { data: registrationId, error } = await supabase.rpc('register_volunteer', {
       p_full_name: fullName,
       p_phone: phone,
@@ -114,6 +119,7 @@ export async function POST(request: NextRequest) {
       p_skill_ids: skills,
       p_occupation: occupation || null,
       p_transportation_required: gender === 'Male' ? transportationRequired || 'No' : 'No',
+      p_festival_event_id: festivalEventId,
     });
 
     if (error) {

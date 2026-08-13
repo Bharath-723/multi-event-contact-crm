@@ -81,9 +81,13 @@ export default function RegistrationForm() {
   // Location Autocomplete suggestions state (supports Geoapify API & Google Places API)
   const [locationSuggestions, setLocationSuggestions] = useState<Array<{ place_id: string; description: string }>>([]);
   const [isLocationApiAvailable, setIsLocationApiAvailable] = useState(false);
+  const locationScriptLoadedRef = useRef(false);
 
-  // Check Geoapify / Google Maps API availability
-  useEffect(() => {
+  // Lazy-load Location API (Google Places / Geoapify) when user interacts with Area of Stay field
+  const ensureLocationApiInitialized = () => {
+    if (locationScriptLoadedRef.current) return;
+    locationScriptLoadedRef.current = true;
+
     const geoapifyKey = process.env.NEXT_PUBLIC_GEOAPIFY_API_KEY;
     const googleKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
@@ -95,10 +99,8 @@ export default function RegistrationForm() {
         script.async = true;
         document.head.appendChild(script);
       }
-    } else {
-      console.info('[Location Search] NEXT_PUBLIC_GEOAPIFY_API_KEY / NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is not defined. Falling back to local area search.');
     }
-  }, []);
+  };
 
   // Fetch Geoapify / Google Places Predictions on areaSearch change
   useEffect(() => {
@@ -446,28 +448,6 @@ export default function RegistrationForm() {
     }
   };
 
-  if (isLoadingSkills) {
-    return (
-      <div className="w-full max-w-xl mx-auto">
-        <div className="glass-card rounded-3xl p-6 sm:p-8 relative overflow-hidden animate-pulse">
-          <div className="h-4 w-28 bg-slate-850 rounded-full mx-auto mb-4" />
-          <div className="h-8 w-64 bg-slate-850 rounded-lg mx-auto mb-3" />
-          <div className="h-4 w-48 bg-slate-850 rounded-full mx-auto mb-8" />
-          <div className="space-y-6">
-            <div className="h-12 w-full bg-slate-850 rounded-xl" />
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="h-12 w-full bg-slate-850 rounded-xl" />
-              <div className="h-12 w-full bg-slate-850 rounded-xl" />
-            </div>
-            <div className="pt-4">
-              <div className="h-14 w-full bg-slate-850 rounded-xl" />
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="w-full max-w-xl mx-auto">
       {/* Donation Redirection Overlay */}
@@ -766,8 +746,12 @@ export default function RegistrationForm() {
                   type="text"
                   value={areaSearch}
                   placeholder={watchedFields.gender === 'Male' ? "Search Area of Stay / Location *" : "Search Area of Stay / Location"}
-                  onFocus={() => setShowAreaDropdown(true)}
+                  onFocus={() => {
+                    ensureLocationApiInitialized();
+                    setShowAreaDropdown(true);
+                  }}
                   onChange={(e) => {
+                    ensureLocationApiInitialized();
                     const typed = e.target.value;
                     setAreaSearch(typed);
                     setValue('areaOfStay', typed);
@@ -921,33 +905,41 @@ export default function RegistrationForm() {
               Select one or more skills you would like to support us with:
             </p>
 
-            <div className="grid grid-cols-2 gap-3.5">
-              {skills.map((skill) => (
-                <label
-                  key={skill.id}
-                  className={`flex items-center gap-3 p-3.5 rounded-xl border text-sm font-medium cursor-pointer transition-all ${(watchedFields.skills || []).includes(skill.id)
-                    ? 'bg-purple-950/40 border-purple-500/50 text-white shadow-[0_0_15px_rgba(168,85,247,0.15)]'
-                    : 'bg-slate-950/50 border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
-                    }`}
-                >
-                  <input
-                    type="checkbox"
-                    value={skill.id}
-                    className="sr-only"
-                    {...register('skills')}
-                  />
-                  <div className={`w-4 h-4 rounded flex items-center justify-center border shrink-0 ${(watchedFields.skills || []).includes(skill.id)
-                    ? 'border-purple-400 bg-purple-500 text-slate-950'
-                    : 'border-slate-700'
-                    }`}>
-                    {(watchedFields.skills || []).includes(skill.id) && (
-                      <CheckCircle2 className="w-3.5 h-3.5 stroke-[3]" />
-                    )}
-                  </div>
-                  <span>{skill.name}</span>
-                </label>
-              ))}
-            </div>
+            {isLoadingSkills ? (
+              <div className="grid grid-cols-2 gap-3.5">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="h-12 rounded-xl bg-slate-900/50 border border-slate-800 animate-pulse" />
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3.5">
+                {skills.map((skill) => (
+                  <label
+                    key={skill.id}
+                    className={`flex items-center gap-3 p-3.5 rounded-xl border text-sm font-medium cursor-pointer transition-all ${(watchedFields.skills || []).includes(skill.id)
+                      ? 'bg-purple-950/40 border-purple-500/50 text-white shadow-[0_0_15px_rgba(168,85,247,0.15)]'
+                      : 'bg-slate-950/50 border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
+                      }`}
+                  >
+                    <input
+                      type="checkbox"
+                      value={skill.id}
+                      className="sr-only"
+                      {...register('skills')}
+                    />
+                    <div className={`w-4 h-4 rounded flex items-center justify-center border shrink-0 ${(watchedFields.skills || []).includes(skill.id)
+                      ? 'border-purple-400 bg-purple-500 text-slate-950'
+                      : 'border-slate-700'
+                      }`}>
+                      {(watchedFields.skills || []).includes(skill.id) && (
+                        <CheckCircle2 className="w-3.5 h-3.5 stroke-[3]" />
+                      )}
+                    </div>
+                    <span>{skill.name}</span>
+                  </label>
+                ))}
+              </div>
+            )}
             {errors.skills && (
               <p className="text-red-400 text-xs mt-1 pl-1">{errors.skills.message}</p>
             )}
