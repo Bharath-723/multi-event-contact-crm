@@ -8,7 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import confetti from 'canvas-confetti';
 import {
   User, Phone, CheckCircle2,
-  ChevronDown, ShieldAlert, Sparkles, Loader2, Home, Star, Laptop
+  ChevronDown, ShieldAlert, Sparkles, Loader2, Home, Star, Laptop, GraduationCap
 } from 'lucide-react';
 import { feedbackSchema, FeedbackSchemaInput } from '@/lib/validation';
 import { supabase } from '@/lib/supabase';
@@ -49,6 +49,7 @@ export default function RegistrationForm() {
       fullName: '',
       phone: '',
       collegeName: '',
+      customCollegeName: '',
       branch: '',
       gender: undefined,
       currentStay: undefined,
@@ -91,7 +92,13 @@ export default function RegistrationForm() {
 
     if (values.fullName && values.fullName.trim().length >= 2) completed++;
     if (values.phone && values.phone.length === 10) completed++;
-    if (values.collegeName) completed++;
+    if (values.collegeName) {
+      if (values.collegeName === 'Other') {
+        if (values.customCollegeName && values.customCollegeName.trim().length >= 2) completed++;
+      } else {
+        completed++;
+      }
+    }
     if (values.branch) completed++;
     if (values.gender) completed++;
     if (values.currentStay) completed++;
@@ -116,11 +123,21 @@ export default function RegistrationForm() {
     setIsSubmitting(true);
     setSubmissionError(null);
 
+    const finalCollegeName = data.collegeName === 'Other'
+      ? data.customCollegeName?.trim() || ''
+      : data.collegeName.trim();
+
+    const payload = {
+      ...data,
+      collegeName: finalCollegeName,
+    };
+    delete payload.customCollegeName;
+
     try {
       const response = await fetch('/api/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       });
 
       const result = await response.json();
@@ -312,8 +329,12 @@ export default function RegistrationForm() {
                   defaultValue=""
                 >
                   <option value="" disabled className="bg-slate-950 text-slate-500">Select College *</option>
-                  <option value="MGIT" className="bg-slate-950 text-white">MGIT</option>
                   <option value="CBIT" className="bg-slate-950 text-white">CBIT</option>
+                  <option value="MGIT" className="bg-slate-950 text-white">MGIT</option>
+                  <option value="JBIT" className="bg-slate-950 text-white">JBIT</option>
+                  <option value="VJIT" className="bg-slate-950 text-white">VJIT</option>
+                  <option value="VBIT" className="bg-slate-950 text-white">VBIT</option>
+                  <option value="Other" className="bg-slate-950 text-white">Other / Enter College Name</option>
                 </select>
                 <span className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-slate-500">
                   <ChevronDown className="w-5 h-5" />
@@ -346,6 +367,25 @@ export default function RegistrationForm() {
                 )}
               </div>
             </div>
+
+            {/* Manual College Name Input (when Other is selected) */}
+            {watchedFields.collegeName === 'Other' && (
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-500">
+                  <GraduationCap className="w-5 h-5" />
+                </span>
+                <input
+                  type="text"
+                  {...register('customCollegeName')}
+                  placeholder="Enter College Name *"
+                  className="w-full pl-11 pr-4 py-3 rounded-xl glass-input text-white text-base placeholder-slate-500"
+                  aria-invalid={errors.customCollegeName ? 'true' : 'false'}
+                />
+                {errors.customCollegeName && (
+                  <p className="text-red-400 text-xs mt-1 pl-1">{errors.customCollegeName.message}</p>
+                )}
+              </div>
+            )}
 
             {/* Current Stay (Mandatory - With Parents / In Hostel) */}
             <div className="space-y-2 pt-1">

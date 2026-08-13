@@ -521,8 +521,11 @@ export default function AdminFeedbackDashboard() {
               className="px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-100 dark:text-slate-100 focus:outline-none cursor-pointer"
             >
               <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">College (All)</option>
-              <option value="MGIT" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">MGIT</option>
               <option value="CBIT" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">CBIT</option>
+              <option value="MGIT" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">MGIT</option>
+              <option value="JBIT" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">JBIT</option>
+              <option value="VJIT" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">VJIT</option>
+              <option value="VBIT" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">VBIT</option>
             </select>
 
             {/* Branch Filter Dropdown */}

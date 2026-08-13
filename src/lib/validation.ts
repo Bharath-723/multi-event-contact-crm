@@ -103,9 +103,10 @@ export const feedbackSchema = z.object({
   phone: z.string()
     .length(10, 'Phone number must be exactly 10 digits')
     .regex(/^[0-9]+$/, 'Phone number must contain only numbers'),
-  collegeName: z.enum(['MGIT', 'CBIT'], {
+  collegeName: z.string({
     message: 'Please select a college',
-  }),
+  }).min(1, 'Please select a college').trim(),
+  customCollegeName: z.string().optional(),
   branch: z.enum(['CSE', 'ECE', 'EEE', 'Mechanical', 'Civil'], {
     message: 'Please select a branch',
   }),
@@ -122,6 +123,22 @@ export const feedbackSchema = z.object({
   interestedOnlineWork: z.enum(['Yes', 'No'], {
     message: 'Please select your interest in online workshop',
   }),
+}).superRefine((data, ctx) => {
+  if (data.collegeName === 'Other') {
+    if (!data.customCollegeName || data.customCollegeName.trim() === '') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Please enter your college name',
+        path: ['customCollegeName'],
+      });
+    } else if (data.customCollegeName.trim().length < 2) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'College name must be at least 2 characters',
+        path: ['customCollegeName'],
+      });
+    }
+  }
 });
 
 export type FeedbackFormInput = z.infer<typeof feedbackSchema>;
