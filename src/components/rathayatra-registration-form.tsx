@@ -8,7 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import confetti from 'canvas-confetti';
 import {
   User, Phone, Award, Building, Home as HomeIcon, CheckCircle2,
-  ChevronDown, Search, ShieldAlert, Sparkles, Loader2, Info, Briefcase, Megaphone
+  ChevronDown, Search, ShieldAlert, Sparkles, Loader2, Info, Briefcase, Megaphone, MapPin, Building2
 } from 'lucide-react';
 import { registrationSchema, RegistrationSchemaInput } from '@/lib/validation';
 import { supabase } from '@/lib/supabase';
@@ -78,77 +78,54 @@ export default function RegistrationForm() {
   const [showOccupationDropdown, setShowOccupationDropdown] = useState(false);
   const occupationDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Location Autocomplete suggestions state (supports Geoapify API & Google Places API)
+  // Location Autocomplete suggestions state (using server-side Geoapify proxy)
   const [locationSuggestions, setLocationSuggestions] = useState<Array<{ place_id: string; description: string }>>([]);
-  const [isLocationApiAvailable, setIsLocationApiAvailable] = useState(false);
-  const locationScriptLoadedRef = useRef(false);
+  const [isLoadingAreaSuggestions, setIsLoadingAreaSuggestions] = useState(false);
 
-  // Lazy-load Location API (Google Places / Geoapify) when user interacts with Area of Stay field
-  const ensureLocationApiInitialized = () => {
-    if (locationScriptLoadedRef.current) return;
-    locationScriptLoadedRef.current = true;
-
-    const geoapifyKey = process.env.NEXT_PUBLIC_GEOAPIFY_API_KEY;
-    const googleKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-
-    if (geoapifyKey || googleKey) {
-      setIsLocationApiAvailable(true);
-      if (googleKey && typeof window !== 'undefined' && !window.google) {
-        const script = document.createElement('script');
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${googleKey}&libraries=places`;
-        script.async = true;
-        document.head.appendChild(script);
-      }
-    }
-  };
-
-  // Fetch Geoapify / Google Places Predictions on areaSearch change
+  // Fetch Geoapify Autocomplete results via server API proxy on areaSearch change
   useEffect(() => {
-    if (!isLocationApiAvailable || !areaSearch.trim() || areaSearch.length < 2) {
+    const query = areaSearch.trim();
+    if (query.length < 2) {
       setLocationSuggestions([]);
+      setIsLoadingAreaSuggestions(false);
       return;
     }
 
-    const geoapifyKey = process.env.NEXT_PUBLIC_GEOAPIFY_API_KEY;
+    setIsLoadingAreaSuggestions(true);
 
-    // Geoapify API Location Autocomplete
-    if (geoapifyKey) {
-      const url = `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(areaSearch)}&filter=countrycode:in&limit=10&apiKey=${geoapifyKey}`;
-      
-      fetch(url)
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      fetch(`/api/geocode/autocomplete?text=${encodeURIComponent(query)}`, {
+        signal: controller.signal,
+      })
         .then((res) => res.json())
         .then((data) => {
-          if (data && Array.isArray(data.features)) {
-            const results = data.features.map((f: { properties: { place_id?: string; formatted?: string; name?: string } }) => ({
-              place_id: f.properties.place_id || Math.random().toString(),
-              description: f.properties.formatted || f.properties.name || '',
-            })).filter((item: { description: string }) => item.description.length > 0);
+          if (data && Array.isArray(data.results)) {
+            const results = data.results.map((r: { formatted: string }, idx: number) => ({
+              place_id: `geoapify-${idx}-${r.formatted}`,
+              description: r.formatted,
+            }));
             setLocationSuggestions(results);
-          }
-        })
-        .catch((err) => {
-          console.error('[Geoapify API Error]:', err);
-          setLocationSuggestions([]);
-        });
-      return;
-    }
-
-    // Google Places Fallback
-    if (typeof window !== 'undefined' && window.google?.maps?.places) {
-      const placesObj = window.google.maps.places;
-      const autocompleteService = new placesObj.AutocompleteService();
-      autocompleteService.getPlacePredictions(
-        { input: areaSearch, componentRestrictions: { country: 'in' } },
-        (predictions, status) => {
-          if (status === placesObj.PlacesServiceStatus.OK && predictions) {
-            setLocationSuggestions(predictions.map((p) => ({ place_id: p.place_id, description: p.description })));
           } else {
             setLocationSuggestions([]);
           }
-        }
-      );
-    }
-  }, [areaSearch, isLocationApiAvailable]);
+        })
+        .catch((err) => {
+          if (err.name !== 'AbortError') {
+            console.error('[Geoapify API Proxy Error]:', err);
+            setLocationSuggestions([]);
+          }
+        })
+        .finally(() => {
+          setIsLoadingAreaSuggestions(false);
+        });
+    }, 300);
+
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [areaSearch]);
 
 
   // 1. Fetch skills and volunteer slots from Supabase via TanStack Query
@@ -756,7 +733,7 @@ export default function RegistrationForm() {
               </div>
             </div>
 
-            {/* Area of Stay with Google Places Integration */}
+            {/* Area of Stay with Geoapify Autocomplete */}
             <div className="grid grid-cols-1 gap-4">
               <div className="relative" ref={areaDropdownRef}>
                 <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-500">
@@ -767,11 +744,9 @@ export default function RegistrationForm() {
                   value={areaSearch}
                   placeholder={watchedFields.gender === 'Male' ? "Search Area of Stay / Location *" : "Search Area of Stay / Location"}
                   onFocus={() => {
-                    ensureLocationApiInitialized();
                     setShowAreaDropdown(true);
                   }}
                   onChange={(e) => {
-                    ensureLocationApiInitialized();
                     const typed = e.target.value;
                     setAreaSearch(typed);
                     setValue('areaOfStay', typed);
@@ -793,47 +768,70 @@ export default function RegistrationForm() {
                   aria-invalid={errors.areaOfStay ? 'true' : 'false'}
                 />
                 {showAreaDropdown && (
-                  <div className="absolute z-10 w-full mt-1.5 max-h-52 overflow-y-auto rounded-xl bg-slate-900 border border-slate-800 shadow-2xl">
-                    {/* Geoapify / Google Places Autocomplete Results */}
-                    {isLocationApiAvailable && locationSuggestions.length > 0 ? (
-                      locationSuggestions.map((place) => (
-                        <button
-                          key={place.place_id}
-                          type="button"
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            setValue('areaOfStay', place.description);
-                            setAreaSearch(place.description);
-                            setShowAreaDropdown(false);
-                            trigger('areaOfStay');
-                          }}
-                          className="w-full text-left px-4 py-2.5 hover:bg-purple-950/60 text-sm text-slate-200 transition-colors flex items-center gap-2"
-                        >
-                          <Search className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                          <span className="truncate">{place.description}</span>
-                        </button>
-                      ))
-                    ) :
- filteredAreas.length > 0 ? (
-                      filteredAreas.map((area) => (
-                        <button
-                          key={area}
-                          type="button"
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            setValue('areaOfStay', area);
-                            setAreaSearch(area);
-                            setShowAreaDropdown(false);
-                            trigger('areaOfStay');
-                          }}
-                          className="w-full text-left px-4 py-2.5 hover:bg-purple-950/60 text-sm text-slate-200 transition-colors"
-                        >
-                          {area}
-                        </button>
-                      ))
-                    ) : (
-                      <div className="px-4 py-2.5 text-sm text-slate-500">
-                        Type to enter location address.
+                  <div className="absolute z-30 w-full mt-1.5 max-h-56 overflow-y-auto rounded-xl bg-slate-900 border border-slate-800 shadow-2xl divide-y divide-slate-800/50">
+                    {/* Inline Loading Indicator */}
+                    {isLoadingAreaSuggestions && (
+                      <div className="px-4 py-2.5 text-xs text-purple-400 flex items-center gap-2">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-400" />
+                        <span>Searching locations...</span>
+                      </div>
+                    )}
+
+                    {/* Geoapify Location Autocomplete Results */}
+                    {locationSuggestions.length > 0 && (
+                      <div className="py-1">
+                        <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-purple-400/90 bg-purple-950/30">
+                          Location Suggestions
+                        </div>
+                        {locationSuggestions.map((place) => (
+                          <button
+                            key={place.place_id}
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              setValue('areaOfStay', place.description);
+                              setAreaSearch(place.description);
+                              setShowAreaDropdown(false);
+                              trigger('areaOfStay');
+                            }}
+                            className="w-full text-left px-4 py-2.5 hover:bg-purple-950/60 text-sm text-slate-200 transition-colors flex items-center gap-2 cursor-pointer"
+                          >
+                            <MapPin className="w-4 h-4 text-purple-400 shrink-0" />
+                            <span className="truncate">{place.description}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Quick / Predefined Popular Areas */}
+                    {filteredAreas.length > 0 && (
+                      <div className="py-1">
+                        <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 bg-slate-950/50">
+                          Popular Areas
+                        </div>
+                        {filteredAreas.map((area) => (
+                          <button
+                            key={area}
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              setValue('areaOfStay', area);
+                              setAreaSearch(area);
+                              setShowAreaDropdown(false);
+                              trigger('areaOfStay');
+                            }}
+                            className="w-full text-left px-4 py-2.5 hover:bg-purple-950/60 text-sm text-slate-200 transition-colors flex items-center gap-2 cursor-pointer"
+                          >
+                            <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span>{area}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {!isLoadingAreaSuggestions && locationSuggestions.length === 0 && filteredAreas.length === 0 && (
+                      <div className="px-4 py-3 text-xs text-slate-500">
+                        Type to enter custom location address.
                       </div>
                     )}
                   </div>

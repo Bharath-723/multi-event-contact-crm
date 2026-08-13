@@ -362,7 +362,7 @@ export default function AdminDashboardPage() {
   const getSkillsDistributionData = () => {
     const skillsMap: Record<string, number> = {
       'Singing': 0,
-      'Teaching': 0,
+      'Event Coordinator': 0,
       'Musical Instruments': 0,
       'Video Editing': 0
     };
