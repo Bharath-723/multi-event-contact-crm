@@ -26,41 +26,74 @@ export default function NotificationBell() {
     if (!selectedEventId) return;
     try {
       setIsLoading(true);
-      
-      // Fetch unread count scoped by festival_event_id
-      const { count, error: countErr } = await supabase
-        .from('notifications')
-        .select('*, registrations!inner(festival_event_id)', { count: 'exact', head: true })
-        .eq('is_read', false)
-        .eq('registrations.festival_event_id', selectedEventId);
+      const isKrishnashtami = selectedEventId === '7852cff8-e784-4e91-b990-a9838ea59ff1';
+      const regRel = isKrishnashtami
+        ? 'krishnashtami_registrations!krishnashtami_registration_id'
+        : 'registrations!registration_id';
 
+      // Fetch unread count scoped by festival
+      let countQuery = supabase
+        .from('notifications')
+        .select(`*, ${regRel}(festival_event_id)`, { count: 'exact', head: true })
+        .eq('is_read', false);
+
+      if (isKrishnashtami) {
+        countQuery = countQuery.not('krishnashtami_registration_id', 'is', null);
+      } else {
+        countQuery = countQuery.eq('registrations.festival_event_id', selectedEventId);
+      }
+
+      const { count, error: countErr } = await countQuery;
       if (!countErr && count !== null) {
         setUnreadCount(count);
       } else {
         setUnreadCount(0);
       }
 
-      // Fetch recent notifications (join with registrations, scoped by selectedEventId)
-      const { data, error: dataErr } = await supabase
+      // Fetch recent notifications
+      let dataQuery = supabase
         .from('notifications')
         .select(`
           id,
           registration_id,
+          krishnashtami_registration_id,
           is_read,
           created_at,
-          registrations!inner (
+          ${regRel} (
             full_name,
             phone,
             created_at,
             festival_event_id
           )
         `)
-        .eq('registrations.festival_event_id', selectedEventId)
         .order('created_at', { ascending: false })
         .limit(20);
 
+      if (isKrishnashtami) {
+        dataQuery = dataQuery.not('krishnashtami_registration_id', 'is', null);
+      } else {
+        dataQuery = dataQuery.eq('registrations.festival_event_id', selectedEventId);
+      }
+
+      const { data, error: dataErr } = await dataQuery;
+
       if (!dataErr && data) {
-        setNotifications(data as unknown as Notification[]);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const mapped = (data as any[]).map((item) => {
+          const regObj = item.krishnashtami_registrations || item.registrations;
+          return {
+            id: item.id,
+            registration_id: item.krishnashtami_registration_id || item.registration_id,
+            is_read: item.is_read,
+            created_at: item.created_at,
+            registrations: {
+              full_name: regObj?.full_name || 'New Registration',
+              phone: regObj?.phone,
+              created_at: regObj?.created_at,
+            },
+          };
+        });
+        setNotifications(mapped as Notification[]);
       } else {
         setNotifications([]);
       }
@@ -72,7 +105,6 @@ export default function NotificationBell() {
   }, [selectedEventId]);
 
   useEffect(() => {
-    // Reset state and fetch whenever selectedEventId changes
     /* eslint-disable react-hooks/set-state-in-effect */
     setNotifications([]);
     setUnreadCount(0);
@@ -81,27 +113,30 @@ export default function NotificationBell() {
 
     if (!selectedEventId) return;
 
-    // Subscribe to Supabase Realtime insert events on 'notifications' table
     const channel = supabase
       .channel(`realtime_notifications_${selectedEventId}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'notifications' },
         async (payload) => {
-          // Fetch registration details including festival_event_id
+          const isKrishnashtami = selectedEventIdRef.current === '7852cff8-e784-4e91-b990-a9838ea59ff1';
+          const regId = payload.new.krishnashtami_registration_id || payload.new.registration_id;
+          const regTable = isKrishnashtami ? 'krishnashtami_registrations' : 'registrations';
+
+          if (!regId) return;
+
           const { data: newReg, error } = await supabase
-            .from('registrations')
+            .from(regTable)
             .select('full_name, phone, created_at, festival_event_id')
-            .eq('id', payload.new.registration_id)
+            .eq('id', regId)
             .single();
 
-          // Only process notification if it matches the current active festival
-          if (!error && newReg && newReg.festival_event_id === selectedEventIdRef.current) {
+          if (!error && newReg) {
             setUnreadCount((prev) => prev + 1);
 
             const newNotification: Notification = {
               id: payload.new.id,
-              registration_id: payload.new.registration_id,
+              registration_id: regId,
               is_read: payload.new.is_read,
               created_at: payload.new.created_at,
               registrations: {

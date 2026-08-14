@@ -55,12 +55,17 @@ export async function GET(req: Request) {
   }
 
 
+  const isKrishnashtami = festivalEventId === '7852cff8-e784-4e91-b990-a9838ea59ff1';
+  const regTable = isKrishnashtami ? 'krishnashtami_registrations' : 'registrations';
+  const caTable = isKrishnashtami ? 'krishnashtami_contact_assignments' : 'contact_assignments';
+  const vvTable = isKrishnashtami ? 'krishnashtami_visitor_visits' : 'visitor_visits';
+
   let assignedIds: string[] = [];
 
   // If Operator, fetch only their assigned registrations
   if (auth.role === 'operator') {
     const { data: assignedRows, error: assignedErr } = await supabaseAdmin
-      .from('contact_assignments')
+      .from(caTable)
       .select('registration_id')
       .eq('operator_id', auth.id)
       .eq('is_active', true);
@@ -77,7 +82,7 @@ export async function GET(req: Request) {
 
   // Build Registrations Query
   let query = supabaseAdmin
-    .from('registrations')
+    .from(regTable)
     .select(`
       id,
       full_name,
@@ -95,14 +100,14 @@ export async function GET(req: Request) {
       registration_no,
       festival_event_id,
       volunteer_slots:volunteer_slot_id (slot_time),
-      contact_assignments (
+      ${caTable} (
         id,
         operator_id,
         is_active,
         status,
         contact_operators (id, name, email, phone)
       ),
-      visitor_visits (
+      ${vvTable} (
         id,
         visited_at,
         visit_method,
@@ -113,7 +118,7 @@ export async function GET(req: Request) {
       )
     `);
 
-  if (festivalEventId) {
+  if (!isKrishnashtami && festivalEventId) {
     query = query.eq('festival_event_id', festivalEventId);
   }
 
@@ -140,17 +145,16 @@ export async function GET(req: Request) {
 
   // Format response details and filter contact assignments to only active ones
   const formatted = (registrations ?? []).map((reg) => {
-    // Only return active assignments
-    const activeAssignments = (reg.contact_assignments ?? []).filter(
-      (a: { is_active: boolean }) => a.is_active
+    const rawReg = reg as Record<string, unknown>;
+    const assignmentsList = (rawReg[caTable] || []) as Record<string, unknown>[];
+    const visitsList = (rawReg[vvTable] || []) as Record<string, unknown>[];
+
+    const activeAssignments = assignmentsList.filter(
+      (a: { is_active?: boolean }) => a.is_active
     );
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const assignedOpRaw = activeAssignments[0]?.contact_operators as any;
+    const assignedOpRaw = activeAssignments[0]?.contact_operators as unknown;
     const assignedOp = Array.isArray(assignedOpRaw) ? assignedOpRaw[0] : assignedOpRaw;
-    
-    // Visit Status info
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const visitRecord = reg.visitor_visits?.[0] as any;
+    const visitRecord = visitsList[0] as Record<string, unknown> | undefined;
 
     return {
       id: reg.id,
@@ -165,18 +169,16 @@ export async function GET(req: Request) {
       interested_to_volunteer: reg.interested_to_volunteer,
       interested_to_dinner: reg.interested_to_dinner,
       transportation_required: reg.transportation_required,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      operator_status: (activeAssignments[0] as any)?.status ?? 'Pending',
+      operator_status: (activeAssignments[0] as { status?: string })?.status ?? 'Pending',
       created_at: reg.created_at,
       volunteer_slot_time: (() => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const slotRaw = reg.volunteer_slots as any;
+        const slotRaw = reg.volunteer_slots as unknown;
         const slot = Array.isArray(slotRaw) ? slotRaw[0] : slotRaw;
-        return slot?.slot_time ?? null;
+        return (slot as { slot_time?: string })?.slot_time ?? null;
       })(),
       assigned_operator: assignedOp ? {
-        id: assignedOp.id,
-        name: assignedOp.name,
+        id: (assignedOp as { id: string }).id,
+        name: (assignedOp as { name: string }).name,
       } : null,
       visit: visitRecord ? {
         id: visitRecord.id,
@@ -185,10 +187,9 @@ export async function GET(req: Request) {
         visited_by_admin: visitRecord.visited_by_admin,
         remarks: visitRecord.remarks,
         operator_name: (() => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const opRaw = visitRecord.contact_operators as any;
+          const opRaw = visitRecord.contact_operators as unknown;
           const op = Array.isArray(opRaw) ? opRaw[0] : opRaw;
-          return op?.name ?? (visitRecord.visited_by_admin ? 'Admin' : 'System');
+          return (op as { name?: string })?.name ?? (visitRecord.visited_by_admin ? 'Admin' : 'System');
         })(),
       } : null,
     };

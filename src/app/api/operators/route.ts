@@ -1,10 +1,11 @@
 /**
- * GET  /api/operators   — Admin: list all operators with stats (scoped by festival_event_id)
+ * GET  /api/operators   — Admin: list all operators with stats (scoped by source/festival)
  * POST /api/operators   — Admin: create new operator
  */
 import { NextResponse, NextRequest } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { hashPassword } from '@/lib/operator-auth';
+import { normalizeSource } from '@/lib/source-resolver';
 
 // ─── Guard: Validate admin session from Supabase Auth header ────────────────
 async function requireAdmin(req: Request): Promise<{ error: NextResponse | null }> {
@@ -30,7 +31,15 @@ export async function GET(req: NextRequest) {
   const { error: authError } = await requireAdmin(req);
   if (authError) return authError;
 
-  const festivalEventId = req.nextUrl.searchParams.get('festival_event_id');
+  const rawSource = req.nextUrl.searchParams.get('source') ?? req.nextUrl.searchParams.get('contact_source');
+  const source = normalizeSource(rawSource);
+
+  const assignTable =
+    source === 'krishnashtami'
+      ? 'krishnashtami_contact_assignments'
+      : source === 'feedback_contacts'
+      ? 'feedback_contact_assignments'
+      : 'contact_assignments';
 
   // 1. Fetch all operators
   const { data: operators, error } = await supabaseAdmin
@@ -40,18 +49,12 @@ export async function GET(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // 2. Fetch contact_assignments scoped by festival_event_id
-  let caQuery = supabaseAdmin
-    .from('contact_assignments')
-    .select('id, operator_id, status, is_active, registrations!inner(festival_event_id)');
+  // 2. Fetch contact assignments from source-specific assignment table
+  const { data: assignments } = await supabaseAdmin
+    .from(assignTable)
+    .select('id, operator_id, status, is_active');
 
-  if (festivalEventId) {
-    caQuery = caQuery.eq('registrations.festival_event_id', festivalEventId);
-  }
-
-  const { data: assignments } = await caQuery;
-
-  const assignmentsByOp = new Map<string, typeof assignments>();
+  const assignmentsByOp = new Map<string, Array<{ id: string; operator_id: string; status: string; is_active: boolean }>>();
   (assignments || []).forEach((fa) => {
     if (!fa.operator_id) return;
     const list = assignmentsByOp.get(fa.operator_id) || [];
@@ -79,7 +82,7 @@ export async function GET(req: NextRequest) {
     };
   });
 
-  return NextResponse.json({ operators: withStats });
+  return NextResponse.json({ operators: withStats, source });
 }
 
 // ─── POST /api/operators ────────────────────────────────────────────────────
@@ -104,7 +107,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid operator_type' }, { status: 400 });
   }
 
-  // Check duplicate email
   const { data: existing } = await supabaseAdmin
     .from('contact_operators')
     .select('id')
@@ -131,7 +133,6 @@ export async function POST(req: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Audit log
   await supabaseAdmin.from('audit_logs').insert({
     action: 'OPERATOR_CREATED',
     details: { operator_id: operator.id, name: operator.name, email: operator.email },

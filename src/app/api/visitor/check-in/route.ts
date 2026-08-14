@@ -53,9 +53,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'festival_event_id is required' }, { status: 400 });
   }
 
-  // 1. Fetch the registration — verify it exists AND belongs to the specified festival.
+  const isKrishnashtami = festival_event_id === '7852cff8-e784-4e91-b990-a9838ea59ff1';
+  const regTable = isKrishnashtami ? 'krishnashtami_registrations' : 'registrations';
+  const caTable = isKrishnashtami ? 'krishnashtami_contact_assignments' : 'contact_assignments';
+  const vvTable = isKrishnashtami ? 'krishnashtami_visitor_visits' : 'visitor_visits';
+
+  // 1. Fetch the registration — verify it exists
   const { data: reg, error: regErr } = await supabaseAdmin
-    .from('registrations')
+    .from(regTable)
     .select('id, registration_no, full_name, festival_event_id')
     .eq('id', registration_id)
     .single();
@@ -64,19 +69,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Registration record not found' }, { status: 404 });
   }
 
-  // Festival isolation: reject cross-festival check-ins.
-  if (reg.festival_event_id !== festival_event_id) {
+  // Festival isolation check (for main registrations table)
+  if (!isKrishnashtami && reg.festival_event_id !== festival_event_id) {
     return NextResponse.json(
       { error: 'Forbidden: This registration does not belong to the selected festival.' },
       { status: 403 }
     );
   }
 
-
   // Security constraint: If Operator, ensure they only check in a contact assigned to them
   if (auth.role === 'operator') {
     const { data: assignment, error: assignErr } = await supabaseAdmin
-      .from('contact_assignments')
+      .from(caTable)
       .select('id')
       .eq('registration_id', registration_id)
       .eq('operator_id', auth.id)
@@ -88,38 +92,32 @@ export async function POST(req: Request) {
     }
   }
 
-  // 2. Check if a visit already exists in visitor_visits (duplicate check-in protection)
+  // 2. Check if a visit already exists in target visit table
   const { data: existingVisit } = await supabaseAdmin
-    .from('visitor_visits')
+    .from(vvTable)
     .select(`
       id,
       visited_at,
       visit_method,
-      visited_by_admin,
-      contact_operators (name)
+      visited_by_admin
     `)
     .eq('registration_id', registration_id)
     .maybeSingle();
 
   if (existingVisit) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const contactOp = existingVisit.contact_operators as any;
-    const checkedInBy = (Array.isArray(contactOp) ? contactOp[0] : contactOp)?.name ?? 
-      (existingVisit.visited_by_admin ? 'Admin' : 'System');
-
     return NextResponse.json({
       error: 'Already Checked In',
       details: {
         visited_at: existingVisit.visited_at,
         visit_method: existingVisit.visit_method,
-        checked_in_by: checkedInBy,
+        checked_in_by: existingVisit.visited_by_admin ? 'Admin' : 'Operator',
       }
     }, { status: 409 });
   }
 
-  // 3. Insert visit record
+  // 3. Insert visit record into target visit table
   const { data: newVisit, error: insertErr } = await supabaseAdmin
-    .from('visitor_visits')
+    .from(vvTable)
     .insert({
       registration_id,
       visited_by: auth.role === 'operator' ? auth.id : null,

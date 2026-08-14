@@ -13,7 +13,7 @@
 
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { MAX_CONTACTS_PER_OPERATOR } from '@/lib/assignment-engine';
+import { assignOperator, MAX_CONTACTS_PER_OPERATOR } from '@/lib/assignment-engine';
 
 // ─── Concurrency Lock ─────────────────────────────────────────────────────────
 let isBatchRunning = false;
@@ -55,15 +55,35 @@ export async function POST(req: Request) {
   const { error: authError, userId } = await requireAdmin(req);
   if (authError) return authError;
 
-  let body: { dry_run?: boolean; festival_event_id?: string } = {};
+  let body: { dry_run?: boolean; source?: string } = {};
   try {
     body = await req.json();
   } catch {
     body = {};
   }
 
-  const isDryRun = body.dry_run !== false; // default to dry_run=true for safety
-  const festivalEventId = body.festival_event_id || null;
+  const isDryRun = body.dry_run !== false;
+  const source = body.source ?? 'rathayatra';
+
+  if (!['rathayatra', 'krishnashtami', 'feedback'].includes(source)) {
+    return NextResponse.json({ error: 'Invalid or missing source parameter' }, { status: 400 });
+  }
+
+  const targetRegTable =
+    source === 'krishnashtami'
+      ? 'krishnashtami_registrations'
+      : source === 'feedback'
+      ? 'feedback_contacts'
+      : 'registrations';
+
+  const assignTable =
+    source === 'krishnashtami'
+      ? 'krishnashtami_contact_assignments'
+      : source === 'feedback'
+      ? 'feedback_contact_assignments'
+      : 'contact_assignments';
+
+  const fkCol = source === 'feedback' ? 'feedback_contact_id' : 'registration_id';
 
   // ── 1. Fetch active operators ────────────────────────────────────────────────
   const { data: operators, error: opsError } = await supabaseAdmin
@@ -79,18 +99,12 @@ export async function POST(req: Request) {
 
   const activeOperators = operators ?? [];
 
-  // ── 2. Fetch current active (non-Not-Coming) assignment counts per operator ──
-  let countQuery = supabaseAdmin
-    .from('contact_assignments')
-    .select('operator_id, registrations!inner(festival_event_id)')
+  // ── 2. Fetch current active assignment counts per operator for this source ──
+  const { data: assignmentCounts, error: countError } = await supabaseAdmin
+    .from(assignTable)
+    .select('operator_id')
     .eq('is_active', true)
     .neq('status', 'Not Coming');
-
-  if (festivalEventId) {
-    countQuery = countQuery.eq('registrations.festival_event_id', festivalEventId);
-  }
-
-  const { data: assignmentCounts, error: countError } = await countQuery;
 
   if (countError) {
     return NextResponse.json({ error: 'Failed to fetch assignment counts: ' + countError.message }, { status: 500 });
@@ -103,36 +117,29 @@ export async function POST(req: Request) {
     }
   }
 
-  // ── 3. Fetch unassigned registrations ────────────────────────────────────────
-  let regsQuery = supabaseAdmin
-    .from('registrations')
-    .select('id, full_name, gender, festival_event_id')
+  // ── 3. Fetch unassigned contacts from target table ─────────────────────────
+  const { data: unassignedRegs, error: regsError } = await supabaseAdmin
+    .from(targetRegTable)
+    .select('id, full_name, gender')
     .order('created_at', { ascending: true });
-
-  if (festivalEventId) {
-    regsQuery = regsQuery.eq('festival_event_id', festivalEventId);
-  }
-
-  const { data: unassignedRegs, error: regsError } = await regsQuery;
 
   if (regsError) {
     return NextResponse.json({ error: 'Failed to fetch registrations: ' + regsError.message }, { status: 500 });
   }
 
-  // Get all currently-assigned registration IDs
+  // Get assigned & Not-Coming IDs from assignTable
   const { data: assignedRows } = await supabaseAdmin
-    .from('contact_assignments')
-    .select('registration_id')
+    .from(assignTable)
+    .select(`${fkCol}`)
     .eq('is_active', true);
 
-  // Get all registration IDs ever marked as 'Not Coming'
   const { data: notComingRows } = await supabaseAdmin
-    .from('contact_assignments')
-    .select('registration_id')
+    .from(assignTable)
+    .select(`${fkCol}`)
     .eq('status', 'Not Coming');
 
-  const assignedSet = new Set((assignedRows ?? []).map((r) => r.registration_id));
-  const notComingSet = new Set((notComingRows ?? []).map((r) => r.registration_id));
+  const assignedSet = new Set((assignedRows ?? []).map((r) => (r as Record<string, string>)[fkCol]));
+  const notComingSet = new Set((notComingRows ?? []).map((r) => (r as Record<string, string>)[fkCol]));
   
   const unassigned = (unassignedRegs ?? []).filter(
     (r) => !assignedSet.has(r.id) && !notComingSet.has(r.id)
@@ -151,16 +158,17 @@ export async function POST(req: Request) {
     available: MAX_CONTACTS_PER_OPERATOR - (countMap[op.id] ?? 0),
   }));
 
-  const skippedFemaleCount = unassigned.filter(r => r.gender === 'Female').length;
-  const eligibleMaleCount = unassigned.filter(r => r.gender === 'Male').length;
+  const skippedFemaleCount = source === 'feedback' ? 0 : unassigned.filter(r => r.gender === 'Female').length;
+  const eligibleCount = source === 'feedback' ? unassigned.length : unassigned.filter(r => r.gender === 'Male').length;
   
-  const willAssign = Math.min(eligibleMaleCount, Math.max(0, availableSlots));
-  const willSkipCapacity = Math.max(0, eligibleMaleCount - availableSlots);
+  const willAssign = Math.min(eligibleCount, Math.max(0, availableSlots));
+  const willSkipCapacity = Math.max(0, eligibleCount - availableSlots);
 
   const dryRunSummary = {
+    source,
     total_unassigned: unassigned.length,
     skipped_female: skippedFemaleCount,
-    eligible_male: eligibleMaleCount,
+    eligible_male: eligibleCount,
     active_operators: activeOperators.length,
     total_capacity: totalCapacity,
     currently_assigned: currentlyAssigned,
@@ -168,24 +176,18 @@ export async function POST(req: Request) {
     will_assign: willAssign,
     will_skip_capacity: willSkipCapacity,
     will_skip: skippedFemaleCount + willSkipCapacity,
-    capacity_warning: eligibleMaleCount > availableSlots,
+    capacity_warning: eligibleCount > availableSlots,
     operator_breakdown: operatorSummaries,
   };
 
-  // ── 5. Dry-run: return summary without assigning ─────────────────────────────
   if (isDryRun) {
     return NextResponse.json({ dry_run: true, summary: dryRunSummary });
   }
 
-  // ── 6. Concurrency guard ─────────────────────────────────────────────────────
   if (isBatchRunning) {
-    return NextResponse.json(
-      { error: 'Batch assignment already in progress.' },
-      { status: 409 }
-    );
+    return NextResponse.json({ error: 'Batch assignment already in progress.' }, { status: 409 });
   }
 
-  // ── 7. Execute batch assignment ──────────────────────────────────────────────
   isBatchRunning = true;
 
   let assigned = 0;
@@ -196,29 +198,15 @@ export async function POST(req: Request) {
 
   try {
     for (const reg of unassigned) {
-      if (reg.gender === 'Female') {
+      if (source !== 'feedback' && reg.gender === 'Female') {
         skippedFemale++;
-        console.log("Assignment skipped: Female registration.");
         continue;
       }
 
       try {
-        const { data: operatorId, error: rpcError } = await supabaseAdmin.rpc(
-          'assign_operator_to_registration',
-          {
-            p_registration_id: reg.id,
-            p_max_contacts: MAX_CONTACTS_PER_OPERATOR,
-            p_festival_event_id: festivalEventId,
-          }
-        );
+        const assignedOpId = await assignOperator(reg.id, source as 'rathayatra' | 'krishnashtami' | 'feedback');
 
-        if (rpcError) {
-          console.error(`[auto-assign] RPC error for ${reg.id}:`, rpcError.message);
-          failed++;
-          continue;
-        }
-
-        if (!operatorId) {
+        if (!assignedOpId) {
           skippedCapacity++;
           continue;
         }
@@ -227,21 +215,21 @@ export async function POST(req: Request) {
           admin_id: userId ?? null,
           action: 'AUTO_ASSIGNMENT',
           details: {
+            source,
             registration_id: reg.id,
-            operator_id: operatorId,
-            festival_event_id: festivalEventId,
+            operator_id: assignedOpId,
             batch: true,
           },
         });
 
         assigned++;
-        if (!distribution[operatorId]) {
-          const op = activeOperators.find((o) => o.id === operatorId);
-          distribution[operatorId] = { name: op?.name ?? operatorId, assigned_in_batch: 0 };
+        if (!distribution[assignedOpId]) {
+          const op = activeOperators.find((o) => o.id === assignedOpId);
+          distribution[assignedOpId] = { name: op?.name ?? assignedOpId, assigned_in_batch: 0 };
         }
-        distribution[operatorId].assigned_in_batch++;
+        distribution[assignedOpId].assigned_in_batch++;
       } catch (err) {
-        console.error(`[auto-assign] Unexpected error for ${reg.id}:`, err);
+        console.error(`[auto-assign] Unexpected error for ${reg.id} (${source}):`, err);
         failed++;
       }
     }
@@ -250,11 +238,12 @@ export async function POST(req: Request) {
   }
 
   const report = {
+    source,
     total_unassigned: unassigned.length,
     successfully_assigned: assigned,
     skipped_female: skippedFemale,
     skipped_no_capacity: skippedCapacity,
-    failed: failed,
+    failed,
     distribution: Object.entries(distribution).map(([id, d]) => ({
       operator_id: id,
       operator_name: d.name,

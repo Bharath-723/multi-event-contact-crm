@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useFestival } from '@/lib/contexts/FestivalContext';
+import { getRegistrationSource } from '@/lib/source-resolver';
 
 interface SearchResult {
   id: string;
@@ -190,12 +191,13 @@ export default function AdminVisitorPage() {
     // Realtime subscription keyed to this specific festival so we don't
     // cross-contaminate when switching festivals. The channel name includes
     // the festival ID so Supabase creates a new subscription per festival.
+    const sourceConfig = getRegistrationSource(selectedEventId);
     const channelName = `visitor_checkins_${selectedEventId}`;
     const channel = supabase
       .channel(channelName)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'visitor_visits' },
+        { event: 'INSERT', schema: 'public', table: sourceConfig.visitsTable },
         () => {
           // Re-fetch stats and logs scoped to the current festival only
           loadStatsAndLogs(selectedEventId);

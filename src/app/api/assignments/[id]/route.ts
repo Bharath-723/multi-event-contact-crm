@@ -1,7 +1,7 @@
 /**
- * PATCH /api/assignments/[id]
- * Operator: update call status and/or remarks on their own assignment.
- * Server-side validation ensures operator owns the assignment.
+ * /api/assignments/[id]
+ * Source-aware endpoint for updating or deactivating contact assignments.
+ * Supports source query parameter: ?source=rathayatra | krishnashtami | feedback
  */
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
@@ -12,10 +12,20 @@ const VALID_STATUSES: AssignmentStatus[] = [
   'Pending', 'Coming', 'Not Coming', 'Callback Required',
 ];
 
+function getAssignmentTable(source: string | null) {
+  if (source === 'krishnashtami') return 'krishnashtami_contact_assignments';
+  if (source === 'feedback') return 'feedback_contact_assignments';
+  return 'contact_assignments';
+}
+
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const url = new URL(req.url);
+  const sourceParam = url.searchParams.get('source');
+  const assignTable = getAssignmentTable(sourceParam);
+
   // Validate operator session from cookie
   const session = getOperatorSessionFromRequest(req);
   if (!session) {
@@ -26,7 +36,7 @@ export async function PATCH(
 
   // Fetch the assignment and verify it belongs to this operator
   const { data: assignment, error: fetchError } = await supabaseAdmin
-    .from('contact_assignments')
+    .from(assignTable)
     .select('id, operator_id, status, is_active')
     .eq('id', id)
     .single();
@@ -62,7 +72,6 @@ export async function PATCH(
     if (body.status === 'Not Coming') {
       updates.is_active = false;
     }
-    // Record when contact was first actioned
     if (body.status !== 'Pending' && !assignment.status) {
       updates.called_at = new Date().toISOString();
     }
@@ -77,7 +86,7 @@ export async function PATCH(
   }
 
   const { data: updated, error: updateError } = await supabaseAdmin
-    .from('contact_assignments')
+    .from(assignTable)
     .update(updates)
     .eq('id', id)
     .select()
@@ -85,7 +94,6 @@ export async function PATCH(
 
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
 
-  // Audit log with full status change details
   const isStatusChange = body.status !== undefined;
   await supabaseAdmin.from('audit_logs').insert({
     action: isStatusChange ? 'ASSIGNMENT_STATUS_UPDATED' : 'ASSIGNMENT_REMARKS_UPDATED',
@@ -93,7 +101,8 @@ export async function PATCH(
       assignment_id: id,
       operator_id: session.operatorId,
       operator_name: session.name,
-      ...(isStatusChange ? {
+      source: sourceParam ?? 'rathayatra',
+      ...(body.status !== undefined ? {
         old_status: oldStatus,
         new_status: body.status,
       } : {}),
@@ -105,12 +114,15 @@ export async function PATCH(
   return NextResponse.json({ assignment: updated });
 }
 
-// Admin can also PATCH (e.g., to add remarks from admin side)
+// Admin can also PUT (e.g., to add remarks from admin side)
 export async function PUT(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  // Admin auth
+  const url = new URL(req.url);
+  const sourceParam = url.searchParams.get('source');
+  const assignTable = getAssignmentTable(sourceParam);
+
   const authHeader = req.headers.get('Authorization') || '';
   const token = authHeader.replace('Bearer ', '');
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -132,7 +144,7 @@ export async function PUT(
   if (body.remarks !== undefined) updates.remarks = body.remarks;
 
   const { data: updated, error: updateError } = await supabaseAdmin
-    .from('contact_assignments')
+    .from(assignTable)
     .update(updates)
     .eq('id', id)
     .select()
@@ -143,11 +155,14 @@ export async function PUT(
 }
 
 // DELETE /api/assignments/[id]
-// Admin: deactivate assignment (unassign contact) while keeping audit log history
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const url = new URL(req.url);
+  const sourceParam = url.searchParams.get('source');
+  const assignTable = getAssignmentTable(sourceParam);
+
   const authHeader = req.headers.get('Authorization') || '';
   const token = authHeader.replace('Bearer ', '');
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -159,26 +174,25 @@ export async function DELETE(
   const { id } = await params;
 
   const { data: updated, error: updateError } = await supabaseAdmin
-    .from('contact_assignments')
+    .from(assignTable)
     .update({
       is_active: false,
       updated_at: new Date().toISOString()
     })
     .eq('id', id)
-    .select('id, registration_id, operator_id')
+    .select()
     .single();
 
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
   if (!updated) return NextResponse.json({ error: 'Assignment not found' }, { status: 404 });
 
-  // Record audit log
   await supabaseAdmin.from('audit_logs').insert({
     admin_id: user.id,
     action: 'ASSIGNMENT_DEACTIVATED',
     details: {
       assignment_id: id,
-      registration_id: updated.registration_id,
-      operator_id: updated.operator_id
+      source: sourceParam ?? 'rathayatra',
+      operator_id: (updated as { operator_id?: string }).operator_id
     },
   });
 

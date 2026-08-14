@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useFestival } from '@/lib/contexts/FestivalContext';
 import {
   Search, Clock, CheckCircle2, AlertCircle, Loader2, X,
   UserCheck, Smartphone, Check, Shield, UserX
@@ -42,6 +43,7 @@ interface SuccessCheckIn {
 }
 
 export default function OperatorVisitorPage() {
+  const { selectedEventId } = useFestival();
   const [query, setQuery] = useState('');
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -66,13 +68,18 @@ export default function OperatorVisitorPage() {
       return;
     }
 
+    if (!selectedEventId) {
+      setSearchError('Please select a festival in the header.');
+      return;
+    }
+
     setLoadingSearch(true);
     setSearchError(null);
     setErrorCheckIn(null);
     setResults([]);
     setSelectedVisitor(null);
     try {
-      const res = await fetch(`/api/visitor/search?q=${encodeURIComponent(searchVal)}`);
+      const res = await fetch(`/api/visitor/search?q=${encodeURIComponent(searchVal)}&festival_event_id=${selectedEventId}`);
       const data = await res.json();
       if (!res.ok) {
         setSearchError(data.error || `Search failed (HTTP ${res.status}). Please try again.`);
@@ -106,7 +113,7 @@ export default function OperatorVisitorPage() {
 
   // 3. Check-in Action
   const handleApproveCheckIn = async () => {
-    if (!selectedVisitor) return;
+    if (!selectedVisitor || !selectedEventId) return;
     setCheckingIn(true);
     setErrorCheckIn(null);
 
@@ -118,6 +125,7 @@ export default function OperatorVisitorPage() {
         },
         body: JSON.stringify({
           registration_id: selectedVisitor.id,
+          festival_event_id: selectedEventId,
           remarks: checkInRemarks,
         }),
       });

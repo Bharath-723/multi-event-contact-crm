@@ -1,10 +1,11 @@
 /**
- * GET /api/assignments/check?registration_id=...
- * Admin: check if a registration already has an active assignment.
+ * GET /api/assignments/check?registration_id=...&source=...
+ * Admin: check if a registration already has an active assignment in target source table.
  * Returns the existing operator info or null.
  */
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { normalizeSource } from '@/lib/source-resolver';
 
 async function requireAdmin(req: Request): Promise<{ error: NextResponse | null }> {
   const authHeader = req.headers.get('Authorization') || '';
@@ -25,17 +26,30 @@ export async function GET(req: Request) {
   const regId = url.searchParams.get('registration_id');
   if (!regId) return NextResponse.json({ error: 'registration_id is required' }, { status: 400 });
 
+  const rawSource = url.searchParams.get('source');
+  const source = normalizeSource(rawSource);
+
+  const assignTable =
+    source === 'krishnashtami'
+      ? 'krishnashtami_contact_assignments'
+      : source === 'feedback_contacts'
+      ? 'feedback_contact_assignments'
+      : 'contact_assignments';
+
+  const fkCol = source === 'feedback_contacts' ? 'feedback_contact_id' : 'registration_id';
+  const notesOrRemarksCol = source === 'feedback_contacts' ? 'notes' : 'remarks';
+
   const { data, error } = await supabaseAdmin
-    .from('contact_assignments')
+    .from(assignTable)
     .select(`
-      id, status, assigned_at, remarks,
+      id, status, assigned_at, ${notesOrRemarksCol},
       contact_operators!operator_id (id, name, email, phone)
     `)
-    .eq('registration_id', regId)
+    .eq(fkCol, regId)
     .eq('is_active', true)
     .maybeSingle();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ assignment: data ?? null });
+  return NextResponse.json({ assignment: data ?? null, source });
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { getRegistrationSource } from '@/lib/source-resolver';
 
 export async function GET(req: Request) {
   // Check authorization
@@ -33,7 +34,6 @@ export async function GET(req: Request) {
   const limit = Math.min(100, parseInt(url.searchParams.get('limit') ?? '50', 10));
   const festivalEventId = url.searchParams.get('festival_event_id');
 
-  // festival_event_id is required — reject global (unscoped) log requests.
   if (!festivalEventId) {
     return NextResponse.json(
       { error: 'festival_event_id is required' },
@@ -41,13 +41,20 @@ export async function GET(req: Request) {
     );
   }
 
+  const sourceConfig = getRegistrationSource(festivalEventId);
+  const regTable = sourceConfig.regTable;
+  const visitsTable = sourceConfig.visitsTable;
+
   // Step 1: Resolve registration IDs for this festival.
-  // Using .eq('registrations.festival_event_id') on embedded joins is silently
-  // dropped in count/head queries. Use a direct .in() instead.
-  const { data: regRows, error: regErr } = await supabaseAdmin
-    .from('registrations')
-    .select('id')
-    .eq('festival_event_id', festivalEventId);
+  let regQuery = supabaseAdmin
+    .from(regTable)
+    .select('id');
+
+  if (!sourceConfig.isKrishnashtami) {
+    regQuery = regQuery.eq('festival_event_id', festivalEventId);
+  }
+
+  const { data: regRows, error: regErr } = await regQuery;
 
   if (regErr) {
     return NextResponse.json({ error: regErr.message }, { status: 500 });
@@ -55,14 +62,13 @@ export async function GET(req: Request) {
 
   const registrationIds = (regRows ?? []).map((r) => r.id);
 
-  // If festival has no registrations yet, return empty logs immediately.
   if (registrationIds.length === 0) {
     return NextResponse.json({ logs: [] });
   }
 
-  // Step 2: Fetch visitor visits scoped to those registration IDs.
+  // Step 2: Fetch visitor visits from target visitsTable.
   const { data: logs, error: logsErr } = await supabaseAdmin
-    .from('visitor_visits')
+    .from(visitsTable)
     .select(`
       id,
       visited_at,
@@ -70,7 +76,7 @@ export async function GET(req: Request) {
       visited_by_admin,
       remarks,
       registration_id,
-      registrations!inner (
+      ${regTable}!inner (
         registration_no,
         full_name,
         phone,
@@ -89,20 +95,19 @@ export async function GET(req: Request) {
   }
 
   const formatted = (logs ?? []).map((row) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const regRaw = row.registrations as any;
+    const rowObj = row as Record<string, unknown>;
+    const regRaw = rowObj[regTable] as unknown;
     const reg = Array.isArray(regRaw) ? regRaw[0] : regRaw;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const opRaw = row.contact_operators as any;
+    const opRaw = row.contact_operators as unknown;
     const operator = Array.isArray(opRaw) ? opRaw[0] : opRaw;
     return {
       id: row.id,
       visited_at: row.visited_at,
       visit_method: row.visit_method,
-      registration_no: reg?.registration_no ?? '—',
-      full_name: reg?.full_name ?? '—',
-      phone: reg?.phone ?? '—',
-      checked_in_by: operator?.name ?? (row.visited_by_admin ? 'Admin' : 'System'),
+      registration_no: (reg as { registration_no?: string })?.registration_no ?? '—',
+      full_name: (reg as { full_name?: string })?.full_name ?? '—',
+      phone: (reg as { phone?: string })?.phone ?? '—',
+      checked_in_by: (operator as { name?: string })?.name ?? (row.visited_by_admin ? 'Admin' : 'System'),
       status: 'Visited'
     };
   });

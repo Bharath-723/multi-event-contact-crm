@@ -322,13 +322,17 @@ function OperatorFormModal({
   );
 }
 
+import { ContactSource } from '@/lib/source-resolver';
+
 // ─── View Assigned Modal ──────────────────────────────────────────────────────
 function ViewAssignedModal({
   operator,
+  contactSource,
   onClose,
   onUnassigned,
 }: {
   operator: ContactOperator;
+  contactSource: ContactSource;
   onClose: () => void;
   onUnassigned: () => void;
 }) {
@@ -344,30 +348,44 @@ function ViewAssignedModal({
 
   const loadAssignments = useCallback(async () => {
     try {
-      const res = await fetch(`/api/assignments/feedback?operator_id=${operator.id}&is_active=true`);
+      setLoading(true);
+      const auth = await getAuthHeader();
+      const res = await fetch(`/api/assignments?source=${contactSource}&operator_id=${operator.id}&limit=200`, {
+        headers: { Authorization: auth },
+      });
       if (res.ok) {
         const d = await res.json();
-        setAssignments(d.assignments ?? []);
-        setTotalCount((d.assignments ?? []).length);
+        const list = d.assignments ?? [];
+        setAssignments(list);
+        setTotalCount(d.total ?? list.length);
+      } else {
+        setAssignments([]);
+        setTotalCount(0);
       }
+    } catch {
+      setAssignments([]);
+      setTotalCount(0);
     } finally {
       setLoading(false);
     }
-  }, [operator.id]);
+  }, [operator.id, contactSource]);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     loadAssignments();
   }, [loadAssignments]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleConfirmUnassign = async () => {
     if (!unassignId) return;
     setUnassigning(true);
     setErrorUnassign(null);
     try {
-      const res = await fetch(`/api/assignments/feedback/${unassignId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_active: false, status: 'Not Coming' }),
+      const { data: { session } } = await (await import('@/lib/supabase')).supabase.auth.getSession();
+      const auth = session?.access_token ? `Bearer ${session.access_token}` : '';
+      const res = await fetch(`/api/assignments/${unassignId}?source=${contactSource}`, {
+        method: 'DELETE',
+        headers: { Authorization: auth },
       });
       if (!res.ok) {
         const d = await res.json();
@@ -389,7 +407,6 @@ function ViewAssignedModal({
     Coming:             'text-green-400  bg-green-950/30  border-green-500/20',
     'Not Coming':       'text-red-400    bg-red-950/30    border-red-500/20',
     'Callback Required':'text-blue-400   bg-blue-950/30   border-blue-500/20',
-    // Legacy fallbacks (post-migration data safety)
     Called:             'text-blue-400   bg-blue-950/30   border-blue-500/20',
     Confirmed:          'text-green-400  bg-green-950/30  border-green-500/20',
     'No Answer':        'text-red-400    bg-red-950/30    border-red-500/20',
@@ -397,6 +414,13 @@ function ViewAssignedModal({
     Completed:          'text-green-400  bg-green-950/30  border-green-500/20',
     Visited:            'text-green-400  bg-green-950/30  border-green-500/20',
   };
+
+  const sourceTitle =
+    contactSource === 'krishnashtami'
+      ? 'Krishnashtami 2026'
+      : contactSource === 'feedback_contacts'
+      ? 'Feedback Contacts'
+      : 'Rathayatra 2026';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
@@ -414,30 +438,46 @@ function ViewAssignedModal({
           </div>
           <div>
             <h2 className="text-base font-extrabold text-slate-100">{operator.name}</h2>
-            <p className="text-xs text-slate-500">Assigned Contacts — {totalCount} total</p>
+            <p className="text-xs text-slate-400">
+              <span className="text-purple-400 font-bold">{sourceTitle}</span> · Assigned Contacts — {totalCount} total
+            </p>
           </div>
         </div>
         <div className="overflow-y-auto flex-1 space-y-2 pr-1">
           {loading && <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-purple-400" /></div>}
           {!loading && totalCount === 0 && (
-            <p className="text-slate-500 text-sm text-center py-8">No contacts assigned yet.</p>
+            <p className="text-slate-500 text-sm text-center py-8">No contacts assigned for {sourceTitle}.</p>
           )}
           {assignments.map((a) => {
-            const fc = (a.feedback_contact || a.registrations) as Record<string, unknown> | null;
+            const fc = (
+              a.krishnashtami_registrations ||
+              a.registrations ||
+              a.feedback_contacts ||
+              a.feedback_contact
+            ) as Record<string, unknown> | null;
+
+            const fullName = String(fc?.full_name ?? '—');
+            const phone = String(fc?.phone ?? '—');
+            const subDetail = fc?.college_name
+              ? `${String(fc.college_name)} (${String(fc.branch ?? '')})`
+              : fc?.company_college
+              ? String(fc.company_college)
+              : '';
+
             const statusClass = statusColors[(a.status as string)] ?? 'text-slate-400 bg-slate-900/40 border-slate-700/30';
             const notesText: string | null = typeof a.notes === 'string' ? a.notes : typeof a.remarks === 'string' ? a.remarks : null;
             return (
               <div key={a.id as string} className="flex items-center justify-between gap-3 p-3 bg-slate-900/30 rounded-xl border border-slate-800/40">
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-slate-100 truncate">{String(fc?.full_name ?? '—')}</p>
-                  <p className="text-xs text-slate-400">{String(fc?.phone ?? '—')}{fc?.college_name ? ` · ${String(fc.college_name)} (${String(fc.branch ?? '')})` : ''}</p>
+                  <p className="text-sm font-semibold text-slate-100 truncate">{fullName}</p>
+                  <p className="text-xs text-slate-400">{phone}{subDetail ? ` · ${subDetail}` : ''}</p>
                   {notesText && <p className="text-xs text-slate-500 italic mt-0.5 truncate">&ldquo;{notesText}&rdquo;</p>}
                 </div>
                 <div className="flex items-center gap-2.5 shrink-0">
                   <button
                     onClick={() => {
                       setUnassignId(a.id as string);
-                      setUnassignName(String(fc?.full_name ?? 'Contact'));
+                      setUnassignName(fullName);
                       setErrorUnassign(null);
                     }}
                     className="px-2.5 py-1 rounded-lg border border-slate-700 hover:border-orange-500/50 hover:bg-orange-950/20 text-slate-400 hover:text-orange-400 text-[10px] font-semibold transition-all cursor-pointer flex items-center gap-1"
@@ -531,6 +571,7 @@ interface BatchReport {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ContactOperatorsPage() {
   const { selectedEventId } = useFestival();
+  const [contactSource, setContactSourceState] = useState<ContactSource>('rathayatra');
   const [operators, setOperators] = useState<ContactOperator[]>([]);
   const [filterType, setFilterType] = useState<'all' | 'operator' | 'coordinator'>('all');
   const [loading, setLoading] = useState(true);
@@ -547,6 +588,25 @@ export default function ContactOperatorsPage() {
   const [dryRunSummary, setDryRunSummary] = useState<DryRunSummary | null>(null);
   const [batchReport, setBatchReport] = useState<BatchReport | null>(null);
   const [autoAssignError, setAutoAssignError] = useState<string | null>(null);
+
+  const setContactSource = (newSource: ContactSource) => {
+    setViewOp(null);
+    setAutoAssignStep('idle');
+    setDryRunSummary(null);
+    setBatchReport(null);
+    setContactSourceState(newSource);
+  };
+
+  // Sync initial contactSource with active selectedEventId
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (selectedEventId === '7852cff8-e784-4e91-b990-a9838ea59ff1') {
+      setContactSource('krishnashtami');
+    } else if (selectedEventId === '4ce7287c-4aea-42f8-8d7d-03b698438e4c') {
+      setContactSource('rathayatra');
+    }
+  }, [selectedEventId]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const toast = (msg: string) => {
     setToastMsg(msg);
@@ -582,8 +642,7 @@ export default function ContactOperatorsPage() {
     setLoading(true);
     try {
       const auth = await getAuthHeader();
-      const url = selectedEventId ? `/api/operators?festival_event_id=${selectedEventId}` : '/api/operators';
-      const res = await fetch(url, { headers: { Authorization: auth } });
+      const res = await fetch(`/api/operators?source=${contactSource}`, { headers: { Authorization: auth } });
       if (res.ok) {
         const d = await res.json();
         setOperators(d.operators ?? []);
@@ -591,7 +650,7 @@ export default function ContactOperatorsPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedEventId]);
+  }, [contactSource]);
 
   useEffect(() => { loadOperators(); }, [loadOperators]);
 
@@ -601,35 +660,16 @@ export default function ContactOperatorsPage() {
     setAutoAssignError(null);
     setDryRunSummary(null);
     try {
-      const res = await fetch('/api/assignments/feedback', {
+      const auth = await getAuthHeader();
+      const res = await fetch('/api/assignments/auto', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'dry_run' }),
+        headers: { 'Content-Type': 'application/json', Authorization: auth },
+        body: JSON.stringify({ dry_run: true, source: contactSource }),
       });
       const d = await res.json();
-      if (!res.ok || !d.dryRun) { setAutoAssignError(d.error || 'Failed to fetch dry-run summary'); setAutoAssignStep('idle'); return; }
+      if (!res.ok || !d.summary) { setAutoAssignError(d.error || 'Failed to fetch dry-run summary'); setAutoAssignStep('idle'); return; }
       
-      const dr = d.dryRun;
-      setDryRunSummary({
-        total_unassigned: dr.totalUnassigned,
-        skipped_female: dr.eligibleFemale,
-        eligible_male: dr.eligibleMale,
-        active_operators: dr.activeOperatorsCount,
-        total_capacity: dr.activeOperatorsCount * 40,
-        currently_assigned: dr.operatorCapacities.reduce((a: number, c: { assignedCount: number }) => a + c.assignedCount, 0),
-        available_slots: dr.totalAvailableSlots,
-        will_assign: dr.willAssign,
-        will_skip_capacity: Math.max(0, dr.totalUnassigned - dr.totalAvailableSlots),
-        will_skip: dr.eligibleFemale,
-        capacity_warning: dr.capacityWarning,
-        operator_breakdown: dr.operatorCapacities.map((op: { id: string; name: string; assignedCount: number; capacity: number; remaining: number }) => ({
-          id: op.id,
-          name: op.name,
-          current: op.assignedCount,
-          capacity: op.capacity,
-          available: op.remaining,
-        })),
-      });
+      setDryRunSummary(d.summary);
       setAutoAssignStep('dry-run');
     } catch {
       setAutoAssignError('Network error. Please try again.');
@@ -641,22 +681,16 @@ export default function ContactOperatorsPage() {
     setAutoAssignStep('assigning');
     setAutoAssignError(null);
     try {
-      const res = await fetch('/api/assignments/feedback', {
+      const auth = await getAuthHeader();
+      const res = await fetch('/api/assignments/auto', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'auto_assign_all' }),
+        headers: { 'Content-Type': 'application/json', Authorization: auth },
+        body: JSON.stringify({ dry_run: false, source: contactSource }),
       });
       const d = await res.json();
-      if (!res.ok) { setAutoAssignError(d.error || 'Feedback auto-assignment failed'); setAutoAssignStep('dry-run'); return; }
+      if (!res.ok || !d.report) { setAutoAssignError(d.error || 'Auto-assignment failed'); setAutoAssignStep('dry-run'); return; }
       
-      setBatchReport({
-        total_unassigned: d.totalUnassigned ?? d.assignedCount ?? 0,
-        successfully_assigned: d.assignedCount ?? 0,
-        skipped_female: 0,
-        skipped_no_capacity: Math.max(0, (d.totalUnassigned ?? 0) - (d.assignedCount ?? 0)),
-        failed: 0,
-        distribution: [],
-      });
+      setBatchReport(d.report);
       setAutoAssignStep('report');
       loadOperators();
     } catch {
@@ -678,17 +712,23 @@ export default function ContactOperatorsPage() {
       .channel('admin_operators_realtime')
       .on(
         'postgres_changes',
+        { event: '*', schema: 'public', table: 'krishnashtami_contact_assignments' },
+        () => { loadOperators(); }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'contact_assignments' },
+        () => { loadOperators(); }
+      )
+      .on(
+        'postgres_changes',
         { event: '*', schema: 'public', table: 'feedback_contact_assignments' },
-        () => {
-          loadOperators();
-        }
+        () => { loadOperators(); }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'contact_operators' },
-        () => {
-          loadOperators();
-        }
+        () => { loadOperators(); }
       )
       .subscribe();
 
@@ -723,6 +763,13 @@ export default function ContactOperatorsPage() {
     return op.operator_type === filterType;
   });
 
+  const sourceTitle =
+    contactSource === 'krishnashtami'
+      ? 'Krishnashtami 2026 Contact Assignments'
+      : contactSource === 'feedback_contacts'
+      ? 'Feedback Contact Assignments'
+      : 'Rathayatra 2026 Contact Assignments';
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -732,9 +779,27 @@ export default function ContactOperatorsPage() {
             <PhoneCall className="w-7 h-7 text-purple-400" />
             Contact Operators
           </h1>
-          <p className="text-slate-500 text-sm mt-1">Manage call operators and contact assignments</p>
+          <p className="text-slate-400 text-xs font-semibold mt-1 flex items-center gap-1.5">
+            <span className="px-2 py-0.5 rounded bg-purple-950/50 border border-purple-500/30 text-purple-300">
+              Active Source: {sourceTitle}
+            </span>
+          </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Contact Source Selector Dropdown */}
+          <div className="flex items-center gap-1.5 bg-slate-900/80 border border-purple-500/30 rounded-xl px-3 py-1.5">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-purple-400">Source:</span>
+            <select
+              value={contactSource}
+              onChange={(e) => setContactSource(e.target.value as ContactSource)}
+              className="bg-transparent text-slate-100 font-bold text-xs focus:outline-none cursor-pointer"
+            >
+              <option value="rathayatra" className="bg-slate-900 text-slate-100">Rathayatra 2026</option>
+              <option value="krishnashtami" className="bg-slate-900 text-slate-100">Krishnashtami 2026</option>
+              <option value="feedback_contacts" className="bg-slate-900 text-slate-100">Feedback Contacts</option>
+            </select>
+          </div>
+
           <a
             href="/operator"
             target="_blank"
@@ -768,7 +833,7 @@ export default function ContactOperatorsPage() {
             ) : autoAssignStep === 'assigning' ? (
               <><Loader2 className="w-4 h-4 animate-spin" /> Assigning Contacts...</>
             ) : (
-              <><Zap className="w-4 h-4" /> Auto Assign Existing Contacts</>
+              <><Zap className="w-4 h-4" /> Auto Assign ({contactSource})</>
             )}
           </button>
           <button
@@ -846,6 +911,7 @@ export default function ContactOperatorsPage() {
           <ViewAssignedModal
             key="view-modal"
             operator={viewOp}
+            contactSource={contactSource}
             onClose={() => setViewOp(null)}
             onUnassigned={loadOperators}
           />

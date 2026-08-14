@@ -14,17 +14,23 @@ export { MAX_CONTACTS_PER_OPERATOR };
  * @param registrationId The UUID of the registration
  * @returns The operator ID assigned, or null if skipped/failed
  */
-export async function assignOperator(registrationId: string): Promise<string | null> {
+export async function assignOperator(
+  registrationId: string,
+  source: 'rathayatra' | 'krishnashtami' | 'feedback' = 'krishnashtami'
+): Promise<string | null> {
   try {
+    const regTable = source === 'krishnashtami' ? 'krishnashtami_registrations' : 'registrations';
+    const assignTable = source === 'krishnashtami' ? 'krishnashtami_contact_assignments' : 'contact_assignments';
+
     // 0. Fetch the registration gender
     const { data: reg, error: regError } = await supabaseAdmin
-      .from('registrations')
+      .from(regTable)
       .select('gender')
       .eq('id', registrationId)
       .single();
 
     if (regError || !reg) {
-      console.error(`Auto-assignment: Error fetching registration gender for ${registrationId}:`, regError);
+      console.error(`Auto-assignment: Error fetching registration gender from ${regTable} for ${registrationId}:`, regError);
       return null;
     }
 
@@ -35,7 +41,7 @@ export async function assignOperator(registrationId: string): Promise<string | n
 
     // Check if the registration has ever been marked 'Not Coming' (active or inactive)
     const { data: wasNotComing, error: statusCheckError } = await supabaseAdmin
-      .from('contact_assignments')
+      .from(assignTable)
       .select('id')
       .eq('registration_id', registrationId)
       .eq('status', 'Not Coming')
@@ -43,7 +49,7 @@ export async function assignOperator(registrationId: string): Promise<string | n
       .maybeSingle();
 
     if (statusCheckError) {
-      console.error('Auto-assignment: Error checking historical Not Coming status:', statusCheckError);
+      console.error(`Auto-assignment: Error checking historical Not Coming status in ${assignTable}:`, statusCheckError);
     }
 
     if (wasNotComing) {
@@ -51,82 +57,82 @@ export async function assignOperator(registrationId: string): Promise<string | n
       return null;
     }
 
-    // 1. Duplicate Protection check (pre-flight check for logging clarity)
+    // 1. Duplicate Protection check
     const { data: existing, error: checkError } = await supabaseAdmin
-      .from('contact_assignments')
+      .from(assignTable)
       .select('operator_id')
       .eq('registration_id', registrationId)
       .eq('is_active', true)
       .maybeSingle();
 
     if (checkError) {
-      console.error('Auto-assignment: Error checking existing assignment:', checkError);
+      console.error(`Auto-assignment: Error checking existing assignment in ${assignTable}:`, checkError);
     }
 
     if (existing) {
-      console.log(`Automatic assignment skipped.
-
-Reason:
-An active assignment already exists.
-
-Registration ID:
-${registrationId}
-
-Operator ID (if applicable):
-${existing.operator_id}`);
+      console.log(`Automatic assignment skipped: Active assignment already exists for ${registrationId}`);
       return existing.operator_id;
     }
 
-    // 2. Call the database RPC which executes the selection algorithm safely
-    // and holds row-level locks (FOR UPDATE OF co) to avoid concurrency race conditions.
-    const { data: operatorId, error: rpcError } = await supabaseAdmin.rpc(
-      'assign_operator_to_registration',
-      {
-        p_registration_id: registrationId,
-        p_max_contacts: MAX_CONTACTS_PER_OPERATOR
+    // 2. Select eligible active operator with least workload in source table
+    const { data: operators, error: opErr } = await supabaseAdmin
+      .from('contact_operators')
+      .select('id')
+      .eq('is_active', true);
+
+    if (opErr || !operators || operators.length === 0) {
+      console.log('Automatic assignment skipped: No active operators available.');
+      return null;
+    }
+
+    // Count active assignments per operator in target table
+    const { data: activeAssignments } = await supabaseAdmin
+      .from(assignTable)
+      .select('operator_id')
+      .eq('is_active', true);
+
+    const countsMap: Record<string, number> = {};
+    operators.forEach(op => { countsMap[op.id] = 0; });
+    (activeAssignments || []).forEach(a => {
+      if (countsMap[a.operator_id] !== undefined) {
+        countsMap[a.operator_id] += 1;
       }
-    );
+    });
 
-    if (rpcError) {
-      console.error(`Automatic assignment failed.
+    // Find operator below capacity with minimum assigned count
+    const eligible = operators
+      .map(op => ({ id: op.id, count: countsMap[op.id] || 0 }))
+      .filter(op => op.count < MAX_CONTACTS_PER_OPERATOR)
+      .sort((a, b) => a.count - b.count);
 
-Registration ID:
-${registrationId}
-
-Assignment failure reason (if applicable):
-${rpcError.message}`);
+    if (eligible.length === 0) {
+      console.log('Automatic assignment skipped: All operators at max capacity.');
       return null;
     }
 
-    // 3. Log results based on the RPC response
-    if (operatorId) {
-      console.log(`Automatic assignment succeeded.
+    const chosenOperatorId = eligible[0].id;
 
-Registration ID:
-${registrationId}
+    // Insert assignment into source-specific table
+    const { error: insertErr } = await supabaseAdmin
+      .from(assignTable)
+      .insert({
+        registration_id: registrationId,
+        operator_id: chosenOperatorId,
+        is_active: true,
+        status: 'Pending',
+        assigned_by: 'system_auto',
+      });
 
-Operator ID (if applicable):
-${operatorId}`);
-      return operatorId;
-    } else {
-      console.log(`Automatic assignment skipped.
-
-Reason:
-No active operator with available capacity.
-
-Registration ID:
-${registrationId}`);
+    if (insertErr) {
+      console.error(`Automatic assignment failed inserting into ${assignTable}:`, insertErr);
       return null;
     }
+
+    console.log(`Automatic assignment succeeded into ${assignTable} for ${registrationId} to operator ${chosenOperatorId}`);
+    return chosenOperatorId;
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
-    console.error(`Automatic assignment failed.
-
-Registration ID:
-${registrationId}
-
-Assignment failure reason (if applicable):
-${errMsg}`);
+    console.error(`Automatic assignment failed for ${registrationId}: ${errMsg}`);
     return null;
   }
 }

@@ -14,6 +14,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import QRModal from '@/components/qr-modal';
 import { useFestival } from '@/lib/contexts/FestivalContext';
+import { getRegistrationSource, ContactSource } from '@/lib/source-resolver';
 
 // ─── Inline Service Assignment Cell ──────────────────────────────────────────
 function ServiceCell({
@@ -233,13 +234,15 @@ function ServiceCell({
   );
 }
 
-// ─── Assign Contact Modal ─────────────────────────────────────────────────────
+// ─── Assign Contact Modal (isolated, source-aware) ───────────────────────────
 function AssignContactModal({
   registration,
+  source,
   onClose,
   onAssigned,
 }: {
   registration: { id: string; full_name: string; phone: string; gender?: string };
+  source: ContactSource;
   onClose: () => void;
   onAssigned: () => void;
 }) {
@@ -260,8 +263,8 @@ function AssignContactModal({
         const { data: { session } } = await (await import('@/lib/supabase')).supabase.auth.getSession();
         const auth = session?.access_token ? `Bearer ${session.access_token}` : '';
         const [opsRes, checkRes] = await Promise.all([
-          fetch('/api/operators', { headers: { Authorization: auth } }),
-          fetch(`/api/assignments/check?registration_id=${registration.id}`, { headers: { Authorization: auth } }),
+          fetch(`/api/operators?source=${source}`, { headers: { Authorization: auth } }),
+          fetch(`/api/assignments/check?registration_id=${registration.id}&source=${source}`, { headers: { Authorization: auth } }),
         ]);
         if (opsRes.ok) { const d = await opsRes.json(); setOperators((d.operators ?? []).filter((o: {is_active:boolean}) => o.is_active)); }
         if (checkRes.ok) {
@@ -275,7 +278,7 @@ function AssignContactModal({
       } finally { setLoadingCheck(false); }
     }
     load();
-  }, [registration.id, registration.gender]);
+  }, [registration.id, registration.gender, source]);
 
   if (registration.gender === 'Female') {
     return (
@@ -306,7 +309,7 @@ function AssignContactModal({
       const res = await fetch('/api/assignments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: auth },
-        body: JSON.stringify({ registration_id: registration.id, operator_id: selectedOp, reassign: reassignMode }),
+        body: JSON.stringify({ registration_id: registration.id, operator_id: selectedOp, reassign: reassignMode, source }),
       });
       const d = await res.json();
       if (!res.ok) { setError(d.error || 'Assignment failed'); return; }
@@ -456,6 +459,12 @@ export default function RegistrationsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedEventId]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
   // --- ASSIGNMENT STATE (new) ---
   const [assignReg, setAssignReg] = React.useState<{id:string;full_name:string;phone:string;gender?:string}|null>(null);
   const [assignToast, setAssignToast] = React.useState<string|null>(null);
@@ -520,8 +529,16 @@ export default function RegistrationsPage() {
     queryKey: ['registrations-list', selectedEventId],
     queryFn: async () => {
       if (!selectedEventId) return [];
+      const sourceConfig = getRegistrationSource(selectedEventId);
+      const regTable = sourceConfig.regTable;
+      const skillsJoinTable = sourceConfig.skillsJoinTable;
+      const prasadamJoinTable = sourceConfig.prasadamTable;
+      const assignmentsJoinTable = sourceConfig.assignmentsTable;
+
+      const servicesJoin = !sourceConfig.isKrishnashtami ? 'services ( id, name ),' : '';
+
       let query = supabase
-        .from('registrations')
+        .from(regTable)
         .select(`
           *,
           volunteer_slots (
@@ -529,22 +546,19 @@ export default function RegistrationsPage() {
             slot_time,
             display_order
           ),
-          registration_skills (
+          ${skillsJoinTable} (
             skill_id,
             skills (
               id,
               name
             )
           ),
-          services (
-            id,
-            name
-          ),
-          registration_prasadam (
+          ${servicesJoin}
+          ${prasadamJoinTable} (
             id,
             prasadam_type
           ),
-          contact_assignments (
+          ${assignmentsJoinTable} (
             id,
             operator_id,
             status,
@@ -562,26 +576,33 @@ export default function RegistrationsPage() {
         `)
         .order('created_at', { ascending: false });
 
-      query = query.eq('festival_event_id', selectedEventId);
+      if (!sourceConfig.isKrishnashtami) {
+        query = query.eq('festival_event_id', selectedEventId);
+      }
 
       const { data, error } = await query;
       if (error) throw error;
 
       interface DBRegistration {
-        registration_skills?: {
-          skills: {
-            id: string;
-            name: string;
-          } | null;
-        }[] | null;
+        krishnashtami_registration_skills?: { skills: { id: string; name: string } | null }[] | null;
+        registration_skills?: { skills: { id: string; name: string } | null }[] | null;
+        krishnashtami_registration_prasadam?: { id: string; prasadam_type: string }[] | null;
+        registration_prasadam?: { id: string; prasadam_type: string }[] | null;
+        krishnashtami_contact_assignments?: Record<string, unknown>[] | null;
+        contact_assignments?: Record<string, unknown>[] | null;
       }
  
       return (data || []).map((reg: unknown) => {
         const r = reg as DBRegistration & Record<string, unknown>;
-        const skills = r.registration_skills?.map((rs) => rs.skills).filter(Boolean) || [];
+        const rawSkills = r.krishnashtami_registration_skills || r.registration_skills || [];
+        const skillsList = rawSkills.map((rs) => rs.skills).filter(Boolean) || [];
+        const prasadamList = r.krishnashtami_registration_prasadam || r.registration_prasadam || [];
+        const assignmentsList = r.krishnashtami_contact_assignments || r.contact_assignments || [];
         return {
           ...r,
-          skills,
+          skills: skillsList,
+          registration_prasadam: prasadamList,
+          contact_assignments: assignmentsList,
         } as unknown as Registration;
       });
     },
@@ -620,18 +641,19 @@ export default function RegistrationsPage() {
 
   // Realtime refetch sync
   useEffect(() => {
+    const sourceConfig = getRegistrationSource(selectedEventId);
     const channel = supabase
-      .channel('registrations_table_realtime')
+      .channel(`registrations_table_realtime_${selectedEventId}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'registrations' },
+        { event: '*', schema: 'public', table: sourceConfig.regTable },
         () => {
           queryClient.invalidateQueries({ queryKey: ['registrations-list'] });
         }
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'contact_assignments' },
+        { event: '*', schema: 'public', table: sourceConfig.assignmentsTable },
         () => {
           queryClient.invalidateQueries({ queryKey: ['registrations-list'] });
         }
@@ -649,7 +671,7 @@ export default function RegistrationsPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [queryClient]);
+  }, [queryClient, selectedEventId]);
 
   // Load search filters from sessionStorage on mount
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -2296,9 +2318,11 @@ export default function RegistrationsPage() {
           <AssignContactModal
             key="assign-modal"
             registration={assignReg}
+            source={getRegistrationSource(selectedEventId).isKrishnashtami ? 'krishnashtami' : 'rathayatra'}
             onClose={() => setAssignReg(null)}
             onAssigned={() => {
               setAssignReg(null);
+              queryClient.invalidateQueries({ queryKey: ['registrations-list', selectedEventId] });
               showAssignToast('Contact assigned successfully!');
             }}
           />

@@ -5,7 +5,7 @@ import { registrationSchema } from '@/lib/validation';
 import { assignOperator } from '@/lib/assignment-engine';
 import { REGISTRATION_STATUS } from '@/lib/constants/app-status';
 import { arePrasadamSelectionsValidForSlot } from '@/lib/constants/prasadam-rules';
-import { resolveFestivalEventFromHost } from '@/lib/festival-resolver';
+import { resolveFestivalDetailsFromHost } from '@/lib/festival-resolver';
 
 // Basic in-memory rate limiting
 const rateLimitMap = new Map<string, { count: number; lastReset: number }>();
@@ -101,12 +101,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 4. Resolve festival_event_id from Host header
+    // 4. Resolve festival details from Host header
     const hostHeader = request.headers.get('host');
-    const festivalEventId = await resolveFestivalEventFromHost(hostHeader);
+    const { id: festivalEventId, slug: festivalSlug } = await resolveFestivalDetailsFromHost(hostHeader);
 
-    // 5. Database operation calling the atomic Postgres function 'register_volunteer'
-    const { data: registrationId, error } = await supabase.rpc('register_volunteer', {
+    const isKrishnashtami = festivalSlug === 'krishnashtami-2026';
+    const rpcName = isKrishnashtami ? 'register_krishnashtami_volunteer' : 'register_volunteer';
+    const prasadamTable = isKrishnashtami ? 'krishnashtami_registration_prasadam' : 'registration_prasadam';
+    const targetRegTable = isKrishnashtami ? 'krishnashtami_registrations' : 'registrations';
+
+    // 5. Database operation calling the dedicated atomic Postgres RPC
+    const rpcParams: Record<string, unknown> = {
       p_full_name: fullName,
       p_phone: phone,
       p_age: age,
@@ -123,7 +128,13 @@ export async function POST(request: NextRequest) {
       p_occupation: occupation || null,
       p_transportation_required: gender === 'Male' ? transportationRequired || 'No' : 'No',
       p_festival_event_id: festivalEventId,
-    });
+    };
+
+    if (isKrishnashtami) {
+      rpcParams.p_prasadam_types = interestedToDinner === 'Yes' ? (prasadamSelections || []) : [];
+    }
+
+    const { data: registrationId, error } = await supabase.rpc(rpcName, rpcParams);
 
     if (error) {
       console.error('Database insertion error:', error);
@@ -150,10 +161,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 6. Insert prasadam selections into registration_prasadam table
-    // Transaction Safety: Every registration_prasadam row uses the same festival_event_id.
-    // If prasadam insert fails, roll back the registration to prevent inconsistent partial data.
-    if (interestedToDinner === 'Yes' && prasadamSelections && prasadamSelections.length > 0 && registrationId) {
+    // 6. For Rathayatra legacy RPC: insert prasadam selections into registration_prasadam table
+    if (!isKrishnashtami && interestedToDinner === 'Yes' && prasadamSelections && prasadamSelections.length > 0 && registrationId) {
       try {
         const prasadamRows = prasadamSelections.map((meal) => ({
           registration_id: registrationId,
@@ -162,21 +171,20 @@ export async function POST(request: NextRequest) {
         }));
 
         const { error: prasadamError } = await supabaseAdmin
-          .from('registration_prasadam')
+          .from(prasadamTable)
           .insert(prasadamRows);
 
         if (prasadamError) {
-          console.error('Failed to insert prasadam selections, rolling back registration:', prasadamError);
-          // Rollback registration to guarantee transaction atomicity
-          await supabaseAdmin.from('registrations').delete().eq('id', registrationId);
+          console.error(`Failed to insert prasadam selections into ${prasadamTable}, rolling back registration:`, prasadamError);
+          await supabaseAdmin.from(targetRegTable).delete().eq('id', registrationId);
           return NextResponse.json(
             { error: 'Failed to record prasadam options. Registration rolled back. Please try again.' },
             { status: 500 }
           );
         }
       } catch (prasadamInsertErr) {
-        console.error('Unexpected error during prasadam insert, rolling back registration:', prasadamInsertErr);
-        await supabaseAdmin.from('registrations').delete().eq('id', registrationId);
+        console.error(`Unexpected error during prasadam insert into ${prasadamTable}, rolling back registration:`, prasadamInsertErr);
+        await supabaseAdmin.from(targetRegTable).delete().eq('id', registrationId);
         return NextResponse.json(
           { error: 'An error occurred while saving prasadam options. Registration rolled back. Please try again.' },
           { status: 500 }
@@ -186,7 +194,7 @@ export async function POST(request: NextRequest) {
 
     // 7. Attempt automatic operator assignment (DO NOT block or fail registration if this fails)
     try {
-      await assignOperator(registrationId);
+      await assignOperator(registrationId, isKrishnashtami ? 'krishnashtami' : 'rathayatra');
     } catch (assignError) {
       console.error('Failed to automatically assign operator to registration:', assignError);
     }

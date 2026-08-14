@@ -30,6 +30,8 @@ const DashboardCharts = dynamic(() => import('@/components/dashboard-charts'), {
 
 const PURPLE_COLORS = ['#8b5cf6', '#6366f1', '#ec4899', '#3b82f6', '#14b8a6', '#f59e0b'];
 
+import { getRegistrationSource } from '@/lib/source-resolver';
+
 interface DashboardVisitorLog {
   id: string;
   visited_at: string;
@@ -57,15 +59,20 @@ export default function AdminDashboardPage() {
     queryKey: ['services-dashboard', selectedEventId],
     queryFn: async () => {
       if (!selectedEventId) return [];
+      const sourceConfig = getRegistrationSource(selectedEventId);
+      const regTable = sourceConfig.regTable;
+
       // Fetch services with volunteer lists via registrations join
       let svcQuery = supabase.from('services').select('*').order('name');
       let regQuery = supabase
-        .from('registrations')
+        .from(regTable)
         .select('id, full_name, phone, service_id, volunteer_slots (slot_time)')
         .not('service_id', 'is', null);
 
-      svcQuery = svcQuery.eq('festival_event_id', selectedEventId);
-      regQuery = regQuery.eq('festival_event_id', selectedEventId);
+      if (!sourceConfig.isKrishnashtami) {
+        svcQuery = svcQuery.eq('festival_event_id', selectedEventId);
+        regQuery = regQuery.eq('festival_event_id', selectedEventId);
+      }
 
       const [svcRes, regRes] = await Promise.all([svcQuery, regQuery]);
       if (svcRes.error) throw svcRes.error;
@@ -100,8 +107,13 @@ export default function AdminDashboardPage() {
     queryKey: ['registrations-summary', selectedEventId],
     queryFn: async () => {
       if (!selectedEventId) return [];
+      const sourceConfig = getRegistrationSource(selectedEventId);
+      const regTable = sourceConfig.regTable;
+      const skillsJoinTable = sourceConfig.skillsJoinTable;
+      const prasadamJoinTable = sourceConfig.prasadamTable;
+
       let query = supabase
-        .from('registrations')
+        .from(regTable)
         .select(`
           *,
           volunteer_slots (
@@ -109,41 +121,43 @@ export default function AdminDashboardPage() {
             slot_time,
             display_order
           ),
-          registration_skills (
+          ${skillsJoinTable} (
             skill_id,
             skills (
               id,
               name
             )
           ),
-          registration_prasadam (
+          ${prasadamJoinTable} (
             id,
             prasadam_type
           )
         `)
         .order('created_at', { ascending: false });
 
-      query = query.eq('festival_event_id', selectedEventId);
+      if (!sourceConfig.isKrishnashtami) {
+        query = query.eq('festival_event_id', selectedEventId);
+      }
 
       const { data, error } = await query;
       if (error) throw error;
       
       interface DBRegistration {
-        registration_skills?: {
-          skills: {
-            id: string;
-            name: string;
-          } | null;
-        }[] | null;
+        krishnashtami_registration_skills?: { skills: { id: string; name: string } | null }[] | null;
+        registration_skills?: { skills: { id: string; name: string } | null }[] | null;
+        krishnashtami_registration_prasadam?: { id: string; prasadam_type: string }[] | null;
+        registration_prasadam?: { id: string; prasadam_type: string }[] | null;
       }
 
-      // Parse skills from joining data structure to plain list
       return (data || []).map((reg: unknown) => {
         const r = reg as DBRegistration & Record<string, unknown>;
-        const skills = r.registration_skills?.map((rs) => rs.skills).filter(Boolean) || [];
+        const rawSkills = r.krishnashtami_registration_skills || r.registration_skills || [];
+        const skillsList = rawSkills.map((rs) => rs.skills).filter(Boolean) || [];
+        const prasadamList = r.krishnashtami_registration_prasadam || r.registration_prasadam || [];
         return {
           ...r,
-          skills,
+          skills: skillsList,
+          registration_prasadam: prasadamList,
         } as unknown as Registration;
       });
     },
@@ -211,11 +225,13 @@ export default function AdminDashboardPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadVisitorStats();
 
+    const sourceConfig = getRegistrationSource(selectedEventId);
+
     const channel = supabase
-      .channel('dashboard_realtime_refetch')
+      .channel(`dashboard_realtime_${selectedEventId}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'registrations' },
+        { event: '*', schema: 'public', table: sourceConfig.regTable },
         () => {
           queryClient.invalidateQueries({ queryKey: ['registrations-summary'] });
           queryClient.invalidateQueries({ queryKey: ['visitor-stats-summary'] });
@@ -225,7 +241,7 @@ export default function AdminDashboardPage() {
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'visitor_visits' },
+        { event: '*', schema: 'public', table: sourceConfig.visitsTable },
         () => {
           queryClient.invalidateQueries({ queryKey: ['visitor-stats-summary'] });
           loadVisitorStats();
@@ -245,7 +261,7 @@ export default function AdminDashboardPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [loadVisitorStats, queryClient]);
+  }, [selectedEventId, loadVisitorStats, queryClient]);
 
   // Reset open modal when selected festival changes
   /* eslint-disable react-hooks/set-state-in-effect */
