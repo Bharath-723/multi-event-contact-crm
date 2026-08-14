@@ -983,10 +983,13 @@ export default function RegistrationsPage() {
 
     try {
       const regId = selectedReg!.id;
+      const sourceConfig = getRegistrationSource(selectedEventId);
+      const targetRegTable = sourceConfig.regTable;
+      const targetSkillsTable = sourceConfig.skillsJoinTable;
 
       // 1. Update registrations record
       const { error: regErr } = await supabase
-        .from('registrations')
+        .from(targetRegTable)
         .update({
           full_name: sanitizeText(editFullName),
           phone: editPhone,
@@ -1008,7 +1011,7 @@ export default function RegistrationsPage() {
       // 2. Sync associated skills mapping
       // Delete existing skill mapping entries
       await supabase
-        .from('registration_skills')
+        .from(targetSkillsTable)
         .delete()
         .eq('registration_id', regId);
 
@@ -1020,7 +1023,7 @@ export default function RegistrationsPage() {
 
       if (skillInserts.length > 0) {
         const { error: skillErr } = await supabase
-          .from('registration_skills')
+          .from(targetSkillsTable)
           .insert(skillInserts);
 
         if (skillErr) throw skillErr;
@@ -1028,6 +1031,8 @@ export default function RegistrationsPage() {
 
       // Success, invalidate queries
       queryClient.invalidateQueries({ queryKey: ['registrations-list'] });
+      queryClient.invalidateQueries({ queryKey: ['registration-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       setEditModalOpen(false);
       setSelectedReg(null);
 
@@ -1049,18 +1054,31 @@ export default function RegistrationsPage() {
     if (!deleteRegId) return;
     setIsDeleting(true);
     try {
-      const { error } = await supabase
-        .from('registrations')
-        .delete()
-        .eq('id', deleteRegId);
-      
-      if (error) throw error;
+      const sourceConfig = getRegistrationSource(selectedEventId);
+      const source = sourceConfig.isKrishnashtami ? 'krishnashtami' : 'rathayatra';
+
+      const res = await fetch('/api/registrations', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          registrationId: deleteRegId,
+          source: source,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to delete registration.');
+      }
       
       queryClient.invalidateQueries({ queryKey: ['registrations-list'] });
+      queryClient.invalidateQueries({ queryKey: ['registration-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       setDeleteRegId(null);
     } catch (err) {
       console.error('Delete failed:', err);
-      alert('Failed to delete registration.');
+      const message = err instanceof Error ? err.message : 'Failed to delete registration.';
+      alert(message);
     } finally {
       setIsDeleting(false);
     }

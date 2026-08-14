@@ -211,3 +211,113 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  try {
+    let registrationId: string | null = null;
+    let sourceParam: string | null = null;
+
+    // Support both JSON body and searchParams
+    const url = new URL(request.url);
+    const searchId = url.searchParams.get('id') || url.searchParams.get('registrationId');
+    const searchSource = url.searchParams.get('source');
+
+    if (searchId) {
+      registrationId = searchId;
+      sourceParam = searchSource;
+    } else {
+      try {
+        const body = await request.json();
+        registrationId = body?.registrationId || body?.id || null;
+        sourceParam = body?.source || null;
+      } catch {
+        // body parsing failed or empty
+      }
+    }
+
+    if (!registrationId || typeof registrationId !== 'string') {
+      return NextResponse.json(
+        { error: 'Missing or invalid registrationId' },
+        { status: 400 }
+      );
+    }
+
+    const { normalizeSource } = await import('@/lib/source-resolver');
+    const normalized = normalizeSource(sourceParam);
+    if (normalized !== 'krishnashtami' && normalized !== 'rathayatra') {
+      return NextResponse.json(
+        { error: 'Invalid or unsupported source for registration delete' },
+        { status: 400 }
+      );
+    }
+
+    const isKrishnashtami = normalized === 'krishnashtami';
+    const regTable = isKrishnashtami ? 'krishnashtami_registrations' : 'registrations';
+    const prasadamTable = isKrishnashtami ? 'krishnashtami_registration_prasadam' : 'registration_prasadam';
+    const skillsTable = isKrishnashtami ? 'krishnashtami_registration_skills' : 'registration_skills';
+    const assignmentsTable = isKrishnashtami ? 'krishnashtami_contact_assignments' : 'contact_assignments';
+    const visitsTable = isKrishnashtami ? 'krishnashtami_visitor_visits' : 'visitor_visits';
+
+    // 1. Server-side verification: Check if registration exists in target table
+    const { data: existingReg, error: findError } = await supabaseAdmin
+      .from(regTable)
+      .select('id')
+      .eq('id', registrationId)
+      .maybeSingle();
+
+    if (findError) {
+      console.error(`Error checking registration in ${regTable}:`, findError);
+      return NextResponse.json(
+        { error: `Database check failed: ${findError.message}` },
+        { status: 500 }
+      );
+    }
+
+    if (!existingReg) {
+      return NextResponse.json(
+        { error: `Registration not found in ${regTable}` },
+        { status: 404 }
+      );
+    }
+
+    // 2. Explicitly delete child/dependent records using supabaseAdmin for clean cascade
+    await supabaseAdmin.from(prasadamTable).delete().eq('registration_id', registrationId);
+    await supabaseAdmin.from(skillsTable).delete().eq('registration_id', registrationId);
+    await supabaseAdmin.from(assignmentsTable).delete().eq('registration_id', registrationId);
+    await supabaseAdmin.from(visitsTable).delete().eq('registration_id', registrationId);
+
+    if (isKrishnashtami) {
+      await supabaseAdmin.from('notifications').delete().eq('krishnashtami_registration_id', registrationId);
+    } else {
+      await supabaseAdmin.from('notifications').delete().eq('registration_id', registrationId);
+    }
+
+    // 3. Delete parent record from source-specific registration table
+    const { error: deleteError } = await supabaseAdmin
+      .from(regTable)
+      .delete()
+      .eq('id', registrationId);
+
+    if (deleteError) {
+      console.error(`Failed to delete registration from ${regTable}:`, deleteError);
+      return NextResponse.json(
+        { error: `Failed to delete registration from ${regTable}: ${deleteError.message}` },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `Registration ${registrationId} deleted successfully from ${regTable}`,
+      deletedId: registrationId,
+      source: normalized,
+    });
+  } catch (error) {
+    console.error('Error in DELETE /api/registrations:', error);
+    return NextResponse.json(
+      { error: 'An unexpected server error occurred during deletion' },
+      { status: 500 }
+    );
+  }
+}
+
