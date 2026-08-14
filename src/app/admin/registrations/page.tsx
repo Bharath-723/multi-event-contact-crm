@@ -9,7 +9,7 @@ import { MAX_CONTACTS_PER_OPERATOR } from '@/lib/constants/operator-config';
 import { 
   Search, Filter, Download, Printer, QrCode, Edit2, Trash2, 
   ChevronLeft, ChevronRight, X, Eye, Loader2, AlertTriangle, Check,
-  PhoneCall, UserCheck, AlertCircle, Wrench, Plus, CheckCircle
+  PhoneCall, AlertCircle, Wrench, Plus, CheckCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import QRModal from '@/components/qr-modal';
@@ -252,7 +252,6 @@ function AssignContactModal({
   const [selectedOp, setSelectedOp] = React.useState('');
   const [assigning, setAssigning] = React.useState(false);
   const [error, setError] = React.useState<string|null>(null);
-  const [reassignMode, setReassignMode] = React.useState(false);
 
   React.useEffect(() => {
     if (registration.gender === 'Female') {
@@ -270,10 +269,6 @@ function AssignContactModal({
         if (checkRes.ok) {
           const d = await checkRes.json();
           setExisting(d.assignment);
-          if (d.assignment?.operator_id) {
-            setSelectedOp(d.assignment.operator_id);
-            setReassignMode(true);
-          }
         }
       } finally { setLoadingCheck(false); }
     }
@@ -309,120 +304,132 @@ function AssignContactModal({
       const res = await fetch('/api/assignments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: auth },
-        body: JSON.stringify({ registration_id: registration.id, operator_id: selectedOp, reassign: reassignMode, source }),
+        body: JSON.stringify({ registration_id: registration.id, operator_id: selectedOp, source }),
       });
       const d = await res.json();
-      if (!res.ok) { setError(d.error || 'Assignment failed'); return; }
-      const result = d.results?.[0];
-      if (result?.status === 'already_assigned') { setError(result.message); setReassignMode(false); return; }
+      if (!res.ok) { setError(d.message || d.error || 'Assignment failed'); return; }
       onAssigned();
     } catch { setError('Network error. Please try again.'); }
     finally { setAssigning(false); }
   };
 
+  const assignedOperatorName = (() => {
+    if (!existing) return '—';
+    const op = existing.contact_operators as unknown;
+    return (Array.isArray(op) ? (op as Array<{ name: string }>)[0]?.name : (op as { name: string } | null)?.name) ?? '—';
+  })();
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-      <motion.div initial={{opacity:0,scale:0.95}} animate={{opacity:1,scale:1}} className="glass-card rounded-2xl p-6 w-full max-w-md relative">
+      <motion.div initial={{opacity:0,scale:0.95}} animate={{opacity:1,scale:1}} className="glass-card rounded-2xl p-6 w-full max-w-md relative space-y-4">
         <button onClick={onClose} className="absolute top-4 right-4 text-slate-500 hover:text-slate-100 cursor-pointer"><X className="w-5 h-5" /></button>
-        <div className="flex items-center gap-3 mb-5">
+        
+        <div className="flex items-center gap-3 mb-2">
           <div className="w-9 h-9 rounded-xl bg-purple-950/50 border border-purple-500/20 flex items-center justify-center text-purple-400">
             <PhoneCall className="w-4 h-4" />
           </div>
           <div>
-            <h2 className="text-base font-extrabold text-slate-100">{reassignMode ? 'Reassign Contact' : 'Assign Contact'}</h2>
+            <h2 className="text-base font-extrabold text-slate-100">{existing ? 'Contact Already Assigned' : 'Assign Contact'}</h2>
             <p className="text-xs text-slate-500 truncate">{registration.full_name} · {registration.phone}</p>
           </div>
         </div>
 
         {loadingCheck ? (
           <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-purple-400" /></div>
-        ) : (
+        ) : existing ? (
+          /* READ-ONLY ALREADY ASSIGNED VIEW (STRICT RULE: ONE CONTACT = ONE OPERATOR) */
           <div className="space-y-4">
-            {/* Existing assignment badge */}
-            {existing && !reassignMode && (
-              <div className="p-3 bg-green-950/30 border border-green-500/25 rounded-xl flex items-center justify-between gap-2">
-                <div>
-                  <p className="text-[10px] text-green-400 font-bold uppercase tracking-wider">Already Assigned to</p>
-                  <p className="text-sm font-bold text-slate-100 mt-0.5">
-                    {(() => {
-                      const op = existing.contact_operators as unknown;
-                      return (Array.isArray(op) ? (op as Array<{ name: string }>)[0]?.name : (op as { name: string } | null)?.name) ?? '—';
-                    })()}
-                  </p>
-                </div>
-                <UserCheck className="w-5 h-5 text-green-400 shrink-0" />
+            <div className="p-4 bg-purple-950/20 border border-purple-500/30 rounded-xl space-y-3">
+              <div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Contact Name</p>
+                <p className="text-sm font-extrabold text-slate-100 mt-0.5">{registration.full_name}</p>
               </div>
-            )}
 
+              <div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Assigned Operator</p>
+                <p className="text-sm font-extrabold text-purple-400 mt-0.5">{assignedOperatorName}</p>
+              </div>
+
+              <div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Status</p>
+                <span className="inline-block text-xs font-bold text-emerald-400 bg-emerald-950/40 border border-emerald-500/25 px-2.5 py-0.5 rounded mt-0.5">
+                  {existing.status || 'Assigned'}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-400 text-center leading-relaxed">
+              This contact can only be assigned to one operator at a time. To change operator, first unassign this contact from the Call Portal / Operator list.
+            </p>
+
+            <div className="pt-2">
+              <button onClick={onClose} className="w-full py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-200 text-sm font-bold hover:bg-slate-800 transition-all cursor-pointer">
+                Close
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* NORMAL UNASSIGNED CONTACT OPERATOR SELECTION FORM */
+          <div className="space-y-4">
             {error && (
               <div className="p-3 bg-red-950/40 border border-red-500/30 rounded-xl text-red-300 text-xs flex gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />{error}
               </div>
             )}
 
-            {(!existing || reassignMode) && (
-              <div>
-                <label className="text-xs text-slate-400 font-semibold block mb-2">Select Operator</label>
-                {operators.length === 0 ? (
-                  <p className="text-xs text-slate-500 text-center py-4">No active operators available.</p>
-                ) : (
-                  <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
-                    {operators.map(op => {
-                      const assigned = op.total_assigned ?? 0;
-                      const pct = Math.round((assigned / MAX_CONTACTS_PER_OPERATOR) * 100);
-                      const isFull = assigned >= MAX_CONTACTS_PER_OPERATOR;
-                      const barColor = isFull ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-green-500';
-                      const badgeColor = isFull
-                        ? 'text-red-400 bg-red-950/30 border-red-500/25'
-                        : pct >= 70
-                        ? 'text-amber-400 bg-amber-950/30 border-amber-500/25'
-                        : 'text-green-400 bg-green-950/30 border-green-500/25';
-                      const isSelected = selectedOp === op.id;
-                      return (
-                        <button
-                          key={op.id}
-                          type="button"
-                          disabled={isFull}
-                          onClick={() => !isFull && setSelectedOp(op.id)}
-                          className={`w-full text-left px-3 py-2.5 rounded-xl border transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
-                            isSelected
-                              ? 'bg-purple-950/40 border-purple-500/40'
-                              : 'bg-slate-900/30 border-slate-800/40 hover:border-slate-700/60 hover:bg-slate-900/50'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-2 mb-1.5">
-                            <p className="text-xs font-semibold text-slate-100 truncate">
-                              {op.name} <span className="text-[10px] text-slate-500 font-normal">({op.operator_type === 'coordinator' ? 'Co-ordinator' : 'Operator'})</span>
-                            </p>
-                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${badgeColor}`}>
-                              {isFull ? 'FULL' : `${assigned}/${MAX_CONTACTS_PER_OPERATOR}`}
-                            </span>
-                          </div>
-                          <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
-                            <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${Math.min(pct, 100)}%` }} />
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
+            <div>
+              <label className="text-xs text-slate-400 font-semibold block mb-2">Select Operator</label>
+              {operators.length === 0 ? (
+                <p className="text-xs text-slate-500 text-center py-4">No active operators available.</p>
+              ) : (
+                <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                  {operators.map(op => {
+                    const assigned = op.total_assigned ?? 0;
+                    const pct = Math.round((assigned / MAX_CONTACTS_PER_OPERATOR) * 100);
+                    const isFull = assigned >= MAX_CONTACTS_PER_OPERATOR;
+                    const barColor = isFull ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-green-500';
+                    const badgeColor = isFull
+                      ? 'text-red-400 bg-red-950/30 border-red-500/25'
+                      : pct >= 70
+                      ? 'text-amber-400 bg-amber-950/30 border-amber-500/25'
+                      : 'text-green-400 bg-green-950/30 border-green-500/25';
+                    const isSelected = selectedOp === op.id;
+                    return (
+                      <button
+                        key={op.id}
+                        type="button"
+                        disabled={isFull}
+                        onClick={() => !isFull && setSelectedOp(op.id)}
+                        className={`w-full text-left px-3 py-2.5 rounded-xl border transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                          isSelected
+                            ? 'bg-purple-950/40 border-purple-500/40'
+                            : 'bg-slate-900/30 border-slate-800/40 hover:border-slate-700/60 hover:bg-slate-900/50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                          <p className="text-xs font-semibold text-slate-100 truncate">
+                            {op.name} <span className="text-[10px] text-slate-500 font-normal">({op.operator_type === 'coordinator' ? 'Co-ordinator' : 'Operator'})</span>
+                          </p>
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${badgeColor}`}>
+                            {isFull ? 'FULL' : `${assigned}/${MAX_CONTACTS_PER_OPERATOR}`}
+                          </span>
+                        </div>
+                        <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
 
             <div className="flex gap-2 pt-1">
-              {existing && !reassignMode && (
-                <button onClick={() => { setReassignMode(true); setError(null); }}
-                  className="flex-1 py-2.5 rounded-xl bg-yellow-950/30 border border-yellow-500/25 text-yellow-400 text-sm font-bold hover:bg-yellow-950/50 transition-all cursor-pointer">
-                  Reassign Contact
-                </button>
-              )}
-              {(!existing || reassignMode) && (
-                <button onClick={handleAssign} disabled={assigning || !selectedOp}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm font-bold transition-all cursor-pointer disabled:opacity-60">
-                  {assigning ? <Loader2 className="w-4 h-4 animate-spin" /> : <PhoneCall className="w-4 h-4" />}
-                  {assigning ? 'Assigning...' : existing ? 'Confirm Change' : 'Assign'}
-                </button>
-              )}
+              <button onClick={handleAssign} disabled={assigning || !selectedOp}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm font-bold transition-all cursor-pointer disabled:opacity-60">
+                {assigning ? <Loader2 className="w-4 h-4 animate-spin" /> : <PhoneCall className="w-4 h-4" />}
+                {assigning ? 'Assigning...' : 'Assign'}
+              </button>
               <button onClick={onClose} className="px-4 py-2.5 rounded-xl bg-slate-900/60 border border-slate-700/40 text-slate-400 text-sm font-semibold hover:text-slate-100 transition-all cursor-pointer">Cancel</button>
             </div>
           </div>

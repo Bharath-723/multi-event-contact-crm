@@ -1,6 +1,8 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { MAX_CONTACTS_PER_OPERATOR } from '@/lib/constants/operator-config';
 
+import { autoAssignFeedbackContact } from '@/lib/assignment-engine-feedback';
+
 // Re-export so existing server-side importers don't need to change
 export { MAX_CONTACTS_PER_OPERATOR };
 
@@ -16,9 +18,14 @@ export { MAX_CONTACTS_PER_OPERATOR };
  */
 export async function assignOperator(
   registrationId: string,
-  source: 'rathayatra' | 'krishnashtami' | 'feedback' = 'krishnashtami'
+  source: 'rathayatra' | 'krishnashtami' | 'feedback' | 'feedback_contacts' = 'krishnashtami'
 ): Promise<string | null> {
   try {
+    if (source === 'feedback' || source === 'feedback_contacts') {
+      const res = await autoAssignFeedbackContact(registrationId);
+      return res.success ? (res.operatorId ?? null) : null;
+    }
+
     const regTable = source === 'krishnashtami' ? 'krishnashtami_registrations' : 'registrations';
     const assignTable = source === 'krishnashtami' ? 'krishnashtami_contact_assignments' : 'contact_assignments';
 
@@ -39,23 +46,7 @@ export async function assignOperator(
       return null;
     }
 
-    // Check if the registration has ever been marked 'Not Coming' (active or inactive)
-    const { data: wasNotComing, error: statusCheckError } = await supabaseAdmin
-      .from(assignTable)
-      .select('id')
-      .eq('registration_id', registrationId)
-      .eq('status', 'Not Coming')
-      .limit(1)
-      .maybeSingle();
 
-    if (statusCheckError) {
-      console.error(`Auto-assignment: Error checking historical Not Coming status in ${assignTable}:`, statusCheckError);
-    }
-
-    if (wasNotComing) {
-      console.log(`Assignment skipped: Registration ${registrationId} has been marked 'Not Coming'.`);
-      return null;
-    }
 
     // 1. Duplicate Protection check
     const { data: existing, error: checkError } = await supabaseAdmin

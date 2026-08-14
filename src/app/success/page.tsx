@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { CheckCircle2, RotateCcw, Sparkles, ExternalLink, Play, MessageCircle } from 'lucide-react';
-import Link from 'next/link';
 import { KRISHNASHTAMI_WHATSAPP_COMMUNITY } from '@/lib/constants/community-links';
 
 function YoutubeIcon(props: React.SVGProps<SVGSVGElement>) {
@@ -131,12 +130,22 @@ export default function RedoneSuccessPage() {
 
             {/* Action Buttons */}
             <div className="w-full pt-2">
-              <Link href="/register" className="w-full">
-                <button className="w-full py-3.5 px-5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-purple-600/20 active:scale-95 cursor-pointer">
-                  <RotateCcw className="w-4 h-4" />
-                  Submit Another Response
-                </button>
-              </Link>
+              <button
+                onClick={() => {
+                  if (typeof window !== 'undefined') {
+                    localStorage.removeItem('feedback_registration_draft');
+                    localStorage.removeItem('krishnashtami_registration_draft');
+                    sessionStorage.clear();
+                  }
+                  const params = new URLSearchParams(window.location.search);
+                  const isFeedback = params.get('type') === 'feedback' || params.get('form') === 'feedback';
+                  window.location.href = isFeedback ? '/feedback?reset=true' : '/?reset=true';
+                }}
+                className="w-full py-3.5 px-5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-purple-600/20 active:scale-95 cursor-pointer"
+              >
+                <RotateCcw className="w-4 h-4" />
+                Submit Another Response
+              </button>
             </div>
 
           </motion.div>

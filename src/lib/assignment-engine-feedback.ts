@@ -184,25 +184,15 @@ export async function assignFeedbackContactManually(
       .select('id, operator_id')
       .eq('feedback_contact_id', feedbackContactId)
       .eq('is_active', true)
-      .single();
+      .maybeSingle();
 
-    // If already assigned to the same operator, return early
-    if (currentActive && currentActive.operator_id === targetOperatorId) {
-      return {
-        success: true,
-        assignmentId: currentActive.id,
-        operatorId: operator.id,
-        operatorName: operator.name,
-        message: `Feedback contact is already assigned to ${operator.name}`,
-      };
-    }
-
-    // 3. Deactivate previous assignment if present
     if (currentActive) {
-      await supabaseAdmin
-        .from('feedback_contact_assignments')
-        .update({ is_active: false, updated_at: new Date().toISOString() })
-        .eq('id', currentActive.id);
+      return {
+        success: false,
+        assignmentId: currentActive.id,
+        operatorId: currentActive.operator_id,
+        message: 'This contact is already assigned to an operator.',
+      };
     }
 
     // 4. Create new active assignment
@@ -223,12 +213,10 @@ export async function assignFeedbackContactManually(
     }
 
     // 5. Log audit event
-    const action = currentActive ? 'FEEDBACK_REASSIGNED' : 'FEEDBACK_ASSIGNED';
     await supabaseAdmin.from('audit_logs').insert({
-      action,
+      action: 'FEEDBACK_ASSIGNED',
       details: {
         feedback_contact_id: feedbackContactId,
-        previous_operator_id: currentActive?.operator_id || null,
         new_operator_id: targetOperatorId,
         assigned_by: assignedBy || 'admin',
         assignment_id: inserted.id,
@@ -240,7 +228,7 @@ export async function assignFeedbackContactManually(
       assignmentId: inserted.id,
       operatorId: operator.id,
       operatorName: operator.name,
-      message: `Feedback contact successfully ${currentActive ? 'reassigned' : 'assigned'} to ${operator.name}`,
+      message: `Feedback contact successfully assigned to ${operator.name}`,
     };
   } catch (err) {
     console.error('[assignFeedbackContactManually] Exception:', err);

@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useFestival } from '@/lib/contexts/FestivalContext';
 import {
-  Search, Clock, CheckCircle2, AlertCircle, Loader2, X,
+  CheckCircle2, AlertCircle, Loader2, X,
   UserCheck, Smartphone, Check, Shield, UserX
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -47,86 +47,61 @@ export default function OperatorVisitorPage() {
   const [query, setQuery] = useState('');
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
-  const [selectedVisitor, setSelectedVisitor] = useState<SearchResult | null>(null);
-
   // States for confirmation & success modal
-  const [showConfirm, setShowConfirm] = useState(false);
   const [showSuccess, setShowSuccess] = useState<SuccessCheckIn | null>(null);
-  const [checkInRemarks, setCheckInRemarks] = useState('');
-  const [checkingIn, setCheckingIn] = useState(false);
   const [errorCheckIn, setErrorCheckIn] = useState<string | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
 
-  // 1. Search Visitor (Operator Cookie auth is handled automatically by the browser)
-  const handleSearch = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const searchVal = query.trim().replace(/\s+/g, ' ');
-    if (!searchVal) {
+  // ── Debounced Live Search Effect ──────────────────────────────────────────
+  /* eslint-disable react-hooks/set-state-in-effect */
+  React.useEffect(() => {
+    const digits = query.replace(/\D/g, '');
+    if (digits.length >= 6 && selectedEventId) {
+      const timer = setTimeout(() => {
+        setLoadingSearch(true);
+        setSearchError(null);
+        fetch(`/api/visitor/search?q=${encodeURIComponent(digits)}&festival_event_id=${selectedEventId}`)
+          .then((res) => res.json())
+          .then((data) => {
+            setResults(data.registrations ?? []);
+          })
+          .catch((err) => {
+            console.error('[Autocomplete Error]:', err);
+            setSearchError('Network error while searching mobile number.');
+          })
+          .finally(() => {
+            setLoadingSearch(false);
+          });
+      }, 200);
+      return () => clearTimeout(timer);
+    } else {
       setResults([]);
-      setSelectedVisitor(null);
       setSearchError(null);
-      return;
     }
-
-    if (!selectedEventId) {
-      setSearchError('Please select a festival in the header.');
-      return;
-    }
-
-    setLoadingSearch(true);
-    setSearchError(null);
-    setErrorCheckIn(null);
-    setResults([]);
-    setSelectedVisitor(null);
-    try {
-      const res = await fetch(`/api/visitor/search?q=${encodeURIComponent(searchVal)}&festival_event_id=${selectedEventId}`);
-      const data = await res.json();
-      if (!res.ok) {
-        setSearchError(data.error || `Search failed (HTTP ${res.status}). Please try again.`);
-        setResults([]);
-        setSelectedVisitor(null);
-        return;
-      }
-      const registrations = data.registrations ?? [];
-      setResults(registrations);
-      if (registrations.length === 1) {
-        setSelectedVisitor(registrations[0]);
-      } else {
-        setSelectedVisitor(null);
-      }
-    } catch (err) {
-      console.error('[Search] Network error:', err);
-      setSearchError('Network error. Please check your connection and try again.');
-    } finally {
-      setLoadingSearch(false);
-    }
-  };
+  }, [query, selectedEventId]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleQueryChange = (val: string) => {
-    setQuery(val);
-    if (!val.trim()) {
-      setResults([]);
-      setSelectedVisitor(null);
-      setSearchError(null);
-    }
+    const digits = val.replace(/\D/g, '').slice(0, 10);
+    setQuery(digits);
   };
 
-  // 3. Check-in Action
-  const handleApproveCheckIn = async () => {
-    if (!selectedVisitor || !selectedEventId) return;
-    setCheckingIn(true);
+  // ── Direct Check-in Handler ─────────────────────────────────────────────
+  const [checkingInId, setCheckingInId] = useState<string | null>(null);
+
+  const handleDirectCheckIn = async (item: SearchResult) => {
+    if (!selectedEventId || checkingInId) return;
+    setCheckingInId(item.id);
     setErrorCheckIn(null);
 
     try {
       const res = await fetch('/api/visitor/check-in', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          registration_id: selectedVisitor.id,
+          registration_id: item.id,
           festival_event_id: selectedEventId,
-          remarks: checkInRemarks,
+          remarks: 'MANUAL_SEARCH',
         }),
       });
 
@@ -135,54 +110,41 @@ export default function OperatorVisitorPage() {
       if (!res.ok) {
         setErrorCheckIn(data.error || 'Check-in failed');
         if (data.details) {
-          // Update selected visitor state with existing visit details
-          setSelectedVisitor(prev => prev ? {
-            ...prev,
-            visit: {
-              id: 'existing',
-              visited_at: data.details.visited_at,
-              visit_method: data.details.visit_method,
-              visited_by_admin: data.details.checked_in_by === 'Admin',
-              remarks: null,
-              operator_name: data.details.checked_in_by,
-            }
-          } : null);
+          setResults((prev) =>
+            prev.map((r) =>
+              r.id === item.id
+                ? {
+                    ...r,
+                    visit: {
+                      id: 'existing',
+                      visited_at: data.details.visited_at,
+                      visit_method: data.details.visit_method,
+                      visited_by_admin: data.details.checked_in_by === 'Admin',
+                      remarks: null,
+                      operator_name: data.details.checked_in_by,
+                    },
+                  }
+                : r
+            )
+          );
         }
         return;
       }
 
-      // Success
-      setShowConfirm(false);
-      setCheckInRemarks('');
-      
-      // Update selectedVisitor state to show checked in
-      const updatedVisitor = {
-        ...selectedVisitor,
-        visit: {
-          id: data.visit.id,
-          visited_at: data.visit.visited_at,
-          visit_method: 'MANUAL_SEARCH',
-          visited_by_admin: false,
-          remarks: checkInRemarks || null,
-          operator_name: data.visit.checked_in_by,
-        }
-      };
-      setSelectedVisitor(updatedVisitor);
-      
-      // Update results list
-      setResults(prev => prev.map(r => r.id === selectedVisitor.id ? updatedVisitor : r));
-      
-      // Show check-in success message card
+      const nowIso = new Date().toISOString();
       setShowSuccess({
-        regNo: data.visit.registration_no,
-        name: data.visit.full_name,
-        operator: data.visit.checked_in_by,
-        time: new Date(data.visit.visited_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
+        regNo: item.phone,
+        name: item.full_name,
+        operator: data.visit.checked_in_by || 'Operator',
+        time: new Date(data.visit.visited_at || nowIso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
       });
+
+      setQuery('');
+      setResults([]);
     } catch {
       setErrorCheckIn('Network error. Please try again.');
     } finally {
-      setCheckingIn(false);
+      setCheckingInId(null);
     }
   };
 
@@ -195,7 +157,7 @@ export default function OperatorVisitorPage() {
             <Shield className="w-5 h-5 text-purple-400" />
             Visitor Check-In
           </h1>
-          <p className="text-slate-500 text-xs mt-1">Search and approve checked-in status for assigned visitors</p>
+          <p className="text-slate-500 text-xs mt-1">Type mobile number for instant lookup &amp; check-in</p>
         </div>
         <a
           href="/operator/portal"
@@ -205,268 +167,113 @@ export default function OperatorVisitorPage() {
         </a>
       </div>
 
-      {/* SEARCH INPUT */}
-      <form onSubmit={handleSearch} className="relative">
+      {/* MOBILE NUMBER INPUT */}
+      <div className="relative">
         <span className="absolute inset-y-0 left-0 pl-4 flex items-center text-slate-500 pointer-events-none">
-          <Search className="w-5 h-5" />
+          <Smartphone className="w-5 h-5" />
         </span>
         <input
-          type="text"
+          type="tel"
           value={query}
           onChange={(e) => handleQueryChange(e.target.value)}
-          placeholder="Search assigned visitor by Reg No, Phone, or Name..."
-          className="w-full pl-11 pr-24 py-3.5 rounded-2xl bg-slate-950 border border-slate-800 text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 shadow-xl"
+          placeholder="Enter mobile number"
+          maxLength={10}
+          className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-slate-950 border border-purple-500/30 text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 shadow-2xl"
         />
-        <button
-          type="submit"
-          disabled={loadingSearch || !query.trim()}
-          className="absolute right-2.5 top-2 bottom-2 px-5 rounded-xl bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
-        >
-          {loadingSearch ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Search'}
-        </button>
-      </form>
+      </div>
 
-      {/* Inline Search Error */}
+      {/* Inline Errors */}
       {searchError && (
         <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl bg-red-950/30 border border-red-500/30 text-red-400 text-xs font-semibold">
           <AlertCircle className="w-4 h-4 shrink-0" />
           {searchError}
         </div>
       )}
-
-      {/* Search Result List (if multiple results found) */}
-      {results.length > 1 && !selectedVisitor && (
-        <div className="glass-card rounded-2xl p-4 space-y-2 border border-slate-900">
-          <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2">Multiple Visitors Found ({results.length})</p>
-          <div className="divide-y divide-slate-900/60 max-h-52 overflow-y-auto pr-1">
-            {results.map((res) => (
-              <div
-                key={res.id}
-                onClick={() => setSelectedVisitor(res)}
-                className="flex justify-between items-center py-2.5 px-2 hover:bg-slate-900/40 rounded-xl cursor-pointer transition-all"
-              >
-                <div>
-                  <p className="text-sm font-bold text-slate-200">{res.full_name}</p>
-                  <p className="text-xs text-slate-500">{res.registration_no} · {res.phone}</p>
-                </div>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
-                  res.visit ? 'text-green-400 bg-green-950/20 border-green-500/20' : 'text-yellow-400 bg-yellow-950/20 border-yellow-500/20'
-                }`}>
-                  {res.visit ? 'Visited' : 'Pending'}
-                </span>
-              </div>
-            ))}
-          </div>
+      {errorCheckIn && (
+        <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl bg-red-950/30 border border-red-500/30 text-red-400 text-xs font-semibold">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          {errorCheckIn}
         </div>
       )}
 
-      {/* Success Check-In Card */}
+      {/* Success Notification */}
       <AnimatePresence>
         {showSuccess && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="p-4 bg-green-950/40 border border-green-500/30 rounded-2xl flex flex-col items-center text-center space-y-2.5 relative overflow-hidden"
+            className="p-4 bg-green-950/40 border border-green-500/30 rounded-2xl flex flex-col items-center text-center space-y-2 relative overflow-hidden"
           >
-            <div className="absolute top-2 right-2">
-              <button onClick={() => setShowSuccess(null)} className="text-green-500 hover:text-green-300">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="w-10 h-10 rounded-full bg-green-900/30 border border-green-500/20 flex items-center justify-center text-green-400">
-              <Check className="w-6 h-6" />
+            <button onClick={() => setShowSuccess(null)} className="absolute top-2 right-2 text-green-500 hover:text-green-300">
+              <X className="w-4 h-4" />
+            </button>
+            <div className="w-9 h-9 rounded-full bg-green-900/30 border border-green-500/20 flex items-center justify-center text-green-400">
+              <Check className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-extrabold text-sm text-green-400">✓ Visitor Checked In Successfully</h3>
-              <p className="text-slate-100 text-xs font-bold mt-1">{showSuccess.name}</p>
-              <p className="text-slate-400 text-[10px] mt-0.5">ID: {showSuccess.regNo}</p>
-            </div>
-            <div className="w-full border-t border-green-550/10 pt-2 text-[10px] text-green-400/80 flex justify-between px-6">
-              <span>Checked In By: <strong>{showSuccess.operator}</strong></span>
-              <span>Time: <strong>{showSuccess.time}</strong></span>
+              <h3 className="font-extrabold text-sm text-green-400">Marked Visited Successfully</h3>
+              <p className="text-slate-400 text-xs mt-0.5">Mobile: +91 {showSuccess.regNo}</p>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Selected Visitor Details Card */}
-      {selectedVisitor ? (
-        <div className="glass-card rounded-2xl p-5 border border-slate-900 space-y-4">
-          <div className="flex justify-between items-start gap-4">
-            <div>
-              <span className="text-[10px] font-bold text-purple-400 bg-purple-950/40 border border-purple-500/20 px-2 py-0.5 rounded-md uppercase tracking-wider">
-                {selectedVisitor.registration_no}
-              </span>
-              <h2 className="text-lg font-black text-slate-100 mt-1">{selectedVisitor.full_name}</h2>
-              <p className="text-xs text-slate-500">{selectedVisitor.phone}</p>
-            </div>
-            
-            <span className={`text-xs font-bold px-3 py-1.5 rounded-xl border shrink-0 flex items-center gap-1.5 ${
-              selectedVisitor.visit 
-                ? 'text-green-400 bg-green-950/30 border-green-500/25' 
-                : 'text-yellow-450 bg-yellow-950/30 border-yellow-500/25'
-            }`}>
-              {selectedVisitor.visit ? <CheckCircle2 className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
-              {selectedVisitor.visit ? 'Checked In' : 'Pending'}
-            </span>
-          </div>
-
-          {/* Details list */}
-          <div className="grid grid-cols-2 gap-3 text-xs border-t border-b border-slate-900 py-4">
-            <div>
-              <p className="text-slate-500 font-bold uppercase text-[9px]">Age & Gender</p>
-              <p className="text-slate-200 mt-0.5">{selectedVisitor.age} Years · {selectedVisitor.gender}</p>
-            </div>
-            <div>
-              <p className="text-slate-500 font-bold uppercase text-[9px]">Occupation</p>
-              <p className="text-slate-200 mt-0.5 truncate">{selectedVisitor.occupation || '—'}</p>
-            </div>
-            <div>
-              <p className="text-slate-500 font-bold uppercase text-[9px]">Area of Stay</p>
-              <p className="text-slate-200 mt-0.5 truncate">{selectedVisitor.area_of_stay || '—'}</p>
-            </div>
-            <div>
-              <p className="text-slate-500 font-bold uppercase text-[9px]">Company / College</p>
-              <p className="text-slate-200 mt-0.5 truncate">{selectedVisitor.company_college}</p>
-            </div>
-            <div>
-              <p className="text-slate-500 font-bold uppercase text-[9px]">Volunteer Option</p>
-              <p className={`mt-0.5 font-semibold ${selectedVisitor.interested_to_volunteer ? 'text-purple-400' : 'text-slate-400'}`}>
-                {selectedVisitor.interested_to_volunteer ? `Yes (${selectedVisitor.volunteer_slot_time || 'Pending'})` : 'No'}
-              </p>
-            </div>
-            <div>
-              <p className="text-slate-500 font-bold uppercase text-[9px]">Prasadam</p>
-              <p className="text-slate-200 mt-0.5">{selectedVisitor.interested_to_dinner ? 'Yes' : 'No'}</p>
-            </div>
-            <div>
-              <p className="text-slate-500 font-bold uppercase text-[9px]">Transportation Required</p>
-              <p className="text-slate-200 mt-0.5">{selectedVisitor.transportation_required || 'No'}</p>
-            </div>
-            <div>
-              <p className="text-slate-500 font-bold uppercase text-[9px]">Current Operator Status</p>
-              <p className={`mt-0.5 font-semibold ${
-                selectedVisitor.operator_status === 'Coming' ? 'text-green-400' : 
-                selectedVisitor.operator_status === 'Not Coming' ? 'text-red-400' : 
-                selectedVisitor.operator_status === 'Callback Required' ? 'text-blue-400' : 'text-yellow-405'
-              }`}>{selectedVisitor.operator_status || 'Pending'}</p>
-            </div>
-          </div>
-
-          {/* Already Checked-in breakdown display */}
-          {selectedVisitor.visit && (
-            <div className="p-3.5 bg-slate-900/50 border border-slate-800 rounded-xl space-y-2">
-              <p className="text-xs font-extrabold text-green-400 flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4" /> Check-In Recorded
-              </p>
-              <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-400">
-                <div>Checked In Time: <strong className="text-slate-200">{new Date(selectedVisitor.visit.visited_at).toLocaleString('en-IN', { hour12: true })}</strong></div>
-                <div>Checked In By: <strong className="text-slate-200">{selectedVisitor.visit.operator_name}</strong></div>
-                <div>Method: <strong className="text-slate-200">{selectedVisitor.visit.visit_method}</strong></div>
-              </div>
-            </div>
-          )}
-
-          {errorCheckIn && (
-            <div className="p-3 bg-red-950/40 border border-red-500/30 rounded-xl text-red-300 text-xs flex gap-2">
-              <AlertCircle className="w-4.5 h-4.5 shrink-0 text-red-400 mt-0.5" />
-              <span>{errorCheckIn}</span>
-            </div>
-          )}
-
-          {/* Action buttons (large, optimized for one-hand operation) */}
-          <div className="flex gap-2">
-            {!selectedVisitor.visit ? (
-              <button
-                onClick={() => { setShowConfirm(true); setErrorCheckIn(null); }}
-                className="flex-1 py-3.5 rounded-xl bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-bold text-sm transition-all cursor-pointer shadow-lg shadow-green-950/30 flex items-center justify-center gap-2"
-              >
-                <UserCheck className="w-5 h-5" /> Approve Visit
-              </button>
-            ) : (
-              <button
-                disabled
-                className="flex-1 py-3.5 rounded-xl bg-slate-850 text-slate-500 border border-slate-800 text-sm font-bold opacity-60 flex items-center justify-center gap-2 cursor-not-allowed"
-              >
-                Already Checked In
-              </button>
-            )}
-            <button
-              onClick={() => setSelectedVisitor(null)}
-              className="px-5 py-3.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-100 transition-all font-semibold text-sm cursor-pointer"
-            >
-              Cancel
-            </button>
-          </div>
+      {/* Autocomplete Results Area */}
+      {loadingSearch ? (
+        <div className="p-4 text-center text-slate-400 text-xs flex items-center justify-center gap-2 bg-slate-950 border border-slate-800 rounded-2xl">
+          <Loader2 className="w-4 h-4 animate-spin text-purple-400" /> Searching mobile number...
         </div>
-      ) : results.length > 1 ? (
-        null
-      ) : !loadingSearch && query ? (
-        <div className="glass-card rounded-2xl p-10 text-center border border-slate-900">
-          <UserX className="w-12 h-12 text-slate-700 mx-auto mb-3" />
-          <p className="text-slate-400 font-semibold">No matching assigned visitor found.</p>
-          <p className="text-slate-600 text-xs mt-1">Make sure the visitor is assigned to you and has correct registration details.</p>
+      ) : results.length > 0 ? (
+        <div className="bg-slate-950 border border-purple-500/30 rounded-2xl p-2 space-y-2 shadow-2xl">
+          {results.map((res) => (
+            <div key={res.id} className="flex items-center justify-between p-3.5 bg-slate-900/80 border border-slate-800 rounded-xl hover:border-purple-500/30 transition-all">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-purple-950/60 border border-purple-500/20 flex items-center justify-center text-purple-400 shrink-0">
+                  <Smartphone className="w-4.5 h-4.5" />
+                </div>
+                <div>
+                  <p className="font-extrabold text-sm text-slate-100">+91 {res.phone}</p>
+                  <p className="text-[11px] text-slate-400">{res.full_name} {res.company_college ? `· ${res.company_college}` : ''}</p>
+                </div>
+              </div>
+
+              {res.visit ? (
+                <span className="px-3.5 py-2 rounded-xl bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 text-xs font-extrabold flex items-center gap-1.5 shrink-0">
+                  <CheckCircle2 className="w-4 h-4" /> Already Visited
+                </span>
+              ) : (
+                <button
+                  onClick={() => handleDirectCheckIn(res)}
+                  disabled={checkingInId === res.id}
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 disabled:opacity-50 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-lg shadow-emerald-950/40 active:scale-95 cursor-pointer transition-all shrink-0"
+                >
+                  {checkingInId === res.id ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <UserCheck className="w-4 h-4" />
+                  )}
+                  Visited
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : query.length === 10 ? (
+        <div className="p-6 text-center bg-slate-950 border border-slate-800 rounded-2xl space-y-1 shadow-2xl">
+          <div className="w-10 h-10 rounded-full bg-red-950/60 border border-red-500/30 text-red-400 flex items-center justify-center mx-auto mb-2">
+            <UserX className="w-5 h-5" />
+          </div>
+          <h4 className="font-extrabold text-red-400 text-sm tracking-wider">NOT FOUND</h4>
+          <p className="text-xs text-slate-400">No registration found for this mobile number.</p>
         </div>
       ) : (
-        <div className="glass-card rounded-2xl p-10 text-center border border-slate-900 bg-slate-950/20">
-          <Smartphone className="w-12 h-12 text-slate-800 mx-auto mb-3" />
-          <p className="text-slate-400 font-semibold">Ready to Check In</p>
-          <p className="text-slate-600 text-xs mt-1">Type details in the search box to lookup visitor registration.</p>
+        <div className="glass-card rounded-2xl p-8 text-center border border-slate-900 bg-slate-950/20">
+          <Smartphone className="w-10 h-10 text-slate-800 mx-auto mb-2" />
+          <p className="text-slate-400 font-semibold text-sm">Enter Mobile Number</p>
+          <p className="text-slate-600 text-xs mt-1">Start typing to see matching registrations &amp; mark visited.</p>
         </div>
       )}
-
-      {/* CONFIRMATION DIALOG (MODAL) */}
-      <AnimatePresence>
-        {showConfirm && selectedVisitor && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-sm glass-card rounded-2xl p-6 relative border border-slate-850"
-            >
-              <h3 className="font-extrabold text-slate-100 text-base mb-2">Approve Visitor Check-in?</h3>
-              
-              <div className="space-y-3 mt-4 text-xs">
-                <div className="p-3 bg-slate-900/50 rounded-xl space-y-1">
-                  <div><span className="text-slate-500">ID:</span> <strong className="text-slate-200 font-bold">{selectedVisitor.registration_no}</strong></div>
-                  <div><span className="text-slate-500">Name:</span> <strong className="text-slate-200 font-bold">{selectedVisitor.full_name}</strong></div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Remarks (Optional)</label>
-                  <input
-                    type="text"
-                    value={checkInRemarks}
-                    onChange={(e) => setCheckInRemarks(e.target.value)}
-                    placeholder="e.g. checked in manually..."
-                    className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-850 text-slate-200 text-xs focus:outline-none focus:border-purple-500"
-                  />
-                </div>
-              </div>
-
-              <div className="flex gap-2 pt-4">
-                <button
-                  onClick={handleApproveCheckIn}
-                  disabled={checkingIn}
-                  className="flex-1 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
-                >
-                  {checkingIn ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                  Approve
-                </button>
-                <button
-                  onClick={() => setShowConfirm(false)}
-                  disabled={checkingIn}
-                  className="px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 text-xs font-semibold hover:text-slate-100 transition-all cursor-pointer"
-                >
-                  Cancel
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

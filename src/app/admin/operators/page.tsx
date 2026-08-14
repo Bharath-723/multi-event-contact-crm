@@ -340,11 +340,8 @@ function ViewAssignedModal({
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  // Unassign states
-  const [unassignId, setUnassignId] = useState<string | null>(null);
-  const [unassignName, setUnassignName] = useState('');
-  const [unassigning, setUnassigning] = useState(false);
-  const [errorUnassign, setErrorUnassign] = useState<string | null>(null);
+  // One-click unassign state
+  const [unassigningId, setUnassigningId] = useState<string | null>(null);
 
   const loadAssignments = useCallback(async () => {
     try {
@@ -376,29 +373,26 @@ function ViewAssignedModal({
   }, [loadAssignments]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  const handleConfirmUnassign = async () => {
-    if (!unassignId) return;
-    setUnassigning(true);
-    setErrorUnassign(null);
+  const handleDirectUnassign = async (assignmentId: string) => {
+    setUnassigningId(assignmentId);
     try {
-      const { data: { session } } = await (await import('@/lib/supabase')).supabase.auth.getSession();
-      const auth = session?.access_token ? `Bearer ${session.access_token}` : '';
-      const res = await fetch(`/api/assignments/${unassignId}?source=${contactSource}`, {
+      const auth = await getAuthHeader();
+      const res = await fetch(`/api/assignments/${assignmentId}?source=${contactSource}`, {
         method: 'DELETE',
         headers: { Authorization: auth },
       });
       if (!res.ok) {
         const d = await res.json();
-        setErrorUnassign(d.error || 'Failed to unassign contact');
+        alert(d.error || 'Failed to unassign contact');
         return;
       }
-      setUnassignId(null);
-      await loadAssignments();
+      setAssignments((prev) => prev.filter((a) => (a.id as string) !== assignmentId));
+      setTotalCount((prev) => Math.max(0, prev - 1));
       onUnassigned();
     } catch {
-      setErrorUnassign('Network error. Please try again.');
+      alert('Network error. Please try again.');
     } finally {
-      setUnassigning(false);
+      setUnassigningId(null);
     }
   };
 
@@ -466,6 +460,8 @@ function ViewAssignedModal({
 
             const statusClass = statusColors[(a.status as string)] ?? 'text-slate-400 bg-slate-900/40 border-slate-700/30';
             const notesText: string | null = typeof a.notes === 'string' ? a.notes : typeof a.remarks === 'string' ? a.remarks : null;
+            const isUnassigningThis = unassigningId === (a.id as string);
+
             return (
               <div key={a.id as string} className="flex items-center justify-between gap-3 p-3 bg-slate-900/30 rounded-xl border border-slate-800/40">
                 <div className="min-w-0 flex-1">
@@ -475,15 +471,12 @@ function ViewAssignedModal({
                 </div>
                 <div className="flex items-center gap-2.5 shrink-0">
                   <button
-                    onClick={() => {
-                      setUnassignId(a.id as string);
-                      setUnassignName(fullName);
-                      setErrorUnassign(null);
-                    }}
-                    className="px-2.5 py-1 rounded-lg border border-slate-700 hover:border-orange-500/50 hover:bg-orange-950/20 text-slate-400 hover:text-orange-400 text-[10px] font-semibold transition-all cursor-pointer flex items-center gap-1"
-                    title="Unassign this contact"
+                    onClick={() => handleDirectUnassign(a.id as string)}
+                    disabled={isUnassigningThis}
+                    className="px-2.5 py-1 rounded-lg border border-slate-700 hover:border-orange-500/50 hover:bg-orange-950/20 text-slate-400 hover:text-orange-400 text-[10px] font-semibold transition-all cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                    title="Unassign this contact immediately"
                   >
-                    Unassign
+                    {isUnassigningThis ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Unassign'}
                   </button>
                   <span className={`text-[10px] font-bold px-2 py-1 rounded-lg border shrink-0 ${statusClass}`}>
                     {String(a.status)}
@@ -494,51 +487,6 @@ function ViewAssignedModal({
           })}
         </div>
       </motion.div>
-
-      {/* Confirmation Dialog */}
-      {unassignId && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm animate-fade-in">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="glass-card rounded-2xl p-6 w-full max-w-sm relative"
-          >
-            <h2 className="text-base font-extrabold text-slate-100 mb-2">Unassign Contact</h2>
-            <div className="space-y-4">
-              <p className="text-xs text-slate-300 leading-relaxed">
-                This contact <strong className="text-slate-100">({unassignName})</strong> will no longer be assigned to this operator.
-              </p>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                The registration remains intact and can later be assigned to another operator.
-              </p>
-
-              {errorUnassign && (
-                <div className="p-3 bg-red-950/40 border border-red-500/30 rounded-xl text-red-300 text-xs flex gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-400" />
-                  {errorUnassign}
-                </div>
-              )}
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  onClick={handleConfirmUnassign}
-                  disabled={unassigning}
-                  className="flex-1 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 active:bg-orange-800 disabled:opacity-60 text-white text-xs font-bold transition-all cursor-pointer border-none"
-                >
-                  {unassigning ? 'Unassigning...' : 'Unassign'}
-                </button>
-                <button
-                  onClick={() => setUnassignId(null)}
-                  disabled={unassigning}
-                  className="px-4 py-2.5 rounded-xl bg-slate-900/60 border border-slate-700/40 text-slate-400 text-xs font-semibold hover:text-slate-100 transition-all cursor-pointer"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      )}
     </div>
   );
 }
@@ -647,6 +595,8 @@ export default function ContactOperatorsPage() {
         const d = await res.json();
         setOperators(d.operators ?? []);
       }
+    } catch (err) {
+      console.error('Failed to load operators:', err);
     } finally {
       setLoading(false);
     }
@@ -801,7 +751,7 @@ export default function ContactOperatorsPage() {
           </div>
 
           <a
-            href="/operator"
+            href={`/operator/portal?source=${contactSource}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900/50 border border-slate-700/40 text-slate-400 text-sm font-semibold hover:text-slate-100 transition-all cursor-pointer"

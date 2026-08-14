@@ -54,7 +54,6 @@ export async function GET(req: Request) {
         krishnashtami_registrations!registration_id (*)
       `, { count: 'exact' })
       .eq('is_active', true)
-      .neq('status', 'Not Coming')
       .order('assigned_at', { ascending: false });
 
     if (operatorId) q = q.eq('operator_id', operatorId);
@@ -72,7 +71,6 @@ export async function GET(req: Request) {
         feedback_contacts!feedback_contact_id (*)
       `, { count: 'exact' })
       .eq('is_active', true)
-      .neq('status', 'Not Coming')
       .order('assigned_at', { ascending: false });
 
     if (operatorId) q = q.eq('operator_id', operatorId);
@@ -90,7 +88,6 @@ export async function GET(req: Request) {
         registrations!registration_id (*)
       `, { count: 'exact' })
       .eq('is_active', true)
-      .neq('status', 'Not Coming')
       .order('assigned_at', { ascending: false });
 
     if (operatorId) q = q.eq('operator_id', operatorId);
@@ -124,7 +121,7 @@ export async function POST(req: Request) {
   }
 
   const source = normalizeSource(body.source);
-  const { operator_id, reassign = false } = body;
+  const { operator_id } = body;
   const regIds: string[] = body.registration_ids?.length
     ? body.registration_ids
     : body.registration_id
@@ -186,24 +183,6 @@ export async function POST(req: Request) {
   const results: Array<{ registration_id: string; status: string; message: string; assignment?: unknown }> = [];
 
   for (const regId of regIds) {
-    // Check if registration has ever been marked as Not Coming
-    const { data: notComingCheck } = await supabaseAdmin
-      .from(assignTable)
-      .select('id')
-      .eq(fkCol, regId)
-      .eq('status', 'Not Coming')
-      .limit(1)
-      .maybeSingle();
-
-    if (notComingCheck) {
-      results.push({
-        registration_id: regId,
-        status: 'blocked',
-        message: 'This registration is marked as Not Coming and cannot be assigned/reassigned.',
-      });
-      continue;
-    }
-
     // Check for existing active assignment
     const { data: existing } = await supabaseAdmin
       .from(assignTable)
@@ -212,21 +191,22 @@ export async function POST(req: Request) {
       .eq('is_active', true)
       .maybeSingle();
 
-    if (existing && !reassign) {
+    if (existing) {
+      if (regIds.length === 1) {
+        return NextResponse.json(
+          {
+            error: 'CONTACT_ALREADY_ASSIGNED',
+            message: 'This contact is already assigned to an operator.',
+          },
+          { status: 400 }
+        );
+      }
       results.push({
         registration_id: regId,
         status: 'already_assigned',
-        message: `Already assigned to another operator`,
+        message: 'This contact is already assigned to an operator.',
       });
       continue;
-    }
-
-    // Deactivate previous active assignment if reassigning
-    if (existing && reassign) {
-      await supabaseAdmin
-        .from(assignTable)
-        .update({ is_active: false, updated_at: new Date().toISOString() })
-        .eq('id', existing.id);
     }
 
     // Insert new assignment
@@ -246,6 +226,25 @@ export async function POST(req: Request) {
       .single();
 
     if (insertErr) {
+      // Check for Postgres unique index violation (race condition handling)
+      if (insertErr.code === '23505') {
+        if (regIds.length === 1) {
+          return NextResponse.json(
+            {
+              error: 'CONTACT_ALREADY_ASSIGNED',
+              message: 'This contact is already assigned to an operator.',
+            },
+            { status: 400 }
+          );
+        }
+        results.push({
+          registration_id: regId,
+          status: 'already_assigned',
+          message: 'This contact is already assigned to an operator.',
+        });
+        continue;
+      }
+
       results.push({
         registration_id: regId,
         status: 'error',
@@ -254,29 +253,26 @@ export async function POST(req: Request) {
     } else {
       results.push({
         registration_id: regId,
-        status: existing ? 'reassigned' : 'assigned',
-        message: existing
-          ? `Reassigned to ${operator.name}`
-          : `Assigned to ${operator.name}`,
+        status: 'assigned',
+        message: `Assigned to ${operator.name}`,
         assignment: newAssignment,
       });
 
       // Audit log
       await supabaseAdmin.from('audit_logs').insert({
         admin_id: userId,
-        action: existing ? 'CONTACT_REASSIGNED' : 'CONTACT_ASSIGNED',
+        action: 'CONTACT_ASSIGNED',
         details: {
           source,
           registration_id: regId,
           operator_id: operator.id,
           operator_name: operator.name,
-          previous_operator_id: existing?.operator_id ?? null,
         },
       });
     }
   }
 
-  const assignedCount = results.filter((r) => r.status === 'assigned' || r.status === 'reassigned').length;
+  const assignedCount = results.filter((r) => r.status === 'assigned').length;
   return NextResponse.json({
     success: assignedCount > 0,
     assigned_count: assignedCount,

@@ -169,6 +169,7 @@ export type AssignmentStatus =
   | 'Pending'
   | 'Coming'
   | 'Not Coming'
+  | 'Not Connected'
   | 'Callback Required';
 
 /** @deprecated Legacy statuses — kept only for migration reference. Do not use in new code. */

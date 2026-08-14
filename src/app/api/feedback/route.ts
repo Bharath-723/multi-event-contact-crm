@@ -133,6 +133,22 @@ export async function POST(request: NextRequest) {
       interestedOnlineWork,
     } = validationResult.data;
 
+    const cleanPhone = phone.replace(/\D/g, '').slice(-10);
+
+    // Enforce Backend Mobile Uniqueness for Feedback Submissions
+    const { data: existingFeedback } = await supabaseAdmin
+      .from('feedback_contacts')
+      .select('id')
+      .ilike('phone', `%${cleanPhone}`)
+      .maybeSingle();
+
+    if (existingFeedback) {
+      return NextResponse.json(
+        { error: 'Feedback has already been submitted for this mobile number.' },
+        { status: 409 }
+      );
+    }
+
     const payloadWorkshop = {
       full_name: fullName,
       phone,

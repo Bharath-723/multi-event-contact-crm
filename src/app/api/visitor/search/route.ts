@@ -113,8 +113,7 @@ export async function GET(req: Request) {
         visit_method,
         visited_by,
         visited_by_admin,
-        remarks,
-        contact_operators:visited_by (id, name)
+        remarks
       )
     `);
 

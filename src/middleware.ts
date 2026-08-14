@@ -11,9 +11,9 @@ export function middleware(request: NextRequest) {
   const url = request.nextUrl.clone();
 
   // If request is coming from Rathayatra domain (e.g. rathayatra-three.vercel.app)
-  // and accessing the root / or /register, rewrite to /rathayatra-complete
+  // and accessing the root /, rewrite to /rathayatra-complete
   if (host.includes('rathayatra')) {
-    if (url.pathname === '/' || url.pathname === '/register') {
+    if (url.pathname === '/') {
       url.pathname = '/rathayatra-complete';
       return NextResponse.rewrite(url);
     }
@@ -23,5 +23,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/', '/register'],
+  matcher: ['/'],
 };

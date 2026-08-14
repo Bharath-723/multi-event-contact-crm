@@ -66,10 +66,22 @@ export async function GET(req: Request) {
     return NextResponse.json({ logs: [] });
   }
 
-  // Step 2: Fetch visitor visits from target visitsTable.
-  const { data: logs, error: logsErr } = await supabaseAdmin
-    .from(visitsTable)
-    .select(`
+  const selectQuery = sourceConfig.isKrishnashtami
+    ? `
+      id,
+      visited_at,
+      visit_method,
+      visited_by_admin,
+      remarks,
+      registration_id,
+      ${regTable}!inner (
+        registration_no,
+        full_name,
+        phone,
+        festival_event_id
+      )
+    `
+    : `
       id,
       visited_at,
       visit_method,
@@ -85,7 +97,12 @@ export async function GET(req: Request) {
       contact_operators (
         name
       )
-    `)
+    `;
+
+  // Step 2: Fetch visitor visits from target visitsTable.
+  const { data: logs, error: logsErr } = await supabaseAdmin
+    .from(visitsTable)
+    .select(selectQuery)
     .in('registration_id', registrationIds)
     .order('visited_at', { ascending: false })
     .limit(limit);
@@ -94,16 +111,15 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: logsErr.message }, { status: 500 });
   }
 
-  const formatted = (logs ?? []).map((row) => {
-    const rowObj = row as Record<string, unknown>;
-    const regRaw = rowObj[regTable] as unknown;
+  const formatted = ((logs ?? []) as unknown as Record<string, unknown>[]).map((row) => {
+    const regRaw = row[regTable] as unknown;
     const reg = Array.isArray(regRaw) ? regRaw[0] : regRaw;
     const opRaw = row.contact_operators as unknown;
     const operator = Array.isArray(opRaw) ? opRaw[0] : opRaw;
     return {
-      id: row.id,
-      visited_at: row.visited_at,
-      visit_method: row.visit_method,
+      id: String(row.id ?? ''),
+      visited_at: String(row.visited_at ?? ''),
+      visit_method: String(row.visit_method ?? 'MANUAL_SEARCH'),
       registration_no: (reg as { registration_no?: string })?.registration_no ?? '—',
       full_name: (reg as { full_name?: string })?.full_name ?? '—',
       phone: (reg as { phone?: string })?.phone ?? '—',

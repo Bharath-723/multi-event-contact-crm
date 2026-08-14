@@ -838,14 +838,14 @@ export default function AdminFeedbackDashboard() {
         </div>
       )}
 
-      {/* --- Assign / Reassign Modal --- */}
+      {/* --- Assign Modal --- */}
       {assigningModal.open && assigningModal.contact && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
           <div className="glass-card bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 w-full max-w-md space-y-4 shadow-2xl">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-slate-100 dark:text-slate-100 text-base flex items-center gap-2">
                 <UserPlus className="w-5 h-5 text-purple-500 dark:text-purple-400" />
-                {assigningModal.currentAssignment ? 'Reassign Operator' : 'Assign Contact Operator'}
+                {assigningModal.currentAssignment ? 'Contact Already Assigned' : 'Assign Contact Operator'}
               </h3>
               <button
                 onClick={() => { setAssigningModal({ open: false }); setSelectedOpId(''); }}
@@ -855,60 +855,97 @@ export default function AdminFeedbackDashboard() {
               </button>
             </div>
 
-            <div className="text-xs space-y-1 bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
-              <p className="text-slate-100 dark:text-slate-100"><span className="font-bold text-slate-100 dark:text-slate-100">Student:</span> {assigningModal.contact.full_name}</p>
-              <p className="text-slate-400 dark:text-slate-400"><span className="font-bold text-slate-300 dark:text-slate-300">College:</span> {assigningModal.contact.college_name} ({assigningModal.contact.branch})</p>
-              <p className="text-slate-400 dark:text-slate-400"><span className="font-bold text-slate-300 dark:text-slate-300">Gender:</span> <span className={assigningModal.contact.gender === 'Female' ? 'text-pink-500 font-bold' : 'text-blue-500 font-bold'}>{assigningModal.contact.gender}</span></p>
-              {assigningModal.currentAssignment?.operator && (
-                <p className="text-purple-500 dark:text-purple-400"><span className="font-bold text-slate-300 dark:text-slate-300">Current Operator:</span> {assigningModal.currentAssignment.operator.name}</p>
-              )}
-            </div>
+            {assigningModal.currentAssignment ? (
+              /* READ-ONLY ALREADY ASSIGNED VIEW */
+              <div className="space-y-4">
+                <div className="p-4 bg-purple-950/20 border border-purple-500/30 rounded-xl space-y-3">
+                  <div>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Contact Name</p>
+                    <p className="text-sm font-extrabold text-slate-100 mt-0.5">{assigningModal.contact.full_name}</p>
+                  </div>
 
-            {/* Female Warning Banner */}
-            {assigningModal.contact.gender === 'Female' && (
-              <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-500/30 rounded-xl text-red-800 dark:text-red-300 text-xs space-y-1">
-                <p className="font-extrabold flex items-center gap-1 text-red-600 dark:text-red-400">
-                  ⚠ FEMALES ARE NOT ALLOWED TO ASSIGN
+                  <div>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Assigned Operator</p>
+                    <p className="text-sm font-extrabold text-purple-400 mt-0.5">{assigningModal.currentAssignment.operator?.name || '—'}</p>
+                  </div>
+
+                  <div>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Status</p>
+                    <span className="inline-block text-xs font-bold text-emerald-400 bg-emerald-950/40 border border-emerald-500/25 px-2.5 py-0.5 rounded mt-0.5">
+                      {assigningModal.currentAssignment.status || 'Assigned'}
+                    </span>
+                  </div>
+                </div>
+
+                <p className="text-xs text-slate-400 text-center leading-relaxed">
+                  This contact can only be assigned to one operator at a time. To change operator, first unassign this contact.
                 </p>
-                <p className="text-[11px] leading-relaxed opacity-90">
-                  Female feedback contacts are excluded from operator assignment per organization policy.
-                </p>
+
+                <div className="pt-2">
+                  <button
+                    onClick={() => { setAssigningModal({ open: false }); setSelectedOpId(''); }}
+                    className="w-full py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-200 text-sm font-bold hover:bg-slate-800 transition-all cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* UNASSIGNED CONTACT FORM */
+              <div className="space-y-4">
+                <div className="text-xs space-y-1 bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
+                  <p className="text-slate-100 dark:text-slate-100"><span className="font-bold text-slate-100 dark:text-slate-100">Student:</span> {assigningModal.contact.full_name}</p>
+                  <p className="text-slate-400 dark:text-slate-400"><span className="font-bold text-slate-300 dark:text-slate-300">College:</span> {assigningModal.contact.college_name} ({assigningModal.contact.branch})</p>
+                  <p className="text-slate-400 dark:text-slate-400"><span className="font-bold text-slate-300 dark:text-slate-300">Gender:</span> <span className={assigningModal.contact.gender === 'Female' ? 'text-pink-500 font-bold' : 'text-blue-500 font-bold'}>{assigningModal.contact.gender}</span></p>
+                </div>
+
+                {/* Female Warning Banner */}
+                {assigningModal.contact.gender === 'Female' && (
+                  <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-500/30 rounded-xl text-red-800 dark:text-red-300 text-xs space-y-1">
+                    <p className="font-extrabold flex items-center gap-1 text-red-600 dark:text-red-400">
+                      ⚠ FEMALES ARE NOT ALLOWED TO ASSIGN
+                    </p>
+                    <p className="text-[11px] leading-relaxed opacity-90">
+                      Female feedback contacts are excluded from operator assignment per organization policy.
+                    </p>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-slate-300 dark:text-slate-300">Select Operator / Co-ordinator *</label>
+                  <select
+                    value={selectedOpId}
+                    disabled={assigningModal.contact.gender === 'Female'}
+                    onChange={(e) => setSelectedOpId(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-100 dark:text-slate-100 cursor-pointer disabled:opacity-50"
+                  >
+                    <option value="" disabled className="bg-white dark:bg-slate-950 text-slate-400">Choose operator...</option>
+                    {operators.map((op) => (
+                      <option key={op.id} value={op.id} className="bg-white dark:bg-slate-950 text-slate-900 dark:text-white">
+                        {op.name} ({op.operator_type || 'operator'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    onClick={handleAssignOperator}
+                    disabled={!selectedOpId || assigningBtn || assigningModal.contact.gender === 'Female'}
+                    className="flex-1 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 shadow-md"
+                  >
+                    {assigningBtn ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                    Confirm Assignment
+                  </button>
+                  <button
+                    onClick={() => { setAssigningModal({ open: false }); setSelectedOpId(''); }}
+                    className="px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 font-extrabold text-xs transition-all cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             )}
-
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-300 dark:text-slate-300">Select Operator / Co-ordinator *</label>
-              <select
-                value={selectedOpId}
-                disabled={assigningModal.contact.gender === 'Female'}
-                onChange={(e) => setSelectedOpId(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-100 dark:text-slate-100 cursor-pointer disabled:opacity-50"
-              >
-                <option value="" disabled className="bg-white dark:bg-slate-950 text-slate-400">Choose operator...</option>
-                {operators.map((op) => (
-                  <option key={op.id} value={op.id} className="bg-white dark:bg-slate-950 text-slate-900 dark:text-white">
-                    {op.name} ({op.operator_type || 'operator'})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex gap-2 pt-2">
-              <button
-                onClick={handleAssignOperator}
-                disabled={!selectedOpId || assigningBtn || assigningModal.contact.gender === 'Female'}
-                className="flex-1 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 shadow-md"
-              >
-                {assigningBtn ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                Confirm Assignment
-              </button>
-              <button
-                onClick={() => { setAssigningModal({ open: false }); setSelectedOpId(''); }}
-                className="px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 font-extrabold text-xs transition-all cursor-pointer"
-              >
-                Cancel
-              </button>
-            </div>
           </div>
         </div>
       )}

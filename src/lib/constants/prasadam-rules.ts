@@ -1,8 +1,8 @@
 export const KRISHNASHTAMI_SLOTS = [
+  'Full Day (7AM – 12AM)',
   '7:00 AM – 1:00 PM',
   '3:00 PM – 9:00 PM',
   '6:00 PM – 12:00 AM',
-  'Full Day (7AM – 12AM)',
 ] as const;
 
 export type PrasadamOption = 'Breakfast' | 'Lunch' | 'Dinner';

@@ -6,15 +6,17 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getOperatorSessionFromRequest } from '@/lib/operator-auth';
+import { normalizeSource } from '@/lib/source-resolver';
 import type { AssignmentStatus } from '@/lib/types';
 
 const VALID_STATUSES: AssignmentStatus[] = [
-  'Pending', 'Coming', 'Not Coming', 'Callback Required',
+  'Pending', 'Coming', 'Not Coming', 'Not Connected', 'Callback Required',
 ];
 
 function getAssignmentTable(source: string | null) {
-  if (source === 'krishnashtami') return 'krishnashtami_contact_assignments';
-  if (source === 'feedback') return 'feedback_contact_assignments';
+  const norm = normalizeSource(source);
+  if (norm === 'krishnashtami') return 'krishnashtami_contact_assignments';
+  if (norm === 'feedback_contacts') return 'feedback_contact_assignments';
   return 'contact_assignments';
 }
 
@@ -50,11 +52,7 @@ export async function PATCH(
     return NextResponse.json({ error: 'Forbidden: Not your assignment' }, { status: 403 });
   }
 
-  if (!assignment.is_active) {
-    return NextResponse.json({ error: 'This assignment is no longer active' }, { status: 400 });
-  }
-
-  let body: { status?: string; remarks?: string };
+  let body: { status?: string; remarks?: string; notes?: string };
   try {
     body = await req.json();
   } catch {
@@ -69,9 +67,6 @@ export async function PATCH(
       return NextResponse.json({ error: `Invalid status: ${body.status}` }, { status: 400 });
     }
     updates.status = body.status;
-    if (body.status === 'Not Coming') {
-      updates.is_active = false;
-    }
     if (body.status !== 'Pending' && !assignment.status) {
       updates.called_at = new Date().toISOString();
     }
@@ -79,6 +74,15 @@ export async function PATCH(
 
   if (body.remarks !== undefined) {
     updates.remarks = body.remarks;
+    if (assignTable === 'feedback_contact_assignments') {
+      updates.notes = body.remarks;
+    }
+  }
+  if (body.notes !== undefined) {
+    updates.notes = body.notes;
+    if (assignTable !== 'feedback_contact_assignments') {
+      updates.remarks = body.notes;
+    }
   }
 
   if (Object.keys(updates).length === 0) {
@@ -173,19 +177,49 @@ export async function DELETE(
 
   const { id } = await params;
 
-  const { data: updated, error: updateError } = await supabaseAdmin
+  const { data: updatedRows, error: updateError } = await supabaseAdmin
     .from(assignTable)
     .update({
       is_active: false,
       updated_at: new Date().toISOString()
     })
     .eq('id', id)
-    .select()
-    .single();
+    .select();
 
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
-  if (!updated) return NextResponse.json({ error: 'Assignment not found' }, { status: 404 });
+  if (!updatedRows || updatedRows.length === 0) {
+    // If no row matched by assignment id, check if id was registration_id
+    const { data: updatedByReg, error: regUpdateErr } = await supabaseAdmin
+      .from(assignTable)
+      .update({
+        is_active: false,
+        updated_at: new Date().toISOString()
+      })
+      .eq('registration_id', id)
+      .eq('is_active', true)
+      .select();
 
+    if (regUpdateErr) return NextResponse.json({ error: regUpdateErr.message }, { status: 500 });
+    if (!updatedByReg || updatedByReg.length === 0) {
+      return NextResponse.json({ error: 'Assignment not found' }, { status: 404 });
+    }
+
+    const updated = updatedByReg[0];
+    await supabaseAdmin.from('audit_logs').insert({
+      admin_id: user.id,
+      action: 'ASSIGNMENT_DEACTIVATED',
+      details: {
+        assignment_id: updated.id,
+        registration_id: id,
+        source: sourceParam ?? 'rathayatra',
+        operator_id: (updated as { operator_id?: string }).operator_id
+      },
+    });
+
+    return NextResponse.json({ message: 'Assignment deactivated successfully', assignment: updated });
+  }
+
+  const updated = updatedRows[0];
   await supabaseAdmin.from('audit_logs').insert({
     admin_id: user.id,
     action: 'ASSIGNMENT_DEACTIVATED',

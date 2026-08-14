@@ -62,9 +62,26 @@ export default function RegistrationForm() {
   // eslint-disable-next-line react-hooks/incompatible-library
   const watchedFields = watch();
 
-  // Load draft from local storage
+  // Load draft from local storage or reset if reset=true
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('reset') === 'true') {
+        localStorage.removeItem(LOCAL_STORAGE_KEY);
+        reset({
+          fullName: '',
+          phone: '',
+          collegeName: '',
+          customCollegeName: '',
+          branch: '',
+          gender: undefined,
+          currentStay: undefined,
+          skills: [],
+          feedback: undefined,
+          interestedOnlineWork: undefined,
+        } as unknown as FeedbackSchemaInput);
+        return;
+      }
       const savedDraft = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (savedDraft) {
         try {
@@ -157,7 +174,7 @@ export default function RegistrationForm() {
       localStorage.removeItem(LOCAL_STORAGE_KEY);
 
       setTimeout(() => {
-        router.push('/success');
+        router.push('/success?type=feedback');
       }, 800);
 
     } catch (err) {

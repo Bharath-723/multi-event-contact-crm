@@ -8,7 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import confetti from 'canvas-confetti';
 import {
   User, Phone, Award, Building, Home as HomeIcon, CheckCircle2,
-  ChevronDown, Search, ShieldAlert, Sparkles, Loader2, Info, Briefcase, Megaphone, MapPin, Building2
+  ChevronDown, Search, ShieldAlert, Sparkles, Loader2, Info, Briefcase, MapPin, Building2
 } from 'lucide-react';
 import { registrationSchema, RegistrationSchemaInput } from '@/lib/validation';
 import { supabase } from '@/lib/supabase';
@@ -65,6 +65,14 @@ const OCCUPATION_SUGGESTIONS = [
   'Others'
 ];
 
+const COMPANY_COLLEGE_SUGGESTIONS = [
+  'CBIT',
+  'MGIT',
+  'VASV',
+  'VJIT',
+  'JBIT'
+];
+
 export default function RegistrationForm() {
   const router = useRouter();
   const [submissionError, setSubmissionError] = useState<string | null>(null);
@@ -77,6 +85,10 @@ export default function RegistrationForm() {
   const [occupationSearch, setOccupationSearch] = useState('');
   const [showOccupationDropdown, setShowOccupationDropdown] = useState(false);
   const occupationDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [companyCollegeSearch, setCompanyCollegeSearch] = useState('');
+  const [showCompanyCollegeDropdown, setShowCompanyCollegeDropdown] = useState(false);
+  const companyCollegeDropdownRef = useRef<HTMLDivElement>(null);
 
   // Location Autocomplete suggestions state (using server-side Geoapify proxy)
   const [locationSuggestions, setLocationSuggestions] = useState<Array<{ place_id: string; description: string }>>([]);
@@ -201,14 +213,6 @@ export default function RegistrationForm() {
   // eslint-disable-next-line react-hooks/incompatible-library
   const watchedFields = watch();
 
-  const transportationRequiredValue = watchedFields.transportationRequired;
-  const areaOfStayValue = watchedFields.areaOfStay;
-  const allowedAreas = ['Aziz Nagar', 'Gandipet', 'Narsingi'];
-  const showTransportationWarning = 
-    transportationRequiredValue === 'Yes' && 
-    areaOfStayValue && 
-    !allowedAreas.some(area => area.toLowerCase() === areaOfStayValue.trim().toLowerCase());
-
   const isVolunteerNo = watchedFields.interestedToVolunteer === 'No';
   const isPrasadamYes = watchedFields.interestedToDinner === 'Yes';
 
@@ -258,6 +262,9 @@ export default function RegistrationForm() {
           }
           if (parsed.occupation) {
             setOccupationSearch(parsed.occupation);
+          }
+          if (parsed.companyCollege) {
+            setCompanyCollegeSearch(parsed.companyCollege);
           }
         } catch (e) {
           console.error('Failed to parse draft registration', e);
@@ -322,6 +329,9 @@ export default function RegistrationForm() {
       if (occupationDropdownRef.current && !occupationDropdownRef.current.contains(event.target as Node)) {
         setShowOccupationDropdown(false);
       }
+      if (companyCollegeDropdownRef.current && !companyCollegeDropdownRef.current.contains(event.target as Node)) {
+        setShowCompanyCollegeDropdown(false);
+      }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -333,6 +343,10 @@ export default function RegistrationForm() {
 
   const filteredOccupations = OCCUPATION_SUGGESTIONS.filter((occ) =>
     occ.toLowerCase().includes(occupationSearch.toLowerCase())
+  );
+
+  const filteredCompanyColleges = COMPANY_COLLEGE_SUGGESTIONS.filter((col) =>
+    col.toLowerCase().includes(companyCollegeSearch.toLowerCase())
   );
 
   // Form completion progress calculations
@@ -651,7 +665,6 @@ export default function RegistrationForm() {
                     setValue('gender', val);
                     if (val !== 'Male') {
                       setValue('pgName', '');
-                      setValue('transportationRequired', 'No');
                     }
                   }}
                   className="w-full px-4 py-3 rounded-xl glass-input text-white text-base appearance-none cursor-pointer"
@@ -842,45 +855,7 @@ export default function RegistrationForm() {
               </div>
             </div>
 
-            {/* Conditional Transportation Fields for Male Gender */}
-            {watchedFields.gender === 'Male' && (
-              <>
-                <div className="border border-red-500/40 bg-red-950/30 shadow-[0_0_12px_rgba(239,68,68,0.25)] rounded-xl p-3 flex items-start gap-2.5 mt-1">
-                  <Megaphone className="w-5 h-5 text-red-500 shrink-0 mt-0.5 animate-pulse" />
-                  <span className="text-xs text-white leading-relaxed">
-                    <strong className="text-red-500 font-bold">*NOTE:</strong> Transportation is available from <span className="text-yellow-400 font-semibold">Aziz Nagar, Gandipet, Narsingi</span>.
-                  </span>
-                </div>
-
-                <div className="relative">
-                  <select
-                    {...register('transportationRequired')}
-                    className="w-full px-4 py-3 rounded-xl glass-input text-white text-base appearance-none cursor-pointer"
-                    aria-invalid={errors.transportationRequired ? 'true' : 'false'}
-                    defaultValue=""
-                  >
-                    <option value="" disabled className="bg-slate-950 text-slate-500">Select Transportation Requirement *</option>
-                    <option value="Yes" className="bg-slate-950 text-white">Yes</option>
-                    <option value="No" className="bg-slate-950 text-white">No</option>
-                  </select>
-                  <span className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-slate-500">
-                    <ChevronDown className="w-5 h-5" />
-                  </span>
-                  {errors.transportationRequired && (
-                    <p className="text-red-400 text-xs mt-1 pl-1">{errors.transportationRequired.message}</p>
-                  )}
-                  {showTransportationWarning ? (
-                    <div className="flex items-start gap-2 mt-2 px-1 text-yellow-400 text-xs leading-relaxed">
-                      <Info className="w-4 h-4 shrink-0 mt-0.5" />
-                      <p>
-                        Transportation service is currently available only from Aziz Nagar, Gandipet, and Narsingi. Please contact the organizers for assistance.
-                      </p>
-                    </div>
-                  ) : null}
-                </div>
-              </>
-            )}
-
+            {/* College/Company & PG Name Grid */}
             <div className={watchedFields.gender === 'Male' ? "grid grid-cols-1 sm:grid-cols-2 gap-4" : "grid grid-cols-1 gap-4"}>
               {watchedFields.gender === 'Male' && (
                 <div className="relative">
@@ -896,17 +871,64 @@ export default function RegistrationForm() {
                 </div>
               )}
 
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-500">
+              {/* College / Company Combobox (Autocomplete + Manual Custom Entry) */}
+              <div className="relative" ref={companyCollegeDropdownRef}>
+                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-500 pointer-events-none">
                   <Building className="w-5 h-5" />
                 </span>
                 <input
                   type="text"
-                  {...register('companyCollege')}
-                  placeholder="Company / College *"
+                  value={companyCollegeSearch}
+                  placeholder="Select or Type College / Company *"
+                  onFocus={() => setShowCompanyCollegeDropdown(true)}
+                  onChange={(e) => {
+                    const typed = e.target.value;
+                    setCompanyCollegeSearch(typed);
+                    setValue('companyCollege', typed);
+                    setShowCompanyCollegeDropdown(true);
+                  }}
+                  onBlur={() => {
+                    setTimeout(() => {
+                      const match = COMPANY_COLLEGE_SUGGESTIONS.find(c => c.toLowerCase() === companyCollegeSearch.trim().toLowerCase());
+                      if (match) {
+                        setCompanyCollegeSearch(match);
+                        setValue('companyCollege', match);
+                      } else {
+                        setValue('companyCollege', companyCollegeSearch);
+                      }
+                      trigger('companyCollege');
+                    }, 200);
+                  }}
                   className="w-full pl-11 pr-4 py-3 rounded-xl glass-input text-white text-base placeholder-slate-500"
                   aria-invalid={errors.companyCollege ? 'true' : 'false'}
                 />
+                {showCompanyCollegeDropdown && (
+                  <div className="absolute z-20 w-full mt-1.5 max-h-52 overflow-y-auto rounded-xl bg-slate-900 border border-slate-800 shadow-2xl">
+                    {filteredCompanyColleges.length > 0 ? (
+                      filteredCompanyColleges.map((col) => (
+                        <button
+                          key={col}
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            setValue('companyCollege', col);
+                            setCompanyCollegeSearch(col);
+                            setShowCompanyCollegeDropdown(false);
+                            trigger('companyCollege');
+                          }}
+                          className="w-full text-left px-4 py-2.5 hover:bg-purple-950/60 text-sm text-slate-200 transition-colors flex items-center gap-2"
+                        >
+                          <Building className="w-4 h-4 text-purple-400 shrink-0" />
+                          <span>{col}</span>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-4 py-2.5 text-sm text-slate-500">
+                        Type to enter custom College / Company.
+                      </div>
+                    )}
+                  </div>
+                )}
                 {errors.companyCollege && (
                   <p className="text-red-400 text-xs mt-1 pl-1">{errors.companyCollege.message}</p>
                 )}

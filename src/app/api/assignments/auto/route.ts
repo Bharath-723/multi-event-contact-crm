@@ -14,6 +14,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { assignOperator, MAX_CONTACTS_PER_OPERATOR } from '@/lib/assignment-engine';
+import { normalizeSource } from '@/lib/source-resolver';
 
 // ─── Concurrency Lock ─────────────────────────────────────────────────────────
 let isBatchRunning = false;
@@ -63,27 +64,25 @@ export async function POST(req: Request) {
   }
 
   const isDryRun = body.dry_run !== false;
-  const source = body.source ?? 'rathayatra';
-
-  if (!['rathayatra', 'krishnashtami', 'feedback'].includes(source)) {
-    return NextResponse.json({ error: 'Invalid or missing source parameter' }, { status: 400 });
-  }
+  const rawSource = body.source ?? 'rathayatra';
+  const source = normalizeSource(rawSource);
+  const isFeedback = source === 'feedback_contacts';
 
   const targetRegTable =
     source === 'krishnashtami'
       ? 'krishnashtami_registrations'
-      : source === 'feedback'
+      : isFeedback
       ? 'feedback_contacts'
       : 'registrations';
 
   const assignTable =
     source === 'krishnashtami'
       ? 'krishnashtami_contact_assignments'
-      : source === 'feedback'
+      : isFeedback
       ? 'feedback_contact_assignments'
       : 'contact_assignments';
 
-  const fkCol = source === 'feedback' ? 'feedback_contact_id' : 'registration_id';
+  const fkCol = isFeedback ? 'feedback_contact_id' : 'registration_id';
 
   // ── 1. Fetch active operators ────────────────────────────────────────────────
   const { data: operators, error: opsError } = await supabaseAdmin
@@ -103,8 +102,7 @@ export async function POST(req: Request) {
   const { data: assignmentCounts, error: countError } = await supabaseAdmin
     .from(assignTable)
     .select('operator_id')
-    .eq('is_active', true)
-    .neq('status', 'Not Coming');
+    .eq('is_active', true);
 
   if (countError) {
     return NextResponse.json({ error: 'Failed to fetch assignment counts: ' + countError.message }, { status: 500 });
@@ -133,16 +131,10 @@ export async function POST(req: Request) {
     .select(`${fkCol}`)
     .eq('is_active', true);
 
-  const { data: notComingRows } = await supabaseAdmin
-    .from(assignTable)
-    .select(`${fkCol}`)
-    .eq('status', 'Not Coming');
-
   const assignedSet = new Set((assignedRows ?? []).map((r) => (r as Record<string, string>)[fkCol]));
-  const notComingSet = new Set((notComingRows ?? []).map((r) => (r as Record<string, string>)[fkCol]));
   
   const unassigned = (unassignedRegs ?? []).filter(
-    (r) => !assignedSet.has(r.id) && !notComingSet.has(r.id)
+    (r) => !assignedSet.has(r.id)
   );
 
   // ── 4. Compute capacity summary ──────────────────────────────────────────────
@@ -158,8 +150,8 @@ export async function POST(req: Request) {
     available: MAX_CONTACTS_PER_OPERATOR - (countMap[op.id] ?? 0),
   }));
 
-  const skippedFemaleCount = source === 'feedback' ? 0 : unassigned.filter(r => r.gender === 'Female').length;
-  const eligibleCount = source === 'feedback' ? unassigned.length : unassigned.filter(r => r.gender === 'Male').length;
+  const skippedFemaleCount = unassigned.filter(r => r.gender === 'Female').length;
+  const eligibleCount = unassigned.filter(r => r.gender !== 'Female').length;
   
   const willAssign = Math.min(eligibleCount, Math.max(0, availableSlots));
   const willSkipCapacity = Math.max(0, eligibleCount - availableSlots);
@@ -198,13 +190,13 @@ export async function POST(req: Request) {
 
   try {
     for (const reg of unassigned) {
-      if (source !== 'feedback' && reg.gender === 'Female') {
+      if (reg.gender === 'Female') {
         skippedFemale++;
         continue;
       }
 
       try {
-        const assignedOpId = await assignOperator(reg.id, source as 'rathayatra' | 'krishnashtami' | 'feedback');
+        const assignedOpId = await assignOperator(reg.id, source);
 
         if (!assignedOpId) {
           skippedCapacity++;

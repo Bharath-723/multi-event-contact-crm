@@ -59,15 +59,6 @@ export const registrationSchema = z.object({
     });
   }
 
-  // If gender is Male, transportationRequired is required
-  if (data.gender === 'Male' && (!data.transportationRequired || data.transportationRequired.trim() === '')) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'Please select a transportation preference',
-      path: ['transportationRequired'],
-    });
-  }
-
   // A. Volunteer = Yes
   if (data.interestedToVolunteer === 'Yes') {
     if (!data.volunteerSlotId || data.volunteerSlotId.trim() === '') {
