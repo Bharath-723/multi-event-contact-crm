@@ -80,18 +80,12 @@ export async function DELETE(
 
   const { id } = await params;
 
-  // Step 1: Detach assignments by setting operator_id to NULL and is_active to false
-  const { error: updateError } = await supabaseAdmin
-    .from('contact_assignments')
-    .update({
-      operator_id: null,
-      is_active: false,
-    })
-    .eq('operator_id', id);
-
-  if (updateError) {
-    return NextResponse.json({ error: updateError.message }, { status: 500 });
-  }
+  // Step 1: Detach assignments across all 3 source tables (setting operator_id to null and is_active to false)
+  await Promise.all([
+    supabaseAdmin.from('contact_assignments').update({ operator_id: null, is_active: false }).eq('operator_id', id),
+    supabaseAdmin.from('krishnashtami_contact_assignments').update({ operator_id: null, is_active: false }).eq('operator_id', id),
+    supabaseAdmin.from('feedback_contact_assignments').update({ operator_id: null, is_active: false }).eq('operator_id', id),
+  ]);
 
   // Step 2: Delete operator from contact_operators table
   const { data: operator, error: deleteError } = await supabaseAdmin
