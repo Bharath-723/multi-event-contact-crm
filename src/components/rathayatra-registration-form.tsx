@@ -917,10 +917,10 @@ export default function RegistrationForm() {
           {/* --- SECTION 2: SKILLS --- */}
           <div className="space-y-4 pt-2">
             <h3 className="text-sm font-semibold tracking-wider text-purple-400 uppercase">
-              2. Skills & Capabilities
+              2. SKILLS & CAPABILITIES (optional)
             </h3>
             <p className="text-xs text-slate-400 -mt-2">
-              Select one or more skills you would like to support us with:
+              Please let us know, if you are blessed with any of the below skills
             </p>
 
             {isLoadingSkills ? (
