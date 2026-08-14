@@ -80,11 +80,12 @@ export async function DELETE(
 
   const { id } = await params;
 
-  // Step 1: Detach assignments across all 3 source tables (setting operator_id to null and is_active to false)
-  await Promise.all([
-    supabaseAdmin.from('contact_assignments').update({ operator_id: null, is_active: false }).eq('operator_id', id),
-    supabaseAdmin.from('krishnashtami_contact_assignments').update({ operator_id: null, is_active: false }).eq('operator_id', id),
-    supabaseAdmin.from('feedback_contact_assignments').update({ operator_id: null, is_active: false }).eq('operator_id', id),
+  // Step 1: Delete all assignments for this operator across all 3 assignment tables
+  // This safely unassigns any contacts previously assigned to this operator and prevents foreign key errors
+  await Promise.allSettled([
+    supabaseAdmin.from('contact_assignments').delete().eq('operator_id', id),
+    supabaseAdmin.from('krishnashtami_contact_assignments').delete().eq('operator_id', id),
+    supabaseAdmin.from('feedback_contact_assignments').delete().eq('operator_id', id),
   ]);
 
   // Step 2: Delete operator from contact_operators table
