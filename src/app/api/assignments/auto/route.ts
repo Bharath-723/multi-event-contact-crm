@@ -4,17 +4,15 @@
  * Phase 3A — Batch Auto-Assignment Engine (Multi-Festival Scoped)
  *
  * Modes:
- *   dry_run=true  → Returns a summary (total unassigned, operators, capacity) WITHOUT assigning.
- *   dry_run=false → Executes assignment. Processes one registration at a time via the RPC.
- *
- * Scoping:
- *   Scopes registrations, capacity, and RPC assignment by festival_event_id.
+ *   dry_run=true  → Returns a summary (total unassigned, operators, capacity, filter options) WITHOUT assigning.
+ *   dry_run=false → Revalidates DB state and executes assignment dynamically via atomic RPC.
  */
 
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { assignOperator, MAX_CONTACTS_PER_OPERATOR } from '@/lib/assignment-engine';
 import { normalizeSource } from '@/lib/source-resolver';
+import { formatOperatorDisplayName } from '@/lib/status-normalizer';
 
 // ─── Concurrency Lock ─────────────────────────────────────────────────────────
 let isBatchRunning = false;
@@ -56,7 +54,13 @@ export async function POST(req: Request) {
   const { error: authError, userId } = await requireAdmin(req);
   if (authError) return authError;
 
-  let body: { dry_run?: boolean; source?: string } = {};
+  let body: {
+    dry_run?: boolean;
+    source?: string;
+    area_of_stay?: string;
+    company_college?: string;
+    occupation?: string;
+  } = {};
   try {
     body = await req.json();
   } catch {
@@ -67,6 +71,10 @@ export async function POST(req: Request) {
   const rawSource = body.source ?? 'rathayatra';
   const source = normalizeSource(rawSource);
   const isFeedback = source === 'feedback_contacts';
+
+  const filterArea = body.area_of_stay?.trim() || null;
+  const filterCollege = body.company_college?.trim() || null;
+  const filterOccupation = body.occupation?.trim() || null;
 
   const targetRegTable =
     source === 'krishnashtami'
@@ -116,26 +124,76 @@ export async function POST(req: Request) {
   }
 
   // ── 3. Fetch unassigned contacts from target table ─────────────────────────
-  const { data: unassignedRegs, error: regsError } = await supabaseAdmin
+  const selectFields = isFeedback
+    ? 'id, full_name, gender, current_stay, college_name, branch'
+    : 'id, full_name, gender, area_of_stay, company_college, occupation';
+
+  const { data: allRegs, error: regsError } = await supabaseAdmin
     .from(targetRegTable)
-    .select('id, full_name, gender')
+    .select(selectFields)
     .order('created_at', { ascending: true });
 
   if (regsError) {
     return NextResponse.json({ error: 'Failed to fetch registrations: ' + regsError.message }, { status: 500 });
   }
 
-  // Get assigned & Not-Coming IDs from assignTable
+  // Get assigned IDs from assignTable
   const { data: assignedRows } = await supabaseAdmin
     .from(assignTable)
     .select(`${fkCol}`)
     .eq('is_active', true);
 
   const assignedSet = new Set((assignedRows ?? []).map((r) => (r as Record<string, string>)[fkCol]));
-  
-  const unassigned = (unassignedRegs ?? []).filter(
-    (r) => !assignedSet.has(r.id)
-  );
+
+  // Extract filter options from all registrations
+  const availableAreas = Array.from(
+    new Set(
+      (allRegs ?? [])
+        .map((r: Record<string, unknown>) => String(r.area_of_stay || r.current_stay || '').trim())
+        .filter(Boolean)
+    )
+  ).sort();
+
+  const availableColleges = Array.from(
+    new Set(
+      (allRegs ?? [])
+        .map((r: Record<string, unknown>) => String(r.company_college || r.college_name || '').trim())
+        .filter(Boolean)
+    )
+  ).sort();
+
+  const availableOccupations = Array.from(
+    new Set(
+      (allRegs ?? [])
+        .map((r: Record<string, unknown>) => String(r.occupation || r.branch || '').trim())
+        .filter(Boolean)
+    )
+  ).sort();
+
+  // Filter unassigned registrations
+  let unassigned = (allRegs ?? []).filter((r: Record<string, unknown>) => !assignedSet.has(String(r.id)));
+
+  // Apply filters with AND semantics if specified
+  if (filterArea) {
+    unassigned = unassigned.filter((r: Record<string, unknown>) => {
+      const val = String(r.area_of_stay || r.current_stay || '').trim();
+      return val.toLowerCase() === filterArea.toLowerCase();
+    });
+  }
+
+  if (filterCollege) {
+    unassigned = unassigned.filter((r: Record<string, unknown>) => {
+      const val = String(r.company_college || r.college_name || '').trim();
+      return val.toLowerCase() === filterCollege.toLowerCase();
+    });
+  }
+
+  if (filterOccupation) {
+    unassigned = unassigned.filter((r: Record<string, unknown>) => {
+      const val = String(r.occupation || r.branch || '').trim();
+      return val.toLowerCase() === filterOccupation.toLowerCase();
+    });
+  }
 
   // ── 4. Compute capacity summary ──────────────────────────────────────────────
   const totalCapacity = activeOperators.length * MAX_CONTACTS_PER_OPERATOR;
@@ -144,20 +202,30 @@ export async function POST(req: Request) {
 
   const operatorSummaries = activeOperators.map((op) => ({
     id: op.id,
-    name: op.name,
+    name: formatOperatorDisplayName(op.name),
     current: countMap[op.id] ?? 0,
     capacity: MAX_CONTACTS_PER_OPERATOR,
     available: MAX_CONTACTS_PER_OPERATOR - (countMap[op.id] ?? 0),
   }));
 
-  const skippedFemaleCount = unassigned.filter(r => r.gender === 'Female').length;
-  const eligibleCount = unassigned.filter(r => r.gender !== 'Female').length;
-  
+  const skippedFemaleCount = unassigned.filter((r: Record<string, unknown>) => r.gender === 'Female').length;
+  const eligibleCount = unassigned.filter((r: Record<string, unknown>) => r.gender !== 'Female').length;
+
   const willAssign = Math.min(eligibleCount, Math.max(0, availableSlots));
   const willSkipCapacity = Math.max(0, eligibleCount - availableSlots);
 
   const dryRunSummary = {
     source,
+    filters: {
+      area_of_stay: filterArea,
+      company_college: filterCollege,
+      occupation: filterOccupation,
+    },
+    filter_options: {
+      areas: availableAreas,
+      colleges: availableColleges,
+      occupations: availableOccupations,
+    },
     total_unassigned: unassigned.length,
     skipped_female: skippedFemaleCount,
     eligible_male: eligibleCount,
@@ -196,7 +264,7 @@ export async function POST(req: Request) {
       }
 
       try {
-        const assignedOpId = await assignOperator(reg.id, source);
+        const assignedOpId = await assignOperator(String(reg.id), source);
 
         if (!assignedOpId) {
           skippedCapacity++;
@@ -217,7 +285,12 @@ export async function POST(req: Request) {
         assigned++;
         if (!distribution[assignedOpId]) {
           const op = activeOperators.find((o) => o.id === assignedOpId);
-          distribution[assignedOpId] = { name: op?.name ?? assignedOpId, assigned_in_batch: 0 };
+          let rawName = op?.name;
+          if (!rawName) {
+            const { data: opRow } = await supabaseAdmin.from('contact_operators').select('name').eq('id', assignedOpId).single();
+            rawName = opRow?.name;
+          }
+          distribution[assignedOpId] = { name: formatOperatorDisplayName(rawName), assigned_in_batch: 0 };
         }
         distribution[assignedOpId].assigned_in_batch++;
       } catch (err) {

@@ -99,22 +99,20 @@ export async function autoAssignFeedbackContact(
 
     const selectedOperator = availableOperators[0].operator;
 
-    // 5. Create new feedback assignment record
-    const { data: inserted, error: insertError } = await supabaseAdmin
-      .from('feedback_contact_assignments')
-      .insert({
-        feedback_contact_id: feedbackContactId,
-        operator_id: selectedOperator.id,
-        assigned_by: assignedBy || null,
-        status: 'Assigned',
-        is_active: true,
-      })
-      .select('id')
-      .single();
+    // 5. Create new feedback assignment record atomically via RPC
+    const { data: rpcRes, error: rpcErr } = await supabaseAdmin.rpc('assign_contact_atomic', {
+      p_contact_id: feedbackContactId,
+      p_operator_id: selectedOperator.id,
+      p_source: 'feedback_contacts',
+      p_assigned_by: assignedBy || null,
+      p_max_capacity: MAX_OPERATOR_FEEDBACK_CAPACITY,
+    });
 
-    if (insertError || !inserted) {
-      return { success: false, message: `Failed to insert assignment: ${insertError?.message}` };
+    if (rpcErr || !rpcRes?.success) {
+      return { success: false, message: rpcRes?.message || rpcErr?.message || 'Failed to insert assignment' };
     }
+
+    const insertedId = rpcRes.assignment_id;
 
     // 6. Log audit event
     await supabaseAdmin.from('audit_logs').insert({
@@ -123,13 +121,13 @@ export async function autoAssignFeedbackContact(
         feedback_contact_id: feedbackContactId,
         operator_id: selectedOperator.id,
         assigned_by: assignedBy || 'system_auto',
-        assignment_id: inserted.id,
+        assignment_id: insertedId,
       },
     });
 
     return {
       success: true,
-      assignmentId: inserted.id,
+      assignmentId: insertedId,
       operatorId: selectedOperator.id,
       operatorName: selectedOperator.name,
       message: `Feedback contact assigned to ${selectedOperator.name}`,
@@ -195,22 +193,20 @@ export async function assignFeedbackContactManually(
       };
     }
 
-    // 4. Create new active assignment
-    const { data: inserted, error: insertError } = await supabaseAdmin
-      .from('feedback_contact_assignments')
-      .insert({
-        feedback_contact_id: feedbackContactId,
-        operator_id: targetOperatorId,
-        assigned_by: assignedBy || null,
-        status: 'Assigned',
-        is_active: true,
-      })
-      .select('id')
-      .single();
+    // 4. Create new active assignment atomically via RPC
+    const { data: rpcRes, error: rpcErr } = await supabaseAdmin.rpc('assign_contact_atomic', {
+      p_contact_id: feedbackContactId,
+      p_operator_id: targetOperatorId,
+      p_source: 'feedback_contacts',
+      p_assigned_by: assignedBy || null,
+      p_max_capacity: MAX_OPERATOR_FEEDBACK_CAPACITY,
+    });
 
-    if (insertError || !inserted) {
-      return { success: false, message: `Failed to create assignment: ${insertError?.message}` };
+    if (rpcErr || !rpcRes?.success) {
+      return { success: false, message: rpcRes?.message || rpcErr?.message || 'Failed to create assignment' };
     }
+
+    const insertedId = rpcRes.assignment_id;
 
     // 5. Log audit event
     await supabaseAdmin.from('audit_logs').insert({
@@ -219,13 +215,13 @@ export async function assignFeedbackContactManually(
         feedback_contact_id: feedbackContactId,
         new_operator_id: targetOperatorId,
         assigned_by: assignedBy || 'admin',
-        assignment_id: inserted.id,
+        assignment_id: insertedId,
       },
     });
 
     return {
       success: true,
-      assignmentId: inserted.id,
+      assignmentId: insertedId,
       operatorId: operator.id,
       operatorName: operator.name,
       message: `Feedback contact successfully assigned to ${operator.name}`,

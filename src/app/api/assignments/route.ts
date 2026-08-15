@@ -138,15 +138,6 @@ export async function POST(req: Request) {
       ? 'feedback_contacts'
       : 'registrations';
 
-  const assignTable =
-    source === 'krishnashtami'
-      ? 'krishnashtami_contact_assignments'
-      : source === 'feedback_contacts'
-      ? 'feedback_contact_assignments'
-      : 'contact_assignments';
-
-  const fkCol = source === 'feedback_contacts' ? 'feedback_contact_id' : 'registration_id';
-
   // 1. Strict Server-Side Cross-Source Validation: Verify registrations exist in target source table
   const { data: verifiedRegs, error: regsFetchError } = await supabaseAdmin
     .from(targetRegTable)
@@ -183,93 +174,48 @@ export async function POST(req: Request) {
   const results: Array<{ registration_id: string; status: string; message: string; assignment?: unknown }> = [];
 
   for (const regId of regIds) {
-    // Check for existing active assignment
-    const { data: existing } = await supabaseAdmin
-      .from(assignTable)
-      .select('id, operator_id')
-      .eq(fkCol, regId)
-      .eq('is_active', true)
-      .maybeSingle();
+    const { data: rpcRes, error: rpcErr } = await supabaseAdmin.rpc('assign_contact_atomic', {
+      p_contact_id: regId,
+      p_operator_id: operator.id,
+      p_source: source,
+      p_assigned_by: userId || null,
+      p_max_capacity: 40,
+    });
 
-    if (existing) {
+    if (rpcErr || !rpcRes?.success) {
+      const code = rpcRes?.code || 'ERROR';
+      const msg = rpcRes?.message || rpcErr?.message || 'Assignment failed';
+
       if (regIds.length === 1) {
-        return NextResponse.json(
-          {
-            error: 'CONTACT_ALREADY_ASSIGNED',
-            message: 'This contact is already assigned to an operator.',
-          },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: code, message: msg }, { status: 400 });
       }
+
       results.push({
         registration_id: regId,
-        status: 'already_assigned',
-        message: 'This contact is already assigned to an operator.',
+        status: code.toLowerCase(),
+        message: msg,
       });
       continue;
     }
 
-    // Insert new assignment
-    const insertPayload: Record<string, unknown> = {
-      [fkCol]: regId,
-      operator_id: operator.id,
-      assigned_by: userId,
-      assigned_at: new Date().toISOString(),
-      status: 'Pending',
-      is_active: true,
-    };
+    results.push({
+      registration_id: regId,
+      status: 'assigned',
+      message: `Assigned to ${operator.name}`,
+      assignment: rpcRes,
+    });
 
-    const { data: newAssignment, error: insertErr } = await supabaseAdmin
-      .from(assignTable)
-      .insert(insertPayload)
-      .select()
-      .single();
-
-    if (insertErr) {
-      // Check for Postgres unique index violation (race condition handling)
-      if (insertErr.code === '23505') {
-        if (regIds.length === 1) {
-          return NextResponse.json(
-            {
-              error: 'CONTACT_ALREADY_ASSIGNED',
-              message: 'This contact is already assigned to an operator.',
-            },
-            { status: 400 }
-          );
-        }
-        results.push({
-          registration_id: regId,
-          status: 'already_assigned',
-          message: 'This contact is already assigned to an operator.',
-        });
-        continue;
-      }
-
-      results.push({
+    // Audit log
+    await supabaseAdmin.from('audit_logs').insert({
+      admin_id: userId,
+      action: 'CONTACT_ASSIGNED',
+      details: {
+        source,
         registration_id: regId,
-        status: 'error',
-        message: insertErr.message,
-      });
-    } else {
-      results.push({
-        registration_id: regId,
-        status: 'assigned',
-        message: `Assigned to ${operator.name}`,
-        assignment: newAssignment,
-      });
-
-      // Audit log
-      await supabaseAdmin.from('audit_logs').insert({
-        admin_id: userId,
-        action: 'CONTACT_ASSIGNED',
-        details: {
-          source,
-          registration_id: regId,
-          operator_id: operator.id,
-          operator_name: operator.name,
-        },
-      });
-    }
+        operator_id: operator.id,
+        operator_name: operator.name,
+      },
+    });
   }
 
   const assignedCount = results.filter((r) => r.status === 'assigned').length;

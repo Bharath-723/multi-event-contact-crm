@@ -1084,8 +1084,6 @@ export default function RegistrationsPage() {
       setDeleteRegId(null);
     } catch (err) {
       console.error('Delete failed:', err);
-      const message = err instanceof Error ? err.message : 'Failed to delete registration.';
-      alert(message);
     } finally {
       setIsDeleting(false);
     }

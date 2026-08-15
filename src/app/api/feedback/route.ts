@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
 
     if (existingFeedback) {
       return NextResponse.json(
-        { error: 'Feedback has already been submitted for this mobile number.' },
+        { error: 'This mobile number has already been registered.' },
         { status: 409 }
       );
     }

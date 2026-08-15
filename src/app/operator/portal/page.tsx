@@ -10,9 +10,10 @@ import {
   ChevronLeft, ChevronRight, MessageCircle,
   CheckCircle2, XCircle, Sparkles, GraduationCap, GitBranch, Laptop, Star
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import type { FeedbackContact } from '@/lib/types';
 import { ContactSource, normalizeSource } from '@/lib/source-resolver';
+import { computeOperatorStats, formatOperatorDisplayName } from '@/lib/status-normalizer';
 import Link from 'next/link';
 
 export type AllowedStatus = 'Coming' | 'Not Coming' | 'Not Connected';
@@ -50,6 +51,7 @@ interface GenericAssignmentData {
   is_active: boolean;
   updated_at: string;
   feedback_contact?: FeedbackContact | null;
+  feedback_contacts?: Record<string, unknown> | null;
   krishnashtami_registrations?: Record<string, unknown> | null;
   registrations?: Record<string, unknown> | null;
 }
@@ -135,6 +137,7 @@ function ContactCard({
   onNotes: (id: string, current: string) => void;
 }) {
   const contact = (
+    assignment.feedback_contacts ||
     assignment.feedback_contact ||
     assignment.krishnashtami_registrations ||
     assignment.registrations
@@ -267,7 +270,7 @@ function ContactCard({
             value={STATUS_OPTIONS.includes(assignment.status as AllowedStatus) ? assignment.status : 'Not Connected'}
             disabled={updating}
             onChange={(e) => handleStatus(e.target.value as AllowedStatus)}
-            className="w-full px-3 py-2 rounded-xl glass-input text-xs font-semibold text-slate-200 cursor-pointer disabled:opacity-50 appearance-none pr-8"
+            className="w-full px-3 py-2 rounded-xl glass-input text-xs font-semibold text-slate-200 cursor-pointer disabled:opacity-50 appearance-none pr-8 bg-slate-950"
           >
             {STATUS_OPTIONS.map((st) => (
               <option key={st} value={st} className="bg-slate-950 text-white">
@@ -306,6 +309,12 @@ function OperatorPortalContent() {
     total_not_connected: 0,
   });
   const [loadingData, setLoadingData] = useState(false);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  const toast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 3500);
+  };
 
   // Preserve & read initial source from URL params
   useEffect(() => {
@@ -328,8 +337,12 @@ function OperatorPortalContent() {
   });
 
   const setContactSource = (newSource: ContactSource) => {
-    setContactSourceState(newSource);
+    // Immediate clean state reset when source changes
+    setAssignments([]);
+    setStats({ total_assigned: 0, total_coming: 0, total_not_coming: 0, total_not_connected: 0 });
+    setSearch('');
     setPage(1);
+    setContactSourceState(newSource);
   };
 
   // 1. Fetch Current Operator Profile
@@ -369,9 +382,14 @@ function OperatorPortalContent() {
         if (json.stats) {
           setStats(json.stats);
         }
+      } else {
+        setAssignments([]);
+        setStats({ total_assigned: 0, total_coming: 0, total_not_coming: 0, total_not_connected: 0 });
       }
     } catch (err) {
       console.error('Failed to fetch operator assignments:', err);
+      setAssignments([]);
+      setStats({ total_assigned: 0, total_coming: 0, total_not_coming: 0, total_not_connected: 0 });
     } finally {
       setLoadingData(false);
     }
@@ -430,27 +448,26 @@ function OperatorPortalContent() {
       if (res.ok) {
         setAssignments((prev) => {
           const updated = prev.map((item) => (item.id === assignmentId ? { ...item, status } : item));
-          
-          const coming = updated.filter((a) => a.status === 'Coming' || a.status === 'Interested' || a.status === 'Confirmed' || a.status === 'Completed').length;
-          const notComing = updated.filter((a) => a.status === 'Not Coming').length;
-          const notConnected = updated.filter((a) => a.status === 'Not Connected' || a.status === 'Callback Required' || a.status === 'Pending' || !a.status).length;
-          
+          const statsObj = computeOperatorStats(updated);
+
           setStats({
-            total_assigned: updated.length,
-            total_coming: coming,
-            total_not_coming: notComing,
-            total_not_connected: notConnected,
+            total_assigned: statsObj.assigned,
+            total_coming: statsObj.coming,
+            total_not_coming: statsObj.notComing,
+            total_not_connected: statsObj.notConnected,
           });
 
           return updated;
         });
+        toast(`Status updated to ${status}`);
         loadAssignments();
       } else {
         const d = await res.json();
-        alert(d.error || 'Failed to update status');
+        toast(d.error || 'Failed to update status');
       }
     } catch (err) {
       console.error('Failed to update status:', err);
+      toast('Network error while updating status.');
     }
   };
 
@@ -464,16 +481,25 @@ function OperatorPortalContent() {
       });
 
       if (res.ok) {
+        toast('Notes saved.');
         loadAssignments();
+      } else {
+        toast('Failed to save notes.');
       }
     } catch (err) {
       console.error('Failed to save notes:', err);
+      toast('Network error while saving notes.');
     }
   };
 
   // Filtered contacts list based on search string
   const filteredList = assignments.filter((a) => {
-    const contact = (a.feedback_contact || a.krishnashtami_registrations || a.registrations) as Record<string, unknown> | null;
+    const contact = (
+      (a as unknown as Record<string, unknown>).feedback_contacts ||
+      a.feedback_contact ||
+      a.krishnashtami_registrations ||
+      a.registrations
+    ) as Record<string, unknown> | null;
     if (!contact) return false;
     if (!search.trim()) return true;
     const q = search.toLowerCase();
@@ -530,7 +556,7 @@ function OperatorPortalContent() {
             </div>
             <div>
               <h1 className="font-bold text-sm text-slate-100 flex items-center gap-1.5 leading-snug">
-                {operator.name}
+                {formatOperatorDisplayName(operator.name)}
               </h1>
               <p className="text-[11px] text-purple-400 font-semibold">{sourceTitle} Operator Portal</p>
             </div>
@@ -656,6 +682,22 @@ function OperatorPortalContent() {
           onClose={() => setNotesModal({ open: false, assignmentId: '', notes: '' })}
         />
       )}
+
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {toastMsg && (
+          <motion.div
+            key="toast"
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 30 }}
+            className="fixed bottom-6 right-6 z-[100] bg-slate-800 border border-purple-500/40 text-slate-100 text-sm font-medium px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-2"
+          >
+            <CheckCircle2 className="w-4 h-4 text-purple-400" />
+            {toastMsg}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

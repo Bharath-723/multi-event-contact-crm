@@ -81,6 +81,8 @@ export default function OperatorVisitorPage() {
   }, [query, selectedEventId]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
   const handleQueryChange = (val: string) => {
     const digits = val.replace(/\D/g, '').slice(0, 10);
     setQuery(digits);
@@ -141,6 +143,7 @@ export default function OperatorVisitorPage() {
 
       setQuery('');
       setResults([]);
+      setTimeout(() => inputRef.current?.focus(), 50);
     } catch {
       setErrorCheckIn('Network error. Please try again.');
     } finally {
@@ -173,6 +176,7 @@ export default function OperatorVisitorPage() {
           <Smartphone className="w-5 h-5" />
         </span>
         <input
+          ref={inputRef}
           type="tel"
           value={query}
           onChange={(e) => handleQueryChange(e.target.value)}

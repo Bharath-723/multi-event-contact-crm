@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getOperatorSessionFromRequest } from '@/lib/operator-auth';
 import { normalizeSource } from '@/lib/source-resolver';
+import { computeOperatorStats } from '@/lib/status-normalizer';
 
 export async function GET(req: Request) {
   const session = getOperatorSessionFromRequest(req);
@@ -59,9 +60,11 @@ export async function GET(req: Request) {
     .select(selectQuery)
     .eq('operator_id', session.operatorId);
 
+  // Default to active assignments for Operator Portal unless explicitly requested otherwise
   if (isActiveParam !== null && isActiveParam !== undefined) {
-    const isActive = isActiveParam === 'true';
-    query = query.eq('is_active', isActive);
+    query = query.eq('is_active', isActiveParam === 'true');
+  } else {
+    query = query.eq('is_active', true);
   }
 
   if (statusFilter && statusFilter !== 'ALL') {
@@ -72,24 +75,33 @@ export async function GET(req: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Compute stats across all assignments for this operator in this source
-  const { data: allSourceAssignments } = await supabaseAdmin
+  const rawList = (data as unknown as Record<string, unknown>[]) ?? [];
+  const normalizedAssignments = rawList.map((row) => {
+    const contactObj = row.feedback_contacts || row.feedback_contact || row.krishnashtami_registrations || row.registrations;
+    return {
+      ...row,
+      feedback_contact: contactObj,
+    };
+  });
+
+  // Compute authoritative stats across active assignments for this operator in this source
+  const { data: activeAssignments } = await supabaseAdmin
     .from(assignTable)
     .select('id, status, is_active')
-    .eq('operator_id', session.operatorId);
+    .eq('operator_id', session.operatorId)
+    .eq('is_active', true);
 
-  const allList = allSourceAssignments ?? [];
-  const activeList = allList.filter((a) => a.is_active);
+  const statsObj = computeOperatorStats(activeAssignments ?? []);
 
   const stats = {
-    total_assigned: activeList.length,
-    total_coming: allList.filter((a) => a.status === 'Coming' || a.status === 'Interested' || a.status === 'Confirmed' || a.status === 'Completed').length,
-    total_not_coming: allList.filter((a) => a.status === 'Not Coming').length,
-    total_not_connected: allList.filter((a) => a.status === 'Not Connected' || a.status === 'Callback Required' || a.status === 'Pending').length,
+    total_assigned: statsObj.assigned,
+    total_coming: statsObj.coming,
+    total_not_coming: statsObj.notComing,
+    total_not_connected: statsObj.notConnected,
   };
 
   return NextResponse.json({
-    assignments: data ?? [],
+    assignments: normalizedAssignments,
     stats,
     source,
   });

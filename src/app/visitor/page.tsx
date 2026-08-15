@@ -321,12 +321,15 @@ export default function AdminVisitorPage() {
       // 3. Clear query & input immediately for next entry
       setQuery('');
       setResults([]);
+      setTimeout(() => inputRef.current?.focus(), 50);
     } catch {
       setErrorCheckIn('Network error. Please try again.');
     } finally {
       setCheckingInId(null);
     }
   };
+
+  const inputRef = useRef<HTMLInputElement>(null);
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto p-4 md:p-6 pb-12">
@@ -393,6 +396,7 @@ export default function AdminVisitorPage() {
                   <Smartphone className="w-5 h-5" />
                 </span>
                 <input
+                  ref={inputRef}
                   type="tel"
                   value={query}
                   onChange={(e) => handleQueryChange(e.target.value)}

@@ -250,7 +250,6 @@ export default function AdminFeedbackDashboard() {
         setDryRunModal({ open: true, loading: false, dryRun: data.dryRun });
       } else {
         setDryRunModal({ open: false, loading: false });
-        alert(data.error || 'Failed to load dry run preview.');
       }
     } catch (err) {
       console.error('Dry run failed:', err);
@@ -268,13 +267,9 @@ export default function AdminFeedbackDashboard() {
         body: JSON.stringify({ action: 'auto_assign_all' }),
       });
 
-      const json = await res.json();
       if (res.ok) {
         setDryRunModal({ open: false, loading: false });
         loadAssignments();
-        alert(json.message || 'Feedback auto-assignment completed.');
-      } else {
-        alert(json.error || 'Feedback auto-assignment failed.');
       }
     } catch (err) {
       console.error('Execute auto assign failed:', err);

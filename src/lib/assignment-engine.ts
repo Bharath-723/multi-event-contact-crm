@@ -103,19 +103,17 @@ export async function assignOperator(
 
     const chosenOperatorId = eligible[0].id;
 
-    // Insert assignment into source-specific table
-    const { error: insertErr } = await supabaseAdmin
-      .from(assignTable)
-      .insert({
-        registration_id: registrationId,
-        operator_id: chosenOperatorId,
-        is_active: true,
-        status: 'Pending',
-        assigned_by: 'system_auto',
-      });
+    // Call atomic RPC for capacity & duplicate safe insertion
+    const { data: rpcRes, error: rpcErr } = await supabaseAdmin.rpc('assign_contact_atomic', {
+      p_contact_id: registrationId,
+      p_operator_id: chosenOperatorId,
+      p_source: source,
+      p_assigned_by: null,
+      p_max_capacity: MAX_CONTACTS_PER_OPERATOR,
+    });
 
-    if (insertErr) {
-      console.error(`Automatic assignment failed inserting into ${assignTable}:`, insertErr);
+    if (rpcErr || !rpcRes?.success) {
+      console.error(`Automatic assignment RPC failed into ${assignTable}:`, rpcErr || rpcRes?.message);
       return null;
     }
 

@@ -62,12 +62,34 @@ export default function RegistrationForm() {
   // eslint-disable-next-line react-hooks/incompatible-library
   const watchedFields = watch();
 
+  const [isDuplicatePhone, setIsDuplicatePhone] = useState(false);
+  const phoneValue = watchedFields.phone;
+
+  useEffect(() => {
+    const digits = (phoneValue || '').replace(/\D/g, '').slice(-10);
+    if (digits.length === 10) {
+      const timer = setTimeout(() => {
+        fetch(`/api/feedback/check?phone=${digits}`)
+          .then((res) => res.json())
+          .then((data) => {
+            setIsDuplicatePhone(Boolean(data.exists));
+          })
+          .catch(() => setIsDuplicatePhone(false));
+      }, 300);
+      return () => clearTimeout(timer);
+    } else {
+      setIsDuplicatePhone(false);
+    }
+  }, [phoneValue]);
+
   // Load draft from local storage or reset if reset=true
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       if (params.get('reset') === 'true') {
         localStorage.removeItem(LOCAL_STORAGE_KEY);
+        setIsDuplicatePhone(false);
+        setSubmissionError(null);
         reset({
           fullName: '',
           phone: '',
@@ -307,10 +329,15 @@ export default function RegistrationForm() {
                   {...register('phone')}
                   placeholder="Mobile Number (10 digits) *"
                   className="w-full pl-11 pr-4 py-3 rounded-xl glass-input text-white text-base placeholder-slate-500"
-                  aria-invalid={errors.phone ? 'true' : 'false'}
+                  aria-invalid={errors.phone || isDuplicatePhone ? 'true' : 'false'}
                 />
                 {errors.phone && (
                   <p className="text-red-400 text-xs mt-1 pl-1">{errors.phone.message}</p>
+                )}
+                {isDuplicatePhone && (
+                  <p className="text-red-400 text-xs mt-1 pl-1 font-bold">
+                    This mobile number has already been registered.
+                  </p>
                 )}
               </div>
 
@@ -568,8 +595,8 @@ export default function RegistrationForm() {
           <div className="pt-4">
             <button
               type="submit"
-              disabled={isSubmitting}
-              className={`w-full py-4 rounded-xl font-bold text-lg text-white transition-all transform active:scale-[0.98] ${isValid
+              disabled={isSubmitting || isDuplicatePhone}
+              className={`w-full py-4 rounded-xl font-bold text-lg text-white transition-all transform active:scale-[0.98] ${isValid && !isDuplicatePhone
                 ? 'bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:opacity-95 shadow-[0_0_20px_rgba(139,92,246,0.3)] hover:shadow-[0_0_30px_rgba(139,92,246,0.5)] cursor-pointer'
                 : 'bg-slate-900 border border-slate-800 text-slate-500 cursor-not-allowed'
                 }`}

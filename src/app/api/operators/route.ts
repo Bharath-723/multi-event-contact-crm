@@ -6,6 +6,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { hashPassword } from '@/lib/operator-auth';
 import { normalizeSource } from '@/lib/source-resolver';
+import { computeOperatorStats, formatOperatorDisplayName } from '@/lib/status-normalizer';
 
 // ─── Guard: Validate admin session from Supabase Auth header ────────────────
 async function requireAdmin(req: Request): Promise<{ error: NextResponse | null }> {
@@ -49,10 +50,11 @@ export async function GET(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // 2. Fetch contact assignments from source-specific assignment table
+  // 2. Fetch active contact assignments from source-specific assignment table
   const { data: assignments } = await supabaseAdmin
     .from(assignTable)
-    .select('id, operator_id, status, is_active');
+    .select('id, operator_id, status, is_active')
+    .eq('is_active', true);
 
   const assignmentsByOp = new Map<string, Array<{ id: string; operator_id: string; status: string; is_active: boolean }>>();
   (assignments || []).forEach((fa) => {
@@ -63,22 +65,19 @@ export async function GET(req: NextRequest) {
   });
 
   const withStats = (operators ?? []).map((op) => {
-    const list = assignmentsByOp.get(op.id) || [];
-    const activeList = list.filter((a) => a.is_active);
-    const total_assigned = activeList.length;
-    const total_pending = activeList.filter((a) => a.status === 'Pending').length;
-    const total_coming = activeList.filter((a) => a.status === 'Coming').length;
-    const total_not_coming = list.filter((a) => a.status === 'Not Coming').length;
+    const activeList = assignmentsByOp.get(op.id) || [];
+    const stats = computeOperatorStats(activeList);
 
     return {
       ...op,
-      total_assigned,
-      total_pending,
-      total_coming,
-      total_not_coming,
-      total_completed: total_coming,
-      total_called: activeList.filter((a) => a.status !== 'Pending').length,
-      call_success_pct: total_assigned > 0 ? Math.round((total_coming / total_assigned) * 100) : 0,
+      name: formatOperatorDisplayName(op.name),
+      total_assigned: stats.assigned,
+      total_pending: stats.pending,
+      total_coming: stats.coming,
+      total_not_coming: stats.notComing,
+      total_completed: stats.coming,
+      total_called: stats.coming + stats.notComing,
+      call_success_pct: stats.assigned > 0 ? Math.round((stats.coming / stats.assigned) * 100) : 0,
     };
   });
 
