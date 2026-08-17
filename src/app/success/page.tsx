@@ -15,11 +15,18 @@ function YoutubeIcon(props: React.SVGProps<SVGSVGElement>) {
 
 export default function RedoneSuccessPage() {
   const [gender, setGender] = useState<'Male' | 'Female' | null>(null);
+  const [isFeedback, setIsFeedback] = useState<boolean>(false);
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
+        const params = new URLSearchParams(window.location.search);
+        const typeParam = params.get('type') || params.get('form');
+        if (typeParam === 'feedback') {
+          setIsFeedback(true);
+        }
+
         const rawData = sessionStorage.getItem('krishnashtami_last_registration');
         if (rawData) {
           const parsed = JSON.parse(rawData);
@@ -46,6 +53,96 @@ export default function RedoneSuccessPage() {
     ? 'Join Female WhatsApp Community'
     : 'Join Krishnashtami WhatsApp Community';
 
+  // Dedicated clean view for Feedback Form Submission
+  if (isFeedback) {
+    return (
+      <div className="dark min-h-screen bg-[#030014] text-slate-100 overflow-x-hidden">
+        <main className="relative min-h-screen flex flex-col items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gradient-purple overflow-hidden">
+          {/* Decorative background glow orbs */}
+          <div className="absolute top-1/6 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-purple-600/15 rounded-full blur-[140px] pointer-events-none" />
+          <div className="absolute bottom-1/4 right-10 w-96 h-96 bg-indigo-600/10 rounded-full blur-[100px] pointer-events-none" />
+          <div className="absolute top-1/3 left-10 w-96 h-96 bg-pink-600/10 rounded-full blur-[100px] pointer-events-none" />
+
+          {/* Decorative Grid */}
+          <div 
+            className="absolute inset-0 bg-[linear-gradient(to_right,rgba(139,92,246,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(139,92,246,0.03)_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" 
+          />
+
+          <div className="relative z-10 w-full max-w-xl flex flex-col items-center space-y-8 my-auto">
+            
+            {/* Feedback Success Card */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ duration: 0.5, ease: 'easeOut' }}
+              className="w-full glass-card rounded-3xl p-8 sm:p-12 text-center border border-purple-500/20 shadow-2xl backdrop-blur-xl bg-slate-950/80 relative overflow-hidden flex flex-col items-center space-y-6"
+            >
+              {/* Top Glowing Accent Bar */}
+              <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-amber-400 via-purple-500 to-indigo-500" />
+
+              {/* Glowing Badge */}
+              <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-purple-950/60 border border-purple-500/30 text-purple-300 text-xs font-bold tracking-wide shadow-inner">
+                <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
+                Feedback — Submission Confirmed
+              </span>
+
+              {/* Animated Ripple Checkmark Circle */}
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: 'spring', stiffness: 200, damping: 15, delay: 0.15 }}
+                className="w-20 h-20 bg-purple-950/80 border border-purple-500/40 rounded-full flex items-center justify-center relative shadow-lg shadow-purple-500/20 my-2"
+              >
+                <CheckCircle2 className="w-12 h-12 text-purple-400" />
+                <motion.div
+                  className="absolute inset-0 rounded-full border border-purple-400"
+                  initial={{ scale: 1, opacity: 0.6 }}
+                  animate={{ scale: 1.45, opacity: 0 }}
+                  transition={{ repeat: Infinity, duration: 2.2, ease: 'easeOut' }}
+                />
+              </motion.div>
+
+              {/* Header Title & Subtitle */}
+              <div className="space-y-2 max-w-md">
+                <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
+                  Feedback Submitted!
+                </h1>
+                <p className="text-slate-300 text-sm sm:text-base leading-relaxed">
+                  Thank you for your response. Your feedback details have been successfully recorded.
+                </p>
+              </div>
+
+              {/* Action Button */}
+              <div className="w-full pt-2">
+                <button
+                  onClick={() => {
+                    if (typeof window !== 'undefined') {
+                      localStorage.removeItem('feedback_registration_draft');
+                      sessionStorage.clear();
+                    }
+                    window.location.href = '/feedback?reset=true';
+                  }}
+                  className="w-full py-3.5 px-5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-purple-600/20 active:scale-95 cursor-pointer"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  Submit Another Response
+                </button>
+              </div>
+            </motion.div>
+
+            {/* Footer */}
+            <footer className="text-center text-xs text-slate-500 space-y-1 pt-2">
+              <p className="text-amber-400 font-bold text-sm tracking-wide">Hare Krishna</p>
+              <p>© 2026 Hare Krishna Movement. All rights reserved.</p>
+            </footer>
+
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // Untouched Default Krishnashtami Success View
   return (
     <div className="dark min-h-screen bg-[#030014] text-slate-100 overflow-x-hidden">
       <main className="relative min-h-screen flex flex-col items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gradient-purple overflow-hidden">
@@ -137,9 +234,7 @@ export default function RedoneSuccessPage() {
                     localStorage.removeItem('krishnashtami_registration_draft');
                     sessionStorage.clear();
                   }
-                  const params = new URLSearchParams(window.location.search);
-                  const isFeedback = params.get('type') === 'feedback' || params.get('form') === 'feedback';
-                  window.location.href = isFeedback ? '/feedback?reset=true' : '/?reset=true';
+                  window.location.href = '/?reset=true';
                 }}
                 className="w-full py-3.5 px-5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-purple-600/20 active:scale-95 cursor-pointer"
               >
