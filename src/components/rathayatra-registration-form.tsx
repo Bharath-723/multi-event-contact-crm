@@ -196,6 +196,7 @@ export default function RegistrationForm() {
       age: undefined,
       gender: undefined,
       occupation: '',
+      standard: '',
       areaOfStay: '',
       companyCollege: '',
       pgName: '',
@@ -212,6 +213,15 @@ export default function RegistrationForm() {
 
   // eslint-disable-next-line react-hooks/incompatible-library
   const watchedFields = watch();
+
+  // Clear standard when Occupation changes away from Student
+  useEffect(() => {
+    if (watchedFields.occupation !== 'Student') {
+      if (watchedFields.standard) {
+        setValue('standard', '');
+      }
+    }
+  }, [watchedFields.occupation, watchedFields.standard, setValue]);
 
   const isVolunteerNo = watchedFields.interestedToVolunteer === 'No';
   const isPrasadamYes = watchedFields.interestedToDinner === 'Yes';
@@ -745,6 +755,36 @@ export default function RegistrationForm() {
                 )}
               </div>
             </div>
+
+            {/* Select Standard (Required & Visible ONLY when Occupation is Student) */}
+            {watchedFields.occupation === 'Student' && (
+              <div className="relative">
+                <select
+                  {...register('standard')}
+                  onChange={(e) => {
+                    const val = e.target.value as '1st Year' | '2nd Year' | '3rd Year' | '4th Year';
+                    setValue('standard', val);
+                    trigger('standard');
+                  }}
+                  className="w-full px-4 py-3 rounded-xl glass-input text-white text-base appearance-none cursor-pointer"
+                  aria-invalid={errors.standard ? 'true' : 'false'}
+                  defaultValue=""
+                  value={watchedFields.standard || ''}
+                >
+                  <option value="" disabled className="bg-slate-950 text-slate-500">Select Standard *</option>
+                  <option value="1st Year" className="bg-slate-950 text-white">1st Year</option>
+                  <option value="2nd Year" className="bg-slate-950 text-white">2nd Year</option>
+                  <option value="3rd Year" className="bg-slate-950 text-white">3rd Year</option>
+                  <option value="4th Year" className="bg-slate-950 text-white">4th Year</option>
+                </select>
+                <span className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-slate-500">
+                  <ChevronDown className="w-5 h-5" />
+                </span>
+                {errors.standard && (
+                  <p className="text-red-400 text-xs mt-1 pl-1">{errors.standard.message}</p>
+                )}
+              </div>
+            )}
 
             {/* Area of Stay with Geoapify Autocomplete */}
             <div className="grid grid-cols-1 gap-4">

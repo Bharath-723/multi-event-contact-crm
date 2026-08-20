@@ -51,6 +51,7 @@ export interface Registration {
   age: number;
   gender: 'Male' | 'Female';
   occupation?: string | null;
+  standard?: string | null;
   area_of_stay?: string | null;
   company_college: string;
   pg_name?: string | null;

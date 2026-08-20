@@ -1611,7 +1611,10 @@ export default function RegistrationsPage() {
 
                     {/* Company/College */}
                     <td className="px-5 py-4 max-w-[150px] truncate" title={reg.company_college}>
-                      {highlightText(reg.company_college, searchQuery)}
+                      <div>{highlightText(reg.company_college, searchQuery)}</div>
+                      {reg.occupation === 'Student' && reg.standard && (
+                        <div className="text-[10px] text-indigo-400 font-semibold mt-0.5 truncate">{reg.standard}</div>
+                      )}
                     </td>
 
                     {/* Skills */}
@@ -1893,11 +1896,17 @@ export default function RegistrationsPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-4 border-t border-slate-900 pt-3">
+                <div className="grid grid-cols-2 gap-4 border-t border-slate-900 pt-3">
                   <div>
                     <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Occupation</span>
                     <span className="font-bold text-slate-100 mt-0.5 block">{selectedReg.occupation || 'N/A'}</span>
                   </div>
+                  {selectedReg.occupation === 'Student' && selectedReg.standard && (
+                    <div>
+                      <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Standard</span>
+                      <span className="font-bold text-slate-100 mt-0.5 block">{selectedReg.standard}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 border-t border-slate-900 pt-3">

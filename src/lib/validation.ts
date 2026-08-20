@@ -27,6 +27,9 @@ export const registrationSchema = z.object({
     message: 'Please select a gender',
   }),
   occupation: z.string().optional().or(z.literal('')),
+  standard: z.enum(['1st Year', '2nd Year', '3rd Year', '4th Year'], {
+    message: 'Please select your standard.',
+  }).optional().or(z.literal('')).nullable(),
   areaOfStay: z.string().optional().or(z.literal('')),
   companyCollege: z.string()
     .min(2, 'Company/College name must be at least 2 characters')
@@ -50,6 +53,15 @@ export const registrationSchema = z.object({
     message: 'Please select a transportation preference',
   }).optional().or(z.literal('')),
 }).superRefine((data, ctx) => {
+  // If Occupation is Student, Standard is required
+  if (data.occupation === 'Student' && (!data.standard || data.standard.trim() === '')) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Please select your standard.',
+      path: ['standard'],
+    });
+  }
+
   // If gender is Male, areaOfStay is required
   if (data.gender === 'Male' && (!data.areaOfStay || data.areaOfStay.trim() === '')) {
     ctx.addIssue({

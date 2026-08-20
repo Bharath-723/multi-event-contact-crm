@@ -76,6 +76,7 @@ export async function POST(request: NextRequest) {
       age,
       gender,
       occupation,
+      standard,
       areaOfStay,
       companyCollege,
       pgName,
@@ -110,6 +111,8 @@ export async function POST(request: NextRequest) {
     const prasadamTable = isKrishnashtami ? 'krishnashtami_registration_prasadam' : 'registration_prasadam';
     const targetRegTable = isKrishnashtami ? 'krishnashtami_registrations' : 'registrations';
 
+    const cleanStandard = isKrishnashtami && occupation === 'Student' ? (standard || null) : null;
+
     // 5. Database operation calling the dedicated atomic Postgres RPC
     const rpcParams: Record<string, unknown> = {
       p_full_name: fullName,
@@ -132,9 +135,29 @@ export async function POST(request: NextRequest) {
 
     if (isKrishnashtami) {
       rpcParams.p_prasadam_types = interestedToDinner === 'Yes' ? (prasadamSelections || []) : [];
+      rpcParams.p_standard = cleanStandard;
     }
 
-    const { data: registrationId, error } = await supabase.rpc(rpcName, rpcParams);
+    let { data: registrationId, error } = await supabase.rpc(rpcName, rpcParams);
+
+    // Fallback: If 18-param RPC signature is not present yet, call 17-param signature
+    if (error && isKrishnashtami && error.message.includes('p_standard')) {
+      delete rpcParams.p_standard;
+      const fallbackRes = await supabase.rpc(rpcName, rpcParams);
+      registrationId = fallbackRes.data;
+      error = fallbackRes.error;
+    }
+
+    if (!error && isKrishnashtami && registrationId) {
+      try {
+        await supabaseAdmin
+          .from('krishnashtami_registrations')
+          .update({ standard: cleanStandard })
+          .eq('id', registrationId);
+      } catch (colErr) {
+        console.warn('Post-insert standard update warning:', colErr);
+      }
+    }
 
     if (error) {
       console.error('Database insertion error:', error);
