@@ -171,41 +171,126 @@ export async function POST(req: Request) {
   if (!operator) return NextResponse.json({ error: 'Operator not found' }, { status: 404 });
   if (!operator.is_active) return NextResponse.json({ error: 'Operator is currently disabled' }, { status: 400 });
 
+  const assignTable =
+    source === 'krishnashtami'
+      ? 'krishnashtami_contact_assignments'
+      : source === 'feedback_contacts'
+      ? 'feedback_contact_assignments'
+      : 'contact_assignments';
+
+  const fkCol = source === 'feedback_contacts' ? 'feedback_contact_id' : 'registration_id';
+
   const results: Array<{ registration_id: string; status: string; message: string; assignment?: unknown }> = [];
 
   for (const regId of regIds) {
-    const { data: rpcRes, error: rpcErr } = await supabaseAdmin.rpc('assign_contact_atomic', {
-      p_contact_id: regId,
-      p_operator_id: operator.id,
-      p_source: source,
-      p_assigned_by: userId || null,
-      p_max_capacity: 40,
-    });
+    // Check if contact already has an active assignment in assignTable
+    const { data: existingActive } = await supabaseAdmin
+      .from(assignTable)
+      .select('id, operator_id, contact_operators!operator_id (id, name)')
+      .eq(fkCol, regId)
+      .eq('is_active', true)
+      .maybeSingle();
 
-    if (rpcErr || !rpcRes?.success) {
-      const code = rpcRes?.code || 'ERROR';
-      const msg = rpcRes?.message || rpcErr?.message || 'Assignment failed';
-
-      if (regIds.length === 1) {
-        return NextResponse.json({ error: code, message: msg }, { status: 400 });
+    if (existingActive) {
+      if (existingActive.operator_id === operator.id) {
+        results.push({
+          registration_id: regId,
+          status: 'already_assigned',
+          message: `Already assigned to ${operator.name}`,
+        });
+        continue;
       }
 
+      const prevOpName = (existingActive.contact_operators as any)?.name || 'previous operator';
+
+      // 1. Deactivate previous operator's active assignment
+      await supabaseAdmin
+        .from(assignTable)
+        .update({ is_active: false, updated_at: new Date().toISOString() })
+        .eq('id', existingActive.id);
+
+      // 2. Deactivate any existing assignment row for target operator on this contact
+      await supabaseAdmin
+        .from(assignTable)
+        .update({ is_active: false, updated_at: new Date().toISOString() })
+        .eq(fkCol, regId)
+        .eq('operator_id', operator.id);
+
+      // 3. Insert new active assignment for target operator
+      const { data: newAssign, error: insertErr } = await supabaseAdmin
+        .from(assignTable)
+        .insert({
+          [fkCol]: regId,
+          operator_id: operator.id,
+          assigned_by: userId || null,
+          assigned_at: new Date().toISOString(),
+          status: 'Pending',
+          is_active: true,
+        })
+        .select()
+        .single();
+
+      if (insertErr) {
+        if (regIds.length === 1) {
+          return NextResponse.json({ error: insertErr.message }, { status: 400 });
+        }
+        results.push({ registration_id: regId, status: 'error', message: insertErr.message });
+        continue;
+      }
+
+      const msg = `Unassigned from "${prevOpName}" and assigned to "${operator.name}"`;
       results.push({
         registration_id: regId,
-        status: code.toLowerCase(),
+        status: 'assigned',
         message: msg,
+        assignment: newAssign,
       });
+
+      await supabaseAdmin.from('audit_logs').insert({
+        admin_id: userId,
+        action: 'CONTACT_REASSIGNED',
+        details: {
+          source,
+          registration_id: regId,
+          from_operator_id: existingActive.operator_id,
+          from_operator_name: prevOpName,
+          to_operator_id: operator.id,
+          to_operator_name: operator.name,
+        },
+      });
+
+      continue;
+    }
+
+    // Direct new assignment
+    const { data: newAssign, error: insertErr } = await supabaseAdmin
+      .from(assignTable)
+      .insert({
+        [fkCol]: regId,
+        operator_id: operator.id,
+        assigned_by: userId || null,
+        assigned_at: new Date().toISOString(),
+        status: 'Pending',
+        is_active: true,
+      })
+      .select()
+      .single();
+
+    if (insertErr) {
+      if (regIds.length === 1) {
+        return NextResponse.json({ error: insertErr.message }, { status: 400 });
+      }
+      results.push({ registration_id: regId, status: 'error', message: insertErr.message });
       continue;
     }
 
     results.push({
       registration_id: regId,
       status: 'assigned',
-      message: `Assigned to ${operator.name}`,
-      assignment: rpcRes,
+      message: `Assigned to "${operator.name}"`,
+      assignment: newAssign,
     });
 
-    // Audit log
     await supabaseAdmin.from('audit_logs').insert({
       admin_id: userId,
       action: 'CONTACT_ASSIGNED',

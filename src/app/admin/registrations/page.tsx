@@ -329,48 +329,24 @@ function AssignContactModal({
             <PhoneCall className="w-4 h-4" />
           </div>
           <div>
-            <h2 className="text-base font-extrabold text-slate-100">{existing ? 'Contact Already Assigned' : 'Assign Contact'}</h2>
+            <h2 className="text-base font-extrabold text-slate-100">{existing ? 'Reassign Contact' : 'Assign Contact'}</h2>
             <p className="text-xs text-slate-500 truncate">{registration.full_name} · {registration.phone}</p>
           </div>
         </div>
 
         {loadingCheck ? (
           <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-purple-400" /></div>
-        ) : existing ? (
-          /* READ-ONLY ALREADY ASSIGNED VIEW (STRICT RULE: ONE CONTACT = ONE OPERATOR) */
+        ) : (
           <div className="space-y-4">
-            <div className="p-4 bg-purple-950/20 border border-purple-500/30 rounded-xl space-y-3">
-              <div>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Contact Name</p>
-                <p className="text-sm font-extrabold text-slate-100 mt-0.5">{registration.full_name}</p>
-              </div>
-
-              <div>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Assigned Operator</p>
-                <p className="text-sm font-extrabold text-purple-400 mt-0.5">{assignedOperatorName}</p>
-              </div>
-
-              <div>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Status</p>
-                <span className="inline-block text-xs font-bold text-emerald-400 bg-emerald-950/40 border border-emerald-500/25 px-2.5 py-0.5 rounded mt-0.5">
+            {existing && (
+              <div className="p-3 bg-purple-950/30 border border-purple-500/30 rounded-xl text-xs flex items-center justify-between">
+                <span className="text-slate-300">Currently assigned to: <strong className="text-purple-300">{assignedOperatorName}</strong></span>
+                <span className="text-[10px] font-bold text-amber-400 bg-amber-950/40 border border-amber-500/30 px-2 py-0.5 rounded">
                   {existing.status || 'Assigned'}
                 </span>
               </div>
-            </div>
+            )}
 
-            <p className="text-xs text-slate-400 text-center leading-relaxed">
-              This contact can only be assigned to one operator at a time. To change operator, first unassign this contact from the Call Portal / Operator list.
-            </p>
-
-            <div className="pt-2">
-              <button onClick={onClose} className="w-full py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-200 text-sm font-bold hover:bg-slate-800 transition-all cursor-pointer">
-                Close
-              </button>
-            </div>
-          </div>
-        ) : (
-          /* NORMAL UNASSIGNED CONTACT OPERATOR SELECTION FORM */
-          <div className="space-y-4">
             {error && (
               <div className="p-3 bg-red-950/40 border border-red-500/30 rounded-xl text-red-300 text-xs flex gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />{error}
@@ -378,7 +354,9 @@ function AssignContactModal({
             )}
 
             <div>
-              <label className="text-xs text-slate-400 font-semibold block mb-2">Select Operator</label>
+              <label className="text-xs text-slate-400 font-semibold block mb-2">
+                {existing ? 'Select New Operator' : 'Select Operator'}
+              </label>
               {operators.length === 0 ? (
                 <p className="text-xs text-slate-500 text-center py-4">No active operators available.</p>
               ) : (
@@ -428,7 +406,7 @@ function AssignContactModal({
               <button onClick={handleAssign} disabled={assigning || !selectedOp}
                 className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm font-bold transition-all cursor-pointer disabled:opacity-60">
                 {assigning ? <Loader2 className="w-4 h-4 animate-spin" /> : <PhoneCall className="w-4 h-4" />}
-                {assigning ? 'Assigning...' : 'Assign'}
+                {assigning ? 'Assigning...' : existing ? 'Reassign Contact' : 'Assign'}
               </button>
               <button onClick={onClose} className="px-4 py-2.5 rounded-xl bg-slate-900/60 border border-slate-700/40 text-slate-400 text-sm font-semibold hover:text-slate-100 transition-all cursor-pointer">Cancel</button>
             </div>
