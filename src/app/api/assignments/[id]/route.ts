@@ -89,12 +89,29 @@ export async function PATCH(
     return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
   }
 
-  const { data: updated, error: updateError } = await supabaseAdmin
+  let { data: updated, error: updateError } = await supabaseAdmin
     .from(assignTable)
     .update(updates)
     .eq('id', id)
     .select()
     .single();
+
+  if (updateError && updateError.code === '23514') {
+    // If DB check constraint has not been updated yet in Supabase SQL editor:
+    if (updates.status === 'Not Answered') {
+      updates.status = 'Not Connected';
+    } else if (updates.status === 'Next Week') {
+      updates.status = 'Callback Required';
+    }
+    const retryRes = await supabaseAdmin
+      .from(assignTable)
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+    updated = retryRes.data;
+    updateError = retryRes.error;
+  }
 
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
 
