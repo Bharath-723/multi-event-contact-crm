@@ -144,7 +144,7 @@ export async function PUT(
   if (!adminRow) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const { id } = await params;
-  let body: { status?: string; remarks?: string };
+  let body: { status?: string; remarks?: string; notes?: string };
   try {
     body = await req.json();
   } catch {
@@ -153,7 +153,10 @@ export async function PUT(
 
   const updates: Record<string, unknown> = {};
   if (body.status) updates.status = body.status;
-  if (body.remarks !== undefined) updates.remarks = body.remarks;
+  // Write to 'notes' column (the live DB column name). Support 'remarks' field name in body for backward compatibility.
+  if (body.notes !== undefined || body.remarks !== undefined) {
+    updates.notes = body.notes !== undefined ? body.notes : body.remarks;
+  }
 
   const { data: updated, error: updateError } = await supabaseAdmin
     .from(assignTable)

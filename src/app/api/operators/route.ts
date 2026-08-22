@@ -50,43 +50,27 @@ export async function GET(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // 2. Fetch active contact assignments from source-specific assignment table with joined registration check
-  let selectQuery = '';
-  if (source === 'krishnashtami') {
-    selectQuery = 'id, operator_id, status, is_active, krishnashtami_registrations!registration_id (id)';
-  } else if (source === 'feedback_contacts') {
-    selectQuery = 'id, operator_id, status, is_active, feedback_contacts!feedback_contact_id (id)';
-  } else {
-    selectQuery = 'id, operator_id, status, is_active, registrations!registration_id (id)';
-  }
-
+  // 2. Fetch active contact assignments from source-specific assignment table
+  //    IMPORTANT: Do NOT join the registration table here — joining and then filtering
+  //    out null joins (orphaned assignments) causes Admin Portal counts to differ from
+  //    what operators see in their portal. Count ALL is_active=true assignments.
   const { data: assignments } = await supabaseAdmin
     .from(assignTable)
-    .select(selectQuery)
+    .select('id, operator_id, status, is_active')
     .eq('is_active', true);
 
-  type AssignmentWithContact = {
+  type AssignmentRow = {
     id: string;
     operator_id: string;
     status: string;
     is_active: boolean;
-    krishnashtami_registrations?: { id: string } | null;
-    feedback_contacts?: { id: string } | null;
-    registrations?: { id: string } | null;
   };
 
   const assignmentsByOp = new Map<string, Array<{ id: string; operator_id: string; status: string; is_active: boolean }>>();
-  ((assignments as unknown as AssignmentWithContact[]) || []).forEach((fa) => {
+  ((assignments as unknown as AssignmentRow[]) || []).forEach((fa) => {
     if (!fa.operator_id) return;
-    const contact =
-      source === 'krishnashtami'
-        ? fa.krishnashtami_registrations
-        : source === 'feedback_contacts'
-        ? fa.feedback_contacts
-        : fa.registrations;
-    // Filter out orphaned assignment records where joined registration record is null
-    if (!contact) return;
-
+    // Count ALL active assignments — including any with orphaned FK references.
+    // This matches how GET /api/assignments/my counts contacts in Operator Portal.
     const list = assignmentsByOp.get(fa.operator_id) || [];
     list.push(fa);
     assignmentsByOp.set(fa.operator_id, list);
