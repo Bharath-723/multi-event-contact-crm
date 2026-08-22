@@ -49,7 +49,7 @@ export async function GET(req: Request) {
       .from('krishnashtami_contact_assignments')
       .select(`
         id, registration_id, operator_id, assigned_by, assigned_at, called_at,
-        status, remarks, is_active, created_at, updated_at,
+        status, notes, is_active, created_at, updated_at,
         contact_operators!operator_id (id, name, email, phone),
         krishnashtami_registrations!registration_id (*)
       `, { count: 'exact' })
@@ -83,7 +83,7 @@ export async function GET(req: Request) {
       .from('contact_assignments')
       .select(`
         id, registration_id, operator_id, assigned_by, assigned_at, called_at,
-        status, remarks, is_active, created_at, updated_at,
+        status, notes, is_active, created_at, updated_at,
         contact_operators!operator_id (id, name, email, phone),
         registrations!registration_id (*)
       `, { count: 'exact' })

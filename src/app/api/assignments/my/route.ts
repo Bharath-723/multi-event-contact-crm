@@ -38,7 +38,7 @@ export async function GET(req: Request) {
   if (source === 'krishnashtami') {
     selectQuery = `
       id, registration_id, operator_id, assigned_at, called_at,
-      status, remarks, is_active, created_at, updated_at,
+      status, notes, is_active, created_at, updated_at,
       krishnashtami_registrations!registration_id (*)
     `;
   } else if (source === 'feedback_contacts') {
@@ -50,7 +50,7 @@ export async function GET(req: Request) {
   } else {
     selectQuery = `
       id, registration_id, operator_id, assigned_at, called_at,
-      status, remarks, is_active, created_at, updated_at,
+      status, notes, is_active, created_at, updated_at,
       registrations!registration_id (*)
     `;
   }

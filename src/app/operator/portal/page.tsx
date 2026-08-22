@@ -270,13 +270,20 @@ function ContactCard({
             </div>
           )}
           <select
-            value={STATUS_OPTIONS.includes(assignment.status as AllowedStatus) ? assignment.status : 'Not Connected'}
+            value={STATUS_OPTIONS.includes(assignment.status as AllowedStatus) ? assignment.status : ''}
             disabled={updating}
-            onChange={(e) => handleStatus(e.target.value as AllowedStatus)}
+            onChange={(e) => {
+              if (e.target.value) {
+                handleStatus(e.target.value as AllowedStatus);
+              }
+            }}
             className="w-full px-3 py-2 rounded-xl glass-input text-xs font-semibold text-slate-200 cursor-pointer disabled:opacity-50 appearance-none pr-8 bg-slate-950"
           >
+            <option value="" disabled className="bg-slate-950 text-slate-400 font-semibold">
+              Status
+            </option>
             {STATUS_OPTIONS.map((st) => (
-              <option key={st} value={st} className="bg-slate-950 text-white">
+              <option key={st} value={st} className="bg-slate-950 text-white font-medium">
                 {st}
               </option>
             ))}

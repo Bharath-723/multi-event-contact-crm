@@ -37,7 +37,7 @@ export async function GET(req: Request) {
       : 'contact_assignments';
 
   const fkCol = source === 'feedback_contacts' ? 'feedback_contact_id' : 'registration_id';
-  const notesOrRemarksCol = source === 'feedback_contacts' ? 'notes' : 'remarks';
+  const notesOrRemarksCol = 'notes';
 
   const { data, error } = await supabaseAdmin
     .from(assignTable)
