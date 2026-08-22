@@ -36,21 +36,24 @@ export async function GET(req: Request) {
 
   let selectQuery = '';
   if (source === 'krishnashtami') {
+    // krishnashtami_contact_assignments live DB column: notes
     selectQuery = `
       id, registration_id, operator_id, assigned_at, called_at,
       status, notes, is_active, created_at, updated_at,
       krishnashtami_registrations!registration_id (*)
     `;
   } else if (source === 'feedback_contacts') {
+    // feedback_contact_assignments column: notes
     selectQuery = `
       id, feedback_contact_id, operator_id, assigned_at,
       status, notes, is_active, created_at, updated_at,
       feedback_contacts!feedback_contact_id (*)
     `;
   } else {
+    // contact_assignments (Rathayatra) column: remarks
     selectQuery = `
       id, registration_id, operator_id, assigned_at, called_at,
-      status, notes, is_active, created_at, updated_at,
+      status, remarks, is_active, created_at, updated_at,
       registrations!registration_id (*)
     `;
   }
@@ -97,9 +100,9 @@ export async function GET(req: Request) {
     total_assigned: statsObj.assigned,
     total_coming: statsObj.coming,
     total_not_coming: statsObj.notComing,
-    total_not_answered: statsObj.notAnswered + statsObj.pending,
+    total_not_answered: statsObj.notAnswered,
     total_next_week: statsObj.nextWeek,
-    total_not_connected: statsObj.notAnswered + statsObj.pending,
+    total_not_connected: statsObj.notAnswered,
   };
 
   return NextResponse.json({

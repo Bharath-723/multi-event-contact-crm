@@ -429,11 +429,13 @@ function ViewAssignedModal({
   };
 
   const statusColors: Record<string, string> = {
-    Pending:            'text-yellow-400 bg-yellow-950/30 border-yellow-500/20',
+    Pending:            'text-blue-400   bg-blue-950/30   border-blue-500/20',
+    Assigned:           'text-blue-400   bg-blue-950/30   border-blue-500/20',
     Coming:             'text-green-400  bg-green-950/30  border-green-500/20',
     'Not Coming':       'text-red-400    bg-red-950/30    border-red-500/20',
     'Not Answered':     'text-amber-400  bg-amber-950/30  border-amber-500/20',
     'Next Week':        'text-purple-400 bg-purple-950/30 border-purple-500/20',
+    'Not Interested':   'text-rose-400   bg-rose-950/30   border-rose-500/20',
     'Not Connected':    'text-amber-400  bg-amber-950/30  border-amber-500/20',
   };
 

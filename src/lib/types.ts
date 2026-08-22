@@ -173,6 +173,7 @@ export type AssignmentStatus =
   | 'Not Coming'
   | 'Not Answered'
   | 'Next Week'
+  | 'Not Interested'
   | 'Not Connected'
   | 'Callback Required';
 

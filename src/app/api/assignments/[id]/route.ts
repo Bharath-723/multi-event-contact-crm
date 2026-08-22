@@ -10,7 +10,7 @@ import { normalizeSource } from '@/lib/source-resolver';
 import type { AssignmentStatus } from '@/lib/types';
 
 const VALID_STATUSES: AssignmentStatus[] = [
-  'Pending', 'Assigned', 'Coming', 'Not Coming', 'Not Answered', 'Next Week', 'Not Connected', 'Callback Required',
+  'Pending', 'Assigned', 'Coming', 'Not Coming', 'Not Answered', 'Next Week', 'Not Interested', 'Not Connected', 'Callback Required',
 ];
 
 function getAssignmentTable(source: string | null) {
