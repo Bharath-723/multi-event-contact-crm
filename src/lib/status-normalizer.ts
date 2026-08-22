@@ -3,16 +3,18 @@
  * Enforces mutually exclusive status classification and strict count invariants.
  */
 
-export type NormalizedStatus = 'coming' | 'notComing' | 'notConnected';
+export type NormalizedStatus = 'coming' | 'notComing' | 'notAnswered' | 'nextWeek' | 'pending';
 
 /**
- * Maps any status string into exactly one of three mutually exclusive buckets:
- * - 'coming'
- * - 'notComing'
- * - 'notConnected' (Admin synonym: 'pending')
+ * Maps any status string into one of five mutually exclusive buckets:
+ * - 'coming': Coming, Interested, Confirmed, Completed
+ * - 'notComing': Not Coming, Not Interested
+ * - 'nextWeek': Next Week, Callback Required, Contacted
+ * - 'notAnswered': Not Answered, Not Connected, No Answer, Wrong Number
+ * - 'pending': Pending / Assigned (unresponded contacts)
  */
 export function normalizeAssignmentStatus(status: string | null | undefined): NormalizedStatus {
-  if (!status) return 'notConnected';
+  if (!status) return 'pending';
   const s = status.trim().toLowerCase();
   if (['coming', 'interested', 'confirmed', 'completed'].includes(s)) {
     return 'coming';
@@ -20,20 +22,30 @@ export function normalizeAssignmentStatus(status: string | null | undefined): No
   if (['not coming', 'not_coming', 'not interested', 'not_interested'].includes(s)) {
     return 'notComing';
   }
-  return 'notConnected';
+  if (['next week', 'next_week', 'callback required', 'callback_required', 'contacted'].includes(s)) {
+    return 'nextWeek';
+  }
+  if (['not answered', 'not_answered', 'not connected', 'not_connected', 'no answer', 'wrong number'].includes(s)) {
+    return 'notAnswered';
+  }
+  return 'pending';
 }
 
 export interface OperatorAssignmentStats {
   assigned: number;
   coming: number;
   notComing: number;
-  notConnected: number; // Used in Operator Portal
-  pending: number;      // Used in Admin Dashboard (synonym for notConnected)
+  notAnswered: number;
+  nextWeek: number;
+  pending: number;      // Used in Admin Dashboard (contacts assigned but not given operator response status)
+  notConnected: number; // Legacy synonym for notAnswered
 }
 
 /**
  * Calculates authoritative operator statistics from active assignment records (is_active = TRUE).
- * Enforces the invariant: assigned = coming + notComing + notConnected
+ * Enforces strict mathematical invariants:
+ * Admin: Assigned = Coming + Not Coming + Not Answered + Next Week + Pending
+ * Operator: Assigned = Coming + Not Coming + (Not Answered + Pending) + Next Week
  */
 export function computeOperatorStats(
   activeAssignments: Array<{ status?: string | null; is_active?: boolean }>
@@ -42,25 +54,31 @@ export function computeOperatorStats(
 
   let coming = 0;
   let notComing = 0;
-  let notConnected = 0;
+  let nextWeek = 0;
+  let notAnswered = 0;
+  let pending = 0;
 
   for (const a of activeList) {
     const bucket = normalizeAssignmentStatus(a.status);
     if (bucket === 'coming') coming++;
     else if (bucket === 'notComing') notComing++;
-    else notConnected++;
+    else if (bucket === 'nextWeek') nextWeek++;
+    else if (bucket === 'notAnswered') notAnswered++;
+    else pending++;
   }
 
   const assigned = activeList.length;
 
-  // Invariant verification check
-  if (assigned !== coming + notComing + notConnected) {
+  // Invariant verification check for Admin Dashboard
+  if (assigned !== coming + notComing + notAnswered + nextWeek + pending) {
     console.error('[ASSIGNMENT COUNT INVARIANT VIOLATION]', {
       assigned,
       coming,
       notComing,
-      notConnected,
-      sum: coming + notComing + notConnected,
+      notAnswered,
+      nextWeek,
+      pending,
+      sum: coming + notComing + notAnswered + nextWeek + pending,
     });
   }
 
@@ -68,8 +86,10 @@ export function computeOperatorStats(
     assigned,
     coming,
     notComing,
-    notConnected,
-    pending: notConnected,
+    notAnswered,
+    nextWeek,
+    pending,
+    notConnected: notAnswered,
   };
 }
 

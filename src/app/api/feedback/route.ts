@@ -317,6 +317,12 @@ interface RawFeedbackRow {
     if (college) query = query.ilike('college_name', `%${college}%`);
     if (branch) query = query.ilike('branch', `%${branch}%`);
 
+    if (interestedOnlineWork === 'Yes') {
+      query = query.or('interested_online_workshop.eq.true,interested_online_work.eq.true');
+    } else if (interestedOnlineWork === 'No') {
+      query = query.or('interested_online_workshop.eq.false,interested_online_work.eq.false');
+    }
+
     if (search.trim()) {
       const s = `%${search.trim()}%`;
       query = query.or(`full_name.ilike.${s},phone.ilike.${s},college_name.ilike.${s},branch.ilike.${s}`);
@@ -337,17 +343,9 @@ interface RawFeedbackRow {
       interested_online_workshop: Boolean(c.interested_online_workshop ?? c.interested_online_work),
     }));
 
-    // Filter by online workshop interest if specified
-    let filteredContacts = normalizedContacts;
-    if (interestedOnlineWork === 'Yes') {
-      filteredContacts = normalizedContacts.filter((c) => c.interested_online_workshop === true);
-    } else if (interestedOnlineWork === 'No') {
-      filteredContacts = normalizedContacts.filter((c) => c.interested_online_workshop === false);
-    }
-
     return NextResponse.json({
       success: true,
-      contacts: filteredContacts,
+      contacts: normalizedContacts,
       total: count ?? 0,
       stats,
       page,

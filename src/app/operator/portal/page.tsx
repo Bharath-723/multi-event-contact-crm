@@ -16,19 +16,21 @@ import { ContactSource, normalizeSource } from '@/lib/source-resolver';
 import { computeOperatorStats, formatOperatorDisplayName } from '@/lib/status-normalizer';
 import Link from 'next/link';
 
-export type AllowedStatus = 'Coming' | 'Not Coming' | 'Not Connected';
+export type AllowedStatus = 'Coming' | 'Not Coming' | 'Not Answered' | 'Next Week';
 
 const STATUS_OPTIONS: AllowedStatus[] = [
-  'Coming', 'Not Coming', 'Not Connected',
+  'Coming', 'Not Coming', 'Not Answered', 'Next Week',
 ];
 
-const STATUS_META: Record<AllowedStatus | 'Assigned' | 'Pending' | 'Contacted' | 'Interested' | 'Not Interested' | 'Completed', { label: string; color: string; bg: string; border: string; icon: React.ReactNode }> = {
+const STATUS_META: Record<string, { label: string; color: string; bg: string; border: string; icon: React.ReactNode }> = {
   'Assigned':       { label: 'Assigned',      color: 'text-blue-400',    bg: 'bg-blue-950/30',    border: 'border-blue-500/30',   icon: <Clock className="w-3 h-3" /> },
-  'Pending':        { label: 'Assigned',      color: 'text-blue-400',    bg: 'bg-blue-950/30',    border: 'border-blue-500/30',   icon: <Clock className="w-3 h-3" /> },
+  'Pending':        { label: 'Not Answered',  color: 'text-amber-400',   bg: 'bg-amber-950/30',   border: 'border-amber-500/30',  icon: <Clock className="w-3 h-3" /> },
   'Coming':         { label: 'Coming',        color: 'text-emerald-400', bg: 'bg-emerald-950/30', border: 'border-emerald-500/30', icon: <CheckCircle2 className="w-3 h-3" /> },
   'Not Coming':     { label: 'Not Coming',    color: 'text-red-400',     bg: 'bg-red-950/30',     border: 'border-red-500/30',    icon: <XCircle className="w-3 h-3" /> },
-  'Not Connected':  { label: 'Not Connected', color: 'text-amber-400',   bg: 'bg-amber-950/30',   border: 'border-amber-500/30',  icon: <Clock className="w-3 h-3" /> },
-  'Contacted':      { label: 'Not Connected', color: 'text-amber-400',   bg: 'bg-amber-950/30',   border: 'border-amber-500/30',  icon: <Clock className="w-3 h-3" /> },
+  'Not Answered':   { label: 'Not Answered',  color: 'text-amber-400',   bg: 'bg-amber-950/30',   border: 'border-amber-500/30',  icon: <Clock className="w-3 h-3" /> },
+  'Next Week':      { label: 'Next Week',     color: 'text-purple-400',  bg: 'bg-purple-950/30', border: 'border-purple-500/30', icon: <Clock className="w-3 h-3" /> },
+  'Not Connected':  { label: 'Not Answered',  color: 'text-amber-400',   bg: 'bg-amber-950/30',   border: 'border-amber-500/30',  icon: <Clock className="w-3 h-3" /> },
+  'Contacted':      { label: 'Next Week',     color: 'text-purple-400',  bg: 'bg-purple-950/30', border: 'border-purple-500/30', icon: <Clock className="w-3 h-3" /> },
   'Interested':     { label: 'Coming',        color: 'text-emerald-400', bg: 'bg-emerald-950/30', border: 'border-emerald-500/30', icon: <CheckCircle2 className="w-3 h-3" /> },
   'Not Interested': { label: 'Not Coming',    color: 'text-red-400',     bg: 'bg-red-950/30',     border: 'border-red-500/30',    icon: <XCircle className="w-3 h-3" /> },
   'Completed':      { label: 'Coming',        color: 'text-emerald-400', bg: 'bg-emerald-950/30', border: 'border-emerald-500/30', icon: <CheckCircle2 className="w-3 h-3" /> },
@@ -60,7 +62,8 @@ interface Stats {
   total_assigned: number;
   total_coming: number;
   total_not_coming: number;
-  total_not_connected: number;
+  total_not_answered: number;
+  total_next_week: number;
 }
 
 function sanitizePhone(phone: string): string {
@@ -306,7 +309,8 @@ function OperatorPortalContent() {
     total_assigned: 0,
     total_coming: 0,
     total_not_coming: 0,
-    total_not_connected: 0,
+    total_not_answered: 0,
+    total_next_week: 0,
   });
   const [loadingData, setLoadingData] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -339,7 +343,13 @@ function OperatorPortalContent() {
   const setContactSource = (newSource: ContactSource) => {
     // Immediate clean state reset when source changes
     setAssignments([]);
-    setStats({ total_assigned: 0, total_coming: 0, total_not_coming: 0, total_not_connected: 0 });
+    setStats({
+      total_assigned: 0,
+      total_coming: 0,
+      total_not_coming: 0,
+      total_not_answered: 0,
+      total_next_week: 0,
+    });
     setSearch('');
     setPage(1);
     setContactSourceState(newSource);
@@ -384,12 +394,12 @@ function OperatorPortalContent() {
         }
       } else {
         setAssignments([]);
-        setStats({ total_assigned: 0, total_coming: 0, total_not_coming: 0, total_not_connected: 0 });
+        setStats({ total_assigned: 0, total_coming: 0, total_not_coming: 0, total_not_answered: 0, total_next_week: 0 });
       }
     } catch (err) {
       console.error('Failed to fetch operator assignments:', err);
       setAssignments([]);
-      setStats({ total_assigned: 0, total_coming: 0, total_not_coming: 0, total_not_connected: 0 });
+      setStats({ total_assigned: 0, total_coming: 0, total_not_coming: 0, total_not_answered: 0, total_next_week: 0 });
     } finally {
       setLoadingData(false);
     }
@@ -454,7 +464,8 @@ function OperatorPortalContent() {
             total_assigned: statsObj.assigned,
             total_coming: statsObj.coming,
             total_not_coming: statsObj.notComing,
-            total_not_connected: statsObj.notConnected,
+            total_not_answered: statsObj.notAnswered + statsObj.pending,
+            total_next_week: statsObj.nextWeek,
           });
 
           return updated;
@@ -590,23 +601,27 @@ function OperatorPortalContent() {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 pt-4 space-y-4">
-        {/* --- Metric Overview Cards (Assigned, Coming, Not Coming, Not Connected) --- */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-          <div className="glass-card rounded-xl p-3 border-purple-500/20">
+        {/* --- Metric Overview Cards (ASSIGNED, COMING, NOT COMING, NOT ANSWERED, NEXT WEEK) --- */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+          <div className="glass-card rounded-xl p-3 border-blue-500/20 text-center">
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Assigned</p>
-            <p className="text-xl font-extrabold text-purple-400 mt-0.5">{stats.total_assigned}</p>
+            <p className="text-xl font-extrabold text-blue-400 mt-0.5">{stats.total_assigned}</p>
           </div>
-          <div className="glass-card rounded-xl p-3 border-emerald-500/20">
+          <div className="glass-card rounded-xl p-3 border-emerald-500/20 text-center">
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Coming</p>
             <p className="text-xl font-extrabold text-emerald-400 mt-0.5">{stats.total_coming}</p>
           </div>
-          <div className="glass-card rounded-xl p-3 border-red-500/20">
+          <div className="glass-card rounded-xl p-3 border-red-500/20 text-center">
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Not Coming</p>
             <p className="text-xl font-extrabold text-red-400 mt-0.5">{stats.total_not_coming}</p>
           </div>
-          <div className="glass-card rounded-xl p-3 border-amber-500/20">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Not Connected</p>
-            <p className="text-xl font-extrabold text-amber-400 mt-0.5">{stats.total_not_connected}</p>
+          <div className="glass-card rounded-xl p-3 border-amber-500/20 text-center">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Not Answered</p>
+            <p className="text-xl font-extrabold text-amber-400 mt-0.5">{stats.total_not_answered}</p>
+          </div>
+          <div className="glass-card rounded-xl p-3 border-purple-500/20 text-center col-span-2 sm:col-span-1">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Next Week</p>
+            <p className="text-xl font-extrabold text-purple-400 mt-0.5">{stats.total_next_week}</p>
           </div>
         </div>
 

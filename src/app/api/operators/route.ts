@@ -75,8 +75,11 @@ export async function GET(req: NextRequest) {
       total_pending: stats.pending,
       total_coming: stats.coming,
       total_not_coming: stats.notComing,
+      total_not_answered: stats.notAnswered,
+      total_next_week: stats.nextWeek,
+      total_not_connected: stats.notAnswered,
       total_completed: stats.coming,
-      total_called: stats.coming + stats.notComing,
+      total_called: stats.coming + stats.notComing + stats.notAnswered + stats.nextWeek,
       call_success_pct: stats.assigned > 0 ? Math.round((stats.coming / stats.assigned) * 100) : 0,
     };
   });

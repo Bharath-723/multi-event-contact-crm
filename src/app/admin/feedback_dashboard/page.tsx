@@ -91,6 +91,7 @@ export default function AdminFeedbackDashboard() {
   const limit = 20;
 
   const printRef = useRef<HTMLDivElement>(null);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Fetch Skills Definitions Map
   useEffect(() => {
@@ -119,9 +120,27 @@ export default function AdminFeedbackDashboard() {
   };
 
   // 1. Fetch Feedback Contacts & Global Stats
-  const loadData = useCallback(async (searchVal = search, pageVal = page) => {
+  const loadData = useCallback(async (overrideFilters?: {
+    s?: string;
+    pageNum?: number;
+    g?: string;
+    col?: string;
+    br?: string;
+    st?: string;
+    fb?: string;
+    ow?: string;
+  }) => {
     setLoading(true);
     try {
+      const searchVal = overrideFilters?.s !== undefined ? overrideFilters.s : search;
+      const pageVal = overrideFilters?.pageNum !== undefined ? overrideFilters.pageNum : page;
+      const genderVal = overrideFilters?.g !== undefined ? overrideFilters.g : filterGender;
+      const collegeVal = overrideFilters?.col !== undefined ? overrideFilters.col : filterCollege;
+      const branchVal = overrideFilters?.br !== undefined ? overrideFilters.br : filterBranch;
+      const stayVal = overrideFilters?.st !== undefined ? overrideFilters.st : filterStay;
+      const feedbackVal = overrideFilters?.fb !== undefined ? overrideFilters.fb : filterFeedback;
+      const onlineWorkVal = overrideFilters?.ow !== undefined ? overrideFilters.ow : filterOnlineWork;
+
       const auth = await getAuthHeader();
       const params = new URLSearchParams({
         page: String(pageVal),
@@ -129,12 +148,12 @@ export default function AdminFeedbackDashboard() {
       });
 
       if (searchVal.trim()) params.set('search', searchVal.trim());
-      if (filterGender) params.set('gender', filterGender);
-      if (filterCollege.trim()) params.set('college', filterCollege.trim());
-      if (filterBranch.trim()) params.set('branch', filterBranch.trim());
-      if (filterStay) params.set('current_stay', filterStay);
-      if (filterFeedback) params.set('feedback', filterFeedback);
-      if (filterOnlineWork) params.set('interested_online_work', filterOnlineWork);
+      if (genderVal) params.set('gender', genderVal);
+      if (collegeVal.trim()) params.set('college', collegeVal.trim());
+      if (branchVal.trim()) params.set('branch', branchVal.trim());
+      if (stayVal) params.set('current_stay', stayVal);
+      if (feedbackVal) params.set('feedback', feedbackVal);
+      if (onlineWorkVal) params.set('interested_online_work', onlineWorkVal);
 
       const res = await fetch(`/api/feedback?${params.toString()}`, {
         headers: { Authorization: auth },
@@ -278,15 +297,26 @@ export default function AdminFeedbackDashboard() {
     }
   };
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSearchChange = (val: string) => {
+    setSearch(val);
     setPage(1);
-    loadData(search, 1);
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    searchTimeoutRef.current = setTimeout(() => {
+      loadData({ s: val, pageNum: 1 });
+    }, 350);
   };
 
-  const handleFilterChange = () => {
+  const handleClearFilters = () => {
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    setSearch('');
+    setFilterGender('');
+    setFilterCollege('');
+    setFilterBranch('');
+    setFilterStay('');
+    setFilterFeedback('');
+    setFilterOnlineWork('');
     setPage(1);
-    loadData(search, 1);
+    loadData({ s: '', pageNum: 1, g: '', col: '', br: '', st: '', fb: '', ow: '' });
   };
 
   // CSV Export
@@ -443,31 +473,34 @@ export default function AdminFeedbackDashboard() {
 
         {/* --- Search & Multi-Filters Panel --- */}
         <div className="glass-card bg-white dark:bg-slate-900/60 rounded-2xl p-4 space-y-3 border border-slate-200 dark:border-slate-800 shadow-sm no-print">
-          <h3 className="text-xs font-bold text-slate-100 dark:text-slate-100 uppercase tracking-wider">Search & Multi-Filters</h3>
-          <form onSubmit={handleSearchSubmit} className="flex gap-2">
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-400 pointer-events-none" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by Name, Phone, College, or Branch..."
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-100 dark:text-slate-100 placeholder-slate-400 focus:outline-none"
-              />
-            </div>
-            <button
-              type="submit"
-              className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition-all cursor-pointer"
-            >
-              Search
-            </button>
-          </form>
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold text-slate-100 dark:text-slate-100 uppercase tracking-wider">Search & Multi-Filters</h3>
+            {(Boolean(search) || Boolean(filterGender) || Boolean(filterStay) || Boolean(filterFeedback) || Boolean(filterOnlineWork) || Boolean(filterCollege) || Boolean(filterBranch)) && (
+              <button
+                onClick={handleClearFilters}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-xl bg-purple-950/40 border border-purple-500/30 text-purple-300 hover:bg-purple-950/70 font-bold transition-all cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" /> Clear Filters
+              </button>
+            )}
+          </div>
+
+          <div className="relative">
+            <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="Search dynamically by Name, Phone, College, or Branch..."
+              className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-100 dark:text-slate-100 placeholder-slate-400 focus:outline-none"
+            />
+          </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
             {/* Gender Filter */}
             <select
               value={filterGender}
-              onChange={(e) => { setFilterGender(e.target.value); handleFilterChange(); }}
+              onChange={(e) => { const v = e.target.value; setFilterGender(v); setPage(1); loadData({ g: v, pageNum: 1 }); }}
               className="px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-100 dark:text-slate-100 focus:outline-none cursor-pointer"
             >
               <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Gender (All)</option>
@@ -478,7 +511,7 @@ export default function AdminFeedbackDashboard() {
             {/* Current Stay Filter */}
             <select
               value={filterStay}
-              onChange={(e) => { setFilterStay(e.target.value); handleFilterChange(); }}
+              onChange={(e) => { const v = e.target.value; setFilterStay(v); setPage(1); loadData({ st: v, pageNum: 1 }); }}
               className="px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-100 dark:text-slate-100 focus:outline-none cursor-pointer"
             >
               <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Current Stay (All)</option>
@@ -489,7 +522,7 @@ export default function AdminFeedbackDashboard() {
             {/* Feedback Rating Filter */}
             <select
               value={filterFeedback}
-              onChange={(e) => { setFilterFeedback(e.target.value); handleFilterChange(); }}
+              onChange={(e) => { const v = e.target.value; setFilterFeedback(v); setPage(1); loadData({ fb: v, pageNum: 1 }); }}
               className="px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-100 dark:text-slate-100 focus:outline-none cursor-pointer"
             >
               <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Feedback (All)</option>
@@ -501,7 +534,7 @@ export default function AdminFeedbackDashboard() {
             {/* Online Workshop Interest Filter */}
             <select
               value={filterOnlineWork}
-              onChange={(e) => { setFilterOnlineWork(e.target.value); handleFilterChange(); }}
+              onChange={(e) => { const v = e.target.value; setFilterOnlineWork(v); setPage(1); loadData({ ow: v, pageNum: 1 }); }}
               className="px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-100 dark:text-slate-100 focus:outline-none cursor-pointer"
             >
               <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Online Workshop (All)</option>
@@ -512,7 +545,7 @@ export default function AdminFeedbackDashboard() {
             {/* College Filter Dropdown */}
             <select
               value={filterCollege}
-              onChange={(e) => { setFilterCollege(e.target.value); handleFilterChange(); }}
+              onChange={(e) => { const v = e.target.value; setFilterCollege(v); setPage(1); loadData({ col: v, pageNum: 1 }); }}
               className="px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-100 dark:text-slate-100 focus:outline-none cursor-pointer"
             >
               <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">College (All)</option>
@@ -526,7 +559,7 @@ export default function AdminFeedbackDashboard() {
             {/* Branch Filter Dropdown */}
             <select
               value={filterBranch}
-              onChange={(e) => { setFilterBranch(e.target.value); handleFilterChange(); }}
+              onChange={(e) => { const v = e.target.value; setFilterBranch(v); setPage(1); loadData({ br: v, pageNum: 1 }); }}
               className="px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-100 dark:text-slate-100 focus:outline-none cursor-pointer"
             >
               <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Branch (All)</option>

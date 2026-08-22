@@ -168,8 +168,11 @@ export interface CompanyStat {
 
 export type AssignmentStatus =
   | 'Pending'
+  | 'Assigned'
   | 'Coming'
   | 'Not Coming'
+  | 'Not Answered'
+  | 'Next Week'
   | 'Not Connected'
   | 'Callback Required';
 
@@ -199,6 +202,9 @@ export interface ContactOperator {
   total_completed?: number;  // legacy — maps to Coming
   total_coming?: number;
   total_not_coming?: number;
+  total_not_answered?: number;
+  total_next_week?: number;
+  total_not_connected?: number; // legacy synonym for not_answered
   total_called?: number;
   total_confirmed?: number;
   call_success_pct?: number;

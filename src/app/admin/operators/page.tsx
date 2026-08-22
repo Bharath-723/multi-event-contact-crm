@@ -105,22 +105,30 @@ function OperatorCard({
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-3 gap-2">
         <div className="bg-slate-900/40 rounded-xl p-2.5 text-center">
-          <p className="text-lg font-extrabold text-slate-100">{op.total_assigned ?? 0}</p>
+          <p className="text-lg font-extrabold text-blue-400">{op.total_assigned ?? 0}</p>
           <p className="text-[10px] text-slate-500">Assigned</p>
         </div>
         <div className="bg-slate-900/40 rounded-xl p-2.5 text-center">
-          <p className="text-lg font-extrabold text-yellow-400">{op.total_pending ?? 0}</p>
-          <p className="text-[10px] text-slate-500">Pending</p>
-        </div>
-        <div className="bg-slate-900/40 rounded-xl p-2.5 text-center">
-          <p className="text-lg font-extrabold text-green-400">{op.total_coming ?? 0}</p>
+          <p className="text-lg font-extrabold text-emerald-400">{op.total_coming ?? 0}</p>
           <p className="text-[10px] text-slate-500">Coming</p>
         </div>
         <div className="bg-slate-900/40 rounded-xl p-2.5 text-center">
           <p className="text-lg font-extrabold text-red-400">{op.total_not_coming ?? 0}</p>
           <p className="text-[10px] text-slate-500">Not Coming</p>
+        </div>
+        <div className="bg-slate-900/40 rounded-xl p-2.5 text-center">
+          <p className="text-lg font-extrabold text-amber-400">{op.total_not_answered ?? 0}</p>
+          <p className="text-[10px] text-slate-500">Not Answered</p>
+        </div>
+        <div className="bg-slate-900/40 rounded-xl p-2.5 text-center">
+          <p className="text-lg font-extrabold text-purple-400">{op.total_next_week ?? 0}</p>
+          <p className="text-[10px] text-slate-500">Next Week</p>
+        </div>
+        <div className="bg-slate-900/40 rounded-xl p-2.5 text-center">
+          <p className="text-lg font-extrabold text-yellow-400">{op.total_pending ?? 0}</p>
+          <p className="text-[10px] text-slate-500">Pending</p>
         </div>
       </div>
 
@@ -424,6 +432,8 @@ function ViewAssignedModal({
     Pending:            'text-yellow-400 bg-yellow-950/30 border-yellow-500/20',
     Coming:             'text-green-400  bg-green-950/30  border-green-500/20',
     'Not Coming':       'text-red-400    bg-red-950/30    border-red-500/20',
+    'Not Answered':     'text-amber-400  bg-amber-950/30  border-amber-500/20',
+    'Next Week':        'text-purple-400 bg-purple-950/30 border-purple-500/20',
     'Not Connected':    'text-amber-400  bg-amber-950/30  border-amber-500/20',
   };
 
@@ -806,16 +816,20 @@ export default function ContactOperatorsPage() {
   const totalPending = operators.reduce((s, o) => s + (o.total_pending ?? 0), 0);
   const totalComing = operators.reduce((s, o) => s + (o.total_coming ?? 0), 0);
   const totalNotComing = operators.reduce((s, o) => s + (o.total_not_coming ?? 0), 0);
+  const totalNotAnswered = operators.reduce((s, o) => s + (o.total_not_answered ?? 0), 0);
+  const totalNextWeek = operators.reduce((s, o) => s + (o.total_next_week ?? 0), 0);
 
   // Development Assertion Check
-  if (totalAssigned !== totalComing + totalNotComing + totalPending) {
+  if (totalAssigned !== totalComing + totalNotComing + totalNotAnswered + totalNextWeek + totalPending) {
     console.error('[ASSIGNMENT COUNT INVARIANT VIOLATION]', {
       contactSource,
       totalAssigned,
       totalComing,
       totalNotComing,
+      totalNotAnswered,
+      totalNextWeek,
       totalPending,
-      sum: totalComing + totalNotComing + totalPending,
+      sum: totalComing + totalNotComing + totalNotAnswered + totalNextWeek + totalPending,
     });
   }
 
@@ -915,14 +929,16 @@ export default function ContactOperatorsPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
         {[
           { label: 'Total Operators', value: totalOperators, icon: Headset, color: 'text-purple-400' },
           { label: 'Active', value: activeOperators, icon: ToggleRight, color: 'text-green-400' },
           { label: 'Assigned', value: totalAssigned, icon: Users, color: 'text-blue-400' },
-          { label: 'Pending Calls', value: totalPending, icon: Clock, color: 'text-yellow-400' },
           { label: 'Coming', value: totalComing, icon: CheckCircle, color: 'text-emerald-400' },
           { label: 'Not Coming', value: totalNotComing, icon: TrendingUp, color: 'text-red-400' },
+          { label: 'Not Answered', value: totalNotAnswered, icon: Clock, color: 'text-amber-400' },
+          { label: 'Next Week', value: totalNextWeek, icon: Clock, color: 'text-purple-400' },
+          { label: 'Pending Calls', value: totalPending, icon: Clock, color: 'text-yellow-400' },
         ].map(({ label, value, icon: Icon, color }) => (
           <div key={label} className="glass-card rounded-xl p-4 text-center">
             <Icon className={`w-5 h-5 mx-auto mb-2 ${color}`} />

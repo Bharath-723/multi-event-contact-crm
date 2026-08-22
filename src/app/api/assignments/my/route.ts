@@ -97,7 +97,9 @@ export async function GET(req: Request) {
     total_assigned: statsObj.assigned,
     total_coming: statsObj.coming,
     total_not_coming: statsObj.notComing,
-    total_not_connected: statsObj.notConnected,
+    total_not_answered: statsObj.notAnswered + statsObj.pending,
+    total_next_week: statsObj.nextWeek,
+    total_not_connected: statsObj.notAnswered + statsObj.pending,
   };
 
   return NextResponse.json({
