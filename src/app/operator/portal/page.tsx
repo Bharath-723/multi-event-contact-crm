@@ -377,9 +377,9 @@ function OperatorPortalContent() {
   }, [fetchProfile]);
 
   // 2. Fetch Assignments for Current Operator & Active Source
-  const loadAssignments = useCallback(async () => {
+  const loadAssignments = useCallback(async (isBackground = false) => {
     if (!operator) return;
-    setLoadingData(true);
+    if (!isBackground) setLoadingData(true);
 
     try {
       const url = `/api/assignments/my?source=${contactSource}`;
@@ -401,12 +401,12 @@ function OperatorPortalContent() {
       setAssignments([]);
       setStats({ total_assigned: 0, total_coming: 0, total_not_coming: 0, total_not_answered: 0, total_next_week: 0 });
     } finally {
-      setLoadingData(false);
+      if (!isBackground) setLoadingData(false);
     }
   }, [operator, contactSource]);
 
   useEffect(() => {
-    if (operator) loadAssignments();
+    if (operator) loadAssignments(false);
   }, [operator, loadAssignments]);
 
   // 3. Supabase Realtime Subscription on source-specific assignment table
@@ -436,7 +436,7 @@ function OperatorPortalContent() {
           filter: `operator_id=eq.${operator.id}`,
         },
         () => {
-          loadAssignmentsRef.current();
+          loadAssignmentsRef.current(true);
         }
       )
       .subscribe();
@@ -446,8 +446,25 @@ function OperatorPortalContent() {
     };
   }, [operator, contactSource]);
 
-  // 4. Update Status Handler with immediate state & stats update
+  // 4. Update Status Handler with immediate state & stats update (no full-page spinner/refresh)
   const handleStatusChange = async (assignmentId: string, status: AllowedStatus) => {
+    // 1. Optimistic instant state & stats update
+    setAssignments((prev) => {
+      const updated = prev.map((item) => (item.id === assignmentId ? { ...item, status } : item));
+      const statsObj = computeOperatorStats(updated);
+
+      setStats({
+        total_assigned: statsObj.assigned,
+        total_coming: statsObj.coming,
+        total_not_coming: statsObj.notComing,
+        total_not_answered: statsObj.notAnswered + statsObj.pending,
+        total_next_week: statsObj.nextWeek,
+      });
+
+      return updated;
+    });
+    toast(`Status updated to ${status}`);
+
     try {
       const res = await fetch(`/api/assignments/${assignmentId}?source=${contactSource}`, {
         method: 'PATCH',
@@ -456,50 +473,45 @@ function OperatorPortalContent() {
       });
 
       if (res.ok) {
-        setAssignments((prev) => {
-          const updated = prev.map((item) => (item.id === assignmentId ? { ...item, status } : item));
-          const statsObj = computeOperatorStats(updated);
-
-          setStats({
-            total_assigned: statsObj.assigned,
-            total_coming: statsObj.coming,
-            total_not_coming: statsObj.notComing,
-            total_not_answered: statsObj.notAnswered + statsObj.pending,
-            total_next_week: statsObj.nextWeek,
-          });
-
-          return updated;
-        });
-        toast(`Status updated to ${status}`);
-        loadAssignments();
+        loadAssignments(true);
       } else {
         const d = await res.json();
         toast(d.error || 'Failed to update status');
+        loadAssignments(true);
       }
     } catch (err) {
       console.error('Failed to update status:', err);
       toast('Network error while updating status.');
+      loadAssignments(true);
     }
   };
 
-  // 5. Save Notes Handler
+  // 5. Save Notes Handler with immediate state update
   const handleSaveNotes = async (assignmentId: string, notes: string) => {
+    // Optimistic instant state update
+    setAssignments((prev) =>
+      prev.map((item) => (item.id === assignmentId ? { ...item, notes, remarks: notes } : item))
+    );
+    toast('Notes saved.');
+
     try {
       const res = await fetch(`/api/assignments/${assignmentId}?source=${contactSource}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ remarks: notes, notes }),
+        body: JSON.stringify({ notes }),
       });
 
       if (res.ok) {
-        toast('Notes saved.');
-        loadAssignments();
+        loadAssignments(true);
       } else {
-        toast('Failed to save notes.');
+        const d = await res.json();
+        toast(d.error || 'Failed to save notes.');
+        loadAssignments(true);
       }
     } catch (err) {
       console.error('Failed to save notes:', err);
       toast('Network error while saving notes.');
+      loadAssignments(true);
     }
   };
 

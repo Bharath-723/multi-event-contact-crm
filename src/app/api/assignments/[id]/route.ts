@@ -72,17 +72,8 @@ export async function PATCH(
     }
   }
 
-  if (body.remarks !== undefined) {
-    updates.remarks = body.remarks;
-    if (assignTable === 'feedback_contact_assignments') {
-      updates.notes = body.remarks;
-    }
-  }
-  if (body.notes !== undefined) {
-    updates.notes = body.notes;
-    if (assignTable !== 'feedback_contact_assignments') {
-      updates.remarks = body.notes;
-    }
+  if (body.notes !== undefined || body.remarks !== undefined) {
+    updates.notes = body.notes !== undefined ? body.notes : body.remarks;
   }
 
   if (Object.keys(updates).length === 0) {
