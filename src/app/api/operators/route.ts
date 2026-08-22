@@ -65,8 +65,18 @@ export async function GET(req: NextRequest) {
     .select(selectQuery)
     .eq('is_active', true);
 
+  type AssignmentWithContact = {
+    id: string;
+    operator_id: string;
+    status: string;
+    is_active: boolean;
+    krishnashtami_registrations?: { id: string } | null;
+    feedback_contacts?: { id: string } | null;
+    registrations?: { id: string } | null;
+  };
+
   const assignmentsByOp = new Map<string, Array<{ id: string; operator_id: string; status: string; is_active: boolean }>>();
-  (assignments || []).forEach((fa: any) => {
+  ((assignments as unknown as AssignmentWithContact[]) || []).forEach((fa) => {
     if (!fa.operator_id) return;
     const contact =
       source === 'krishnashtami'

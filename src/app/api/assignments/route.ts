@@ -201,7 +201,11 @@ export async function POST(req: Request) {
         continue;
       }
 
-      const prevOpName = (existingActive.contact_operators as any)?.name || 'previous operator';
+      const opObj = existingActive.contact_operators as unknown;
+      const prevOpName =
+        (Array.isArray(opObj)
+          ? (opObj as Array<{ name: string }>)[0]?.name
+          : (opObj as { name: string } | null)?.name) || 'previous operator';
 
       // 1. Deactivate previous operator's active assignment
       await supabaseAdmin
