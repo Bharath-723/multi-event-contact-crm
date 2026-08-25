@@ -1052,6 +1052,8 @@ export default function RegistrationForm() {
                         if (opt === 'No') {
                           setValue('volunteerSlotId', '');
                           setValue('volunteerSlotTime', '');
+                          setValue('interestedToDinner', 'No');
+                          setValue('prasadamSelections', []);
                         } else if (opt === 'Yes') {
                           if (getValues('interestedToDinner') === 'Yes' && getValues('volunteerSlotTime')) {
                             const valid = filterValidSelectionsForSlot(
@@ -1137,101 +1139,110 @@ export default function RegistrationForm() {
             </AnimatePresence>
           </div>
 
-          {/* --- SECTION 4: PRASADAM --- */}
-          <div className="space-y-3 pt-2">
-            <h3 className="text-sm font-semibold tracking-wider text-purple-400 uppercase">
-              4. Prasadam
-            </h3>
-            <span className="text-sm text-slate-300 block">Interested to take Prasadam? *</span>
-            <div className="flex gap-4">
-              {['Yes', 'No'].map((opt) => (
-                <label
-                  key={opt}
-                  className={`flex-1 flex items-center justify-center gap-2.5 py-3 rounded-xl border font-semibold text-base cursor-pointer transition-all ${watchedFields.interestedToDinner === opt
-                    ? 'bg-purple-950/40 border-purple-500/50 text-white'
-                    : 'bg-slate-950/50 border-slate-800 text-slate-400'
-                    }`}
-                >
-                  <input
-                    type="radio"
-                    value={opt}
-                    className="sr-only"
-                    {...register('interestedToDinner')}
-                    onChange={() => {
-                      setValue('interestedToDinner', opt as 'Yes' | 'No');
-                      if (opt === 'No') {
-                        setValue('prasadamSelections', []);
-                      } else if (opt === 'Yes' && watchedFields.interestedToVolunteer === 'Yes' && watchedFields.volunteerSlotTime) {
-                        const valid = filterValidSelectionsForSlot(
-                          watchedFields.volunteerSlotTime,
-                          (getValues('prasadamSelections') as unknown as string[]) || []
-                        );
-                        setValue('prasadamSelections', valid as ('Breakfast' | 'Lunch' | 'Dinner')[]);
-                      }
-                      trigger('prasadamSelections');
-                    }}
-                  />
-                  <span>{opt}</span>
-                </label>
-              ))}
-            </div>
-            {errors.interestedToDinner && (
-              <p className="text-red-400 text-xs mt-1">{errors.interestedToDinner.message}</p>
+          {/* --- PRASADAM (Visible ONLY when Volunteer = Yes) --- */}
+          <AnimatePresence>
+            {watchedFields.interestedToVolunteer === 'Yes' && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="space-y-3 pt-2 overflow-hidden"
+              >
+                <h3 className="text-sm font-semibold tracking-wider text-purple-400 uppercase">
+                  Prasadam
+                </h3>
+                <span className="text-sm text-slate-300 block">Interested to take Prasadam? *</span>
+                <div className="flex gap-4">
+                  {['Yes', 'No'].map((opt) => (
+                    <label
+                      key={opt}
+                      className={`flex-1 flex items-center justify-center gap-2.5 py-3 rounded-xl border font-semibold text-base cursor-pointer transition-all ${watchedFields.interestedToDinner === opt
+                        ? 'bg-purple-950/40 border-purple-500/50 text-white'
+                        : 'bg-slate-950/50 border-slate-800 text-slate-400'
+                        }`}
+                    >
+                      <input
+                        type="radio"
+                        value={opt}
+                        className="sr-only"
+                        {...register('interestedToDinner')}
+                        onChange={() => {
+                          setValue('interestedToDinner', opt as 'Yes' | 'No');
+                          if (opt === 'No') {
+                            setValue('prasadamSelections', []);
+                          } else if (opt === 'Yes' && watchedFields.interestedToVolunteer === 'Yes' && watchedFields.volunteerSlotTime) {
+                            const valid = filterValidSelectionsForSlot(
+                              watchedFields.volunteerSlotTime,
+                              (getValues('prasadamSelections') as unknown as string[]) || []
+                            );
+                            setValue('prasadamSelections', valid as ('Breakfast' | 'Lunch' | 'Dinner')[]);
+                          }
+                          trigger('prasadamSelections');
+                        }}
+                      />
+                      <span>{opt}</span>
+                    </label>
+                  ))}
+                </div>
+                {errors.interestedToDinner && (
+                  <p className="text-red-400 text-xs mt-1">{errors.interestedToDinner.message}</p>
+                )}
+
+                {/* Prasadam Selection (multi-select checkboxes, based on time slot) */}
+                <AnimatePresence>
+                  {watchedFields.interestedToDinner === 'Yes' && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="space-y-2.5 pt-2 overflow-hidden"
+                    >
+                      <span className="text-xs text-slate-300 block font-medium">Select Prasadam Option(s) *</span>
+                      {allowedPrasadamOptions.length > 0 ? (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                          {allowedPrasadamOptions.map((opt) => {
+                            const isSelected = currentPrasadamSelections.includes(opt);
+                            return (
+                              <label
+                                key={opt}
+                                className={`flex items-center justify-center gap-2 p-3 rounded-xl border text-xs font-semibold cursor-pointer transition-all ${isSelected
+                                  ? 'bg-purple-950/40 border-purple-500/50 text-white'
+                                  : 'bg-slate-950/30 border-slate-900 text-slate-400 hover:border-slate-800 hover:text-white'
+                                  }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  className="sr-only"
+                                  checked={isSelected}
+                                  onChange={() => togglePrasadamSelection(opt)}
+                                />
+                                <div className={`w-4 h-4 rounded flex items-center justify-center border shrink-0 ${isSelected ? 'border-purple-400 bg-purple-500' : 'border-slate-700'}`}>
+                                  {isSelected && <CheckCircle2 className="w-3.5 h-3.5 stroke-[3] text-slate-950" />}
+                                </div>
+                                <span>{opt}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-amber-400 bg-amber-950/30 border border-amber-500/30 p-3 rounded-xl">
+                          Please select a time slot above to view available prasadam options.
+                        </p>
+                      )}
+                      {errors.prasadamSelections && (
+                        <p className="text-red-400 text-xs mt-1">{String(errors.prasadamSelections.message)}</p>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.div>
             )}
+          </AnimatePresence>
 
-            {/* Prasadam Selection (multi-select checkboxes, based on time slot) */}
-            <AnimatePresence>
-              {watchedFields.interestedToDinner === 'Yes' && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="space-y-2.5 pt-2 overflow-hidden"
-                >
-                  <span className="text-xs text-slate-300 block font-medium">Select Prasadam Option(s) *</span>
-                  {allowedPrasadamOptions.length > 0 ? (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                      {allowedPrasadamOptions.map((opt) => {
-                        const isSelected = currentPrasadamSelections.includes(opt);
-                        return (
-                          <label
-                            key={opt}
-                            className={`flex items-center justify-center gap-2 p-3 rounded-xl border text-xs font-semibold cursor-pointer transition-all ${isSelected
-                              ? 'bg-purple-950/40 border-purple-500/50 text-white'
-                              : 'bg-slate-950/30 border-slate-900 text-slate-400 hover:border-slate-800 hover:text-white'
-                              }`}
-                          >
-                            <input
-                              type="checkbox"
-                              className="sr-only"
-                              checked={isSelected}
-                              onChange={() => togglePrasadamSelection(opt)}
-                            />
-                            <div className={`w-4 h-4 rounded flex items-center justify-center border shrink-0 ${isSelected ? 'border-purple-400 bg-purple-500' : 'border-slate-700'}`}>
-                              {isSelected && <CheckCircle2 className="w-3.5 h-3.5 stroke-[3] text-slate-950" />}
-                            </div>
-                            <span>{opt}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-amber-400 bg-amber-950/30 border border-amber-500/30 p-3 rounded-xl">
-                      Please select a time slot above to view available prasadam options.
-                    </p>
-                  )}
-                  {errors.prasadamSelections && (
-                    <p className="text-red-400 text-xs mt-1">{String(errors.prasadamSelections.message)}</p>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          {/* --- SECTION 5: DONATION --- */}
+          {/* --- SECTION 4: DONATION --- */}
           <div className="space-y-3 pt-2">
             <h3 className="text-sm font-semibold tracking-wider text-purple-400 uppercase">
-              5. Donation Contribution
+              4. Donation Contribution
             </h3>
             <div className="pt-1">
               <span className="text-xs text-slate-400 block mb-3 font-semibold uppercase tracking-wider">Anna-Daan Seva Amount</span>

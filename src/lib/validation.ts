@@ -44,7 +44,7 @@ export const registrationSchema = z.object({
   volunteerSlotTime: z.string().optional().or(z.literal('')),
   interestedToDinner: z.enum(['Yes', 'No'], {
     message: 'Please select a prasadam preference',
-  }),
+  }).optional().or(z.literal('')),
   prasadamSelections: z.array(z.enum(['Breakfast', 'Lunch', 'Dinner'])).optional().default([]),
   wantsToDonate: z.enum(['Yes', 'No'], {
     message: 'Please select a donation preference',
@@ -78,6 +78,14 @@ export const registrationSchema = z.object({
         code: z.ZodIssueCode.custom,
         message: 'Please select a volunteer time slot',
         path: ['volunteerSlotId'],
+      });
+    }
+
+    if (!data.interestedToDinner || data.interestedToDinner.trim() === '') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Please select a prasadam preference',
+        path: ['interestedToDinner'],
       });
     }
 
