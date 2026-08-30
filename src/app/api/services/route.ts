@@ -5,30 +5,34 @@ import { supabase } from '@/lib/supabase';
 const client = supabaseAdmin || supabase;
 
 // ─── GET /api/services ───────────────────────────────────────────────────────
-// Returns services for the selected festival event with assigned volunteer counts.
+// Returns canonical service catalog with assigned volunteer counts across all festivals.
 export async function GET(req: NextRequest) {
   try {
     const festivalEventId = req.nextUrl.searchParams.get('festival_event_id');
 
-    let query = client.from('services').select('*').order('name', { ascending: true });
-    if (festivalEventId) {
-      query = query.eq('festival_event_id', festivalEventId);
-    }
+    // Fetch all active services from canonical services table
+    const { data: services, error } = await client
+      .from('services')
+      .select('*')
+      .order('name', { ascending: true });
 
-    const { data: services, error } = await query;
     if (error) throw error;
 
-    // For each service compute assigned_count
-    let regQuery = client.from('registrations').select('service_id').not('service_id', 'is', null);
-    if (festivalEventId) {
-      regQuery = regQuery.eq('festival_event_id', festivalEventId);
-    }
-
-    const { data: counts, error: countError } = await regQuery;
-    if (countError) throw countError;
+    // For each service compute assigned_count across BOTH Rathayatra and Krishnashtami registrations
+    const [rathRes, krishRes] = await Promise.all([
+      client.from('registrations').select('service_id').not('service_id', 'is', null),
+      client.from('krishnashtami_registrations').select('service_id').not('service_id', 'is', null),
+    ]);
 
     const countMap: Record<string, number> = {};
-    for (const row of (counts || [])) {
+    
+    for (const row of (rathRes.data || [])) {
+      if (row.service_id) {
+        countMap[row.service_id] = (countMap[row.service_id] || 0) + 1;
+      }
+    }
+
+    for (const row of (krishRes.data || [])) {
       if (row.service_id) {
         countMap[row.service_id] = (countMap[row.service_id] || 0) + 1;
       }
@@ -47,7 +51,7 @@ export async function GET(req: NextRequest) {
 }
 
 // ─── POST /api/services ──────────────────────────────────────────────────────
-// Creates a new service scoped by festival_event_id. Requires authenticated admin session.
+// Creates a new service in canonical services table. Requires authenticated admin session.
 export async function POST(req: NextRequest) {
   try {
     const authHeader = req.headers.get('authorization') || '';
@@ -75,22 +79,24 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const name = body.name?.trim();
     const description = body.description?.trim() || null;
-    const festival_event_id = body.festival_event_id;
+    const festival_event_id = body.festival_event_id || null;
 
     if (!name) {
       return NextResponse.json({ error: 'Service name is required' }, { status: 400 });
     }
 
-    if (!festival_event_id) {
-      return NextResponse.json(
-        { error: 'festival_event_id is required when creating a service' },
-        { status: 400 }
-      );
+    const insertPayload: Record<string, unknown> = {
+      name,
+      description,
+      is_active: true,
+    };
+    if (festival_event_id) {
+      insertPayload.festival_event_id = festival_event_id;
     }
 
     const { data: service, error: insertError } = await client
       .from('services')
-      .insert({ name, description, is_active: true, festival_event_id })
+      .insert(insertPayload)
       .select()
       .single();
 
@@ -121,3 +127,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to create service' }, { status: 500 });
   }
 }
+

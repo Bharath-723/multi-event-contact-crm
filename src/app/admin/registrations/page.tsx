@@ -17,16 +17,19 @@ import { useFestival } from '@/lib/contexts/FestivalContext';
 import { getRegistrationSource, ContactSource } from '@/lib/source-resolver';
 
 // ─── Inline Service Assignment Cell ──────────────────────────────────────────
+// ─── Inline Service Assignment Cell ──────────────────────────────────────────
 function ServiceCell({
   registration,
   services,
   onAssigned,
   selectedEventId,
+  source,
 }: {
   registration: Registration;
   services: Service[];
   onAssigned: () => void;
   selectedEventId: string | null;
+  source: ContactSource;
 }) {
   const [saving, setSaving] = useState(false);
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -34,7 +37,24 @@ function ServiceCell({
   const [newSvcDesc, setNewSvcDesc] = useState('');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [assignError, setAssignError] = useState<string | null>(null);
   const [selectOpen, setSelectOpen] = useState(false);
+  const menuRef = React.useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setSelectOpen(false);
+      }
+    }
+    if (selectOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [selectOpen]);
 
   if (!registration.interested_to_volunteer) {
     return (
@@ -42,21 +62,29 @@ function ServiceCell({
     );
   }
 
-  const assigned = registration.services;
+  const assignedService = registration.services || services.find((s) => s.id === registration.service_id);
   const activeServices = services.filter((s) => s.is_active);
 
   const handleAssign = async (serviceId: string | null) => {
     setSaving(true);
+    setAssignError(null);
     setSelectOpen(false);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const auth = session?.access_token ? `Bearer ${session.access_token}` : '';
-      const res = await fetch(`/api/registrations/${registration.id}/service`, {
+      const res = await fetch(`/api/registrations/${registration.id}/service?source=${source}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: auth },
-        body: JSON.stringify({ service_id: serviceId }),
+        body: JSON.stringify({ service_id: serviceId, source }),
       });
-      if (res.ok) onAssigned();
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        onAssigned();
+      } else {
+        setAssignError(data.error || 'Failed to update service assignment');
+      }
+    } catch {
+      setAssignError('Network error while assigning service');
     } finally {
       setSaving(false);
     }
@@ -83,7 +111,7 @@ function ServiceCell({
       setAddModalOpen(false);
       setNewSvcName('');
       setNewSvcDesc('');
-      onAssigned(); // triggers realtime refetch
+      onAssigned(); // triggers refetch
     } catch { setCreateError('Network error'); }
     finally { setCreating(false); }
   };
@@ -92,104 +120,77 @@ function ServiceCell({
     return <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />;
   }
 
-  if (assigned) {
-    return (
-      <div className="relative group inline-block">
-        <button
-          onClick={() => setSelectOpen(!selectOpen)}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-green-950/40 border border-green-500/30 text-green-400 text-xs font-bold whitespace-nowrap hover:bg-green-950/60 transition-all cursor-pointer"
-        >
-          <CheckCircle className="w-3 h-3 shrink-0" />
-          <span className="max-w-[100px] truncate">{assigned.name}</span>
-        </button>
-        {selectOpen && (
-          <div className="absolute left-0 top-full mt-1 z-50 bg-slate-950 border border-slate-800 rounded-xl shadow-2xl py-1 min-w-[180px] max-h-52 overflow-y-auto">
-            <button
-              onClick={() => handleAssign(null)}
-              className="w-full text-left px-3 py-2 text-xs font-semibold text-red-400 hover:bg-red-950/30 transition-all cursor-pointer"
-            >✕ Clear Assignment</button>
-            <div className="border-t border-slate-800 my-1" />
-            {activeServices.map((svc) => (
-              <button
-                key={svc.id}
-                onClick={() => handleAssign(svc.id)}
-                className={`w-full text-left px-3 py-2 text-xs font-semibold transition-all cursor-pointer ${
-                  svc.id === registration.service_id
-                    ? 'bg-indigo-950/40 text-indigo-300'
-                    : 'text-slate-300 hover:bg-slate-900'
-                }`}
-              >{svc.name}</button>
-            ))}
-            <div className="border-t border-slate-800 my-1" />
-            <button
-              onClick={() => { setSelectOpen(false); setAddModalOpen(true); }}
-              className="w-full text-left px-3 py-2 text-xs font-bold text-indigo-400 hover:bg-indigo-950/30 transition-all cursor-pointer flex items-center gap-1.5"
-            >
-              <Plus className="w-3 h-3" /> Add New Service
-            </button>
-          </div>
-        )}
-        {addModalOpen && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-            <motion.div initial={{opacity:0,scale:0.95}} animate={{opacity:1,scale:1}} className="glass-card rounded-2xl p-6 w-full max-w-sm relative">
-              <button onClick={() => setAddModalOpen(false)} className="absolute top-4 right-4 text-slate-500 hover:text-slate-100 cursor-pointer"><X className="w-4 h-4" /></button>
-              <div className="flex items-center gap-2 mb-4">
-                <Wrench className="w-5 h-5 text-indigo-400" />
-                <h3 className="text-sm font-extrabold text-slate-100">Add New Service</h3>
-              </div>
-              {createError && <p className="text-xs text-red-400 mb-3">{createError}</p>}
-              <div className="space-y-3">
-                <input
-                  type="text" value={newSvcName} onChange={(e) => setNewSvcName(e.target.value)}
-                  placeholder="Service Name *"
-                  autoFocus
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-indigo-500/50"
-                />
-                <input
-                  type="text" value={newSvcDesc} onChange={(e) => setNewSvcDesc(e.target.value)}
-                  placeholder="Description (optional)"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-indigo-500/50"
-                />
-              </div>
-              <div className="flex gap-2 mt-4">
-                <button onClick={handleCreateService} disabled={creating}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold cursor-pointer disabled:opacity-60">
-                  {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                  {creating ? 'Creating...' : 'Create'}
-                </button>
-                <button onClick={() => setAddModalOpen(false)} className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 text-sm font-semibold cursor-pointer">Cancel</button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // Not yet assigned
   return (
-    <div className="relative inline-block">
-      <button
-        onClick={() => setSelectOpen(!selectOpen)}
-        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-950/30 border border-indigo-500/20 text-indigo-400 text-xs font-bold hover:bg-indigo-950/50 transition-all cursor-pointer whitespace-nowrap"
-      >
-        <Plus className="w-3 h-3" /> Assign Service
-      </button>
+    <div className="relative inline-block" ref={menuRef}>
+      {assignError && (
+        <div className="absolute bottom-full left-0 mb-1 z-50 p-2 bg-red-950 border border-red-500/50 rounded-lg text-red-300 text-[10px] whitespace-nowrap shadow-xl">
+          {assignError}
+        </div>
+      )}
+
+      {assignedService ? (
+        <div className="flex items-center gap-1.5">
+          <span className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-green-950/40 border border-green-500/30 text-green-400 text-xs font-bold whitespace-nowrap">
+            <CheckCircle className="w-3.5 h-3.5 shrink-0 text-green-400" />
+            <span className="max-w-[110px] truncate" title={assignedService.name}>
+              {assignedService.name}
+            </span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelectOpen(!selectOpen)}
+            className="px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white text-xs font-semibold hover:bg-slate-850 transition-all cursor-pointer whitespace-nowrap"
+          >
+            Change
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setSelectOpen(!selectOpen)}
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-950/30 border border-indigo-500/20 text-indigo-400 text-xs font-bold hover:bg-indigo-950/50 transition-all cursor-pointer whitespace-nowrap"
+        >
+          <Plus className="w-3 h-3" /> Assign Service
+        </button>
+      )}
+
       {selectOpen && (
-        <div className="absolute left-0 top-full mt-1 z-50 bg-slate-950 border border-slate-800 rounded-xl shadow-2xl py-1 min-w-[180px] max-h-52 overflow-y-auto">
+        <div className="absolute left-0 top-full mt-1 z-50 bg-slate-950 border border-slate-800 rounded-xl shadow-2xl py-1 min-w-[200px] max-h-56 overflow-y-auto">
+          {assignedService && (
+            <>
+              <button
+                type="button"
+                onClick={() => handleAssign(null)}
+                className="w-full text-left px-3 py-2 text-xs font-semibold text-red-400 hover:bg-red-950/30 transition-all cursor-pointer"
+              >
+                ✕ Clear Assignment
+              </button>
+              <div className="border-t border-slate-800 my-1" />
+            </>
+          )}
+
           {activeServices.length === 0 ? (
-            <p className="px-3 py-2 text-xs text-slate-500">No active services</p>
+            <p className="px-3 py-2 text-xs text-slate-500">No active services available</p>
           ) : (
             activeServices.map((svc) => (
               <button
                 key={svc.id}
+                type="button"
                 onClick={() => handleAssign(svc.id)}
-                className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-900 transition-all cursor-pointer"
-              >{svc.name}</button>
+                className={`w-full text-left px-3 py-2 text-xs font-semibold transition-all cursor-pointer ${
+                  svc.id === (assignedService?.id || registration.service_id)
+                    ? 'bg-indigo-950/50 text-indigo-300 font-bold'
+                    : 'text-slate-300 hover:bg-slate-900'
+                }`}
+              >
+                {svc.name}
+              </button>
             ))
           )}
+
           <div className="border-t border-slate-800 my-1" />
           <button
+            type="button"
             onClick={() => { setSelectOpen(false); setAddModalOpen(true); }}
             className="w-full text-left px-3 py-2 text-xs font-bold text-indigo-400 hover:bg-indigo-950/30 transition-all cursor-pointer flex items-center gap-1.5"
           >
@@ -197,6 +198,7 @@ function ServiceCell({
           </button>
         </div>
       )}
+
       {addModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
           <motion.div initial={{opacity:0,scale:0.95}} animate={{opacity:1,scale:1}} className="glass-card rounded-2xl p-6 w-full max-w-sm relative">
@@ -420,6 +422,7 @@ function AssignContactModal({
 export default function RegistrationsPage() {
   const queryClient = useQueryClient();
   const { selectedEventId } = useFestival();
+  const sourceConfig = getRegistrationSource(selectedEventId);
   const [qrOpen, setQrOpen] = useState(false);
 
   // --- FILTER STATES ---
@@ -429,6 +432,7 @@ export default function RegistrationsPage() {
   const [filterVolunteer, setFilterVolunteer] = useState('');
   const [filterSlot, setFilterSlot] = useState('');
   const [filterOccupation, setFilterOccupation] = useState('');
+  const [filterStandard, setFilterStandard] = useState('');
   const [filterDonation, setFilterDonation] = useState('');
   const [filterPrasadam, setFilterPrasadam] = useState('');
   const [filterArea, setFilterArea] = useState('');
@@ -520,7 +524,7 @@ export default function RegistrationsPage() {
       const prasadamJoinTable = sourceConfig.prasadamTable;
       const assignmentsJoinTable = sourceConfig.assignmentsTable;
 
-      const servicesJoin = !sourceConfig.isKrishnashtami ? 'services ( id, name ),' : '';
+      const servicesJoin = 'services ( id, name, is_active ),';
 
       let query = supabase
         .from(regTable)
@@ -575,6 +579,7 @@ export default function RegistrationsPage() {
         registration_prasadam?: { id: string; prasadam_type: string }[] | null;
         krishnashtami_contact_assignments?: Record<string, unknown>[] | null;
         contact_assignments?: Record<string, unknown>[] | null;
+        services?: Service | null;
       }
  
       return (data || []).map((reg: unknown) => {
@@ -588,6 +593,7 @@ export default function RegistrationsPage() {
           skills: skillsList,
           registration_prasadam: prasadamList,
           contact_assignments: assignmentsList,
+          services: r.services || null,
         } as unknown as Registration;
       });
     },
@@ -668,11 +674,12 @@ export default function RegistrationsPage() {
       const v = sessionStorage.getItem('regs_filterVolunteer');
       const sl = sessionStorage.getItem('regs_filterSlot');
       const occ = sessionStorage.getItem('regs_filterOccupation');
+      const st = sessionStorage.getItem('regs_filterStandard');
       const d = sessionStorage.getItem('regs_filterDonation');
       const pr = sessionStorage.getItem('regs_filterPrasadam');
       const a = sessionStorage.getItem('regs_filterArea');
       const c = sessionStorage.getItem('regs_filterCompany');
-          const sk = sessionStorage.getItem('regs_filterSkill');
+      const sk = sessionStorage.getItem('regs_filterSkill');
       const dt = sessionStorage.getItem('regs_filterDate');
       const tr = sessionStorage.getItem('regs_filterTransportation');
       const sv = sessionStorage.getItem('regs_filterService');
@@ -685,6 +692,7 @@ export default function RegistrationsPage() {
       if (v) setFilterVolunteer(v);
       if (sl) setFilterSlot(sl);
       if (occ) setFilterOccupation(occ);
+      if (st) setFilterStandard(st);
       if (d) setFilterDonation(d);
       if (pr) setFilterPrasadam(pr);
       if (a) setFilterArea(a);
@@ -706,6 +714,7 @@ export default function RegistrationsPage() {
   useEffect(() => { sessionStorage.setItem('regs_filterVolunteer', filterVolunteer); }, [filterVolunteer]);
   useEffect(() => { sessionStorage.setItem('regs_filterSlot', filterSlot); }, [filterSlot]);
   useEffect(() => { sessionStorage.setItem('regs_filterOccupation', filterOccupation); }, [filterOccupation]);
+  useEffect(() => { sessionStorage.setItem('regs_filterStandard', filterStandard); }, [filterStandard]);
   useEffect(() => { sessionStorage.setItem('regs_filterDonation', filterDonation); }, [filterDonation]);
   useEffect(() => { sessionStorage.setItem('regs_filterPrasadam', filterPrasadam); }, [filterPrasadam]);
   useEffect(() => { sessionStorage.setItem('regs_filterArea', filterArea); }, [filterArea]);
@@ -882,6 +891,11 @@ export default function RegistrationsPage() {
       if (opType !== filterOperatorType) return false;
     }
 
+    // 17. Standard filter (Krishnashtami)
+    if (filterStandard && sourceConfig.isKrishnashtami) {
+      if (reg.standard !== filterStandard) return false;
+    }
+
     return true;
   });
 
@@ -902,7 +916,7 @@ export default function RegistrationsPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setCurrentPage(1);
   }, [
-    searchQuery, searchPhone, filterGender, filterVolunteer, filterSlot, filterOccupation,
+    searchQuery, searchPhone, filterGender, filterVolunteer, filterSlot, filterOccupation, filterStandard,
     filterDonation, filterPrasadam, filterArea, filterCompany, filterSkill, filterDate, filterService, filterOperator, filterOperatorType
   ]);
 
@@ -1192,6 +1206,7 @@ export default function RegistrationsPage() {
     setFilterVolunteer('');
     setFilterSlot('');
     setFilterOccupation('');
+    setFilterStandard('');
     setFilterDonation('');
     setFilterPrasadam('');
     setFilterArea('');
@@ -1290,7 +1305,7 @@ export default function RegistrationsPage() {
           <h3 className="font-bold text-sm text-slate-300 flex items-center gap-2">
             <Filter className="w-4.5 h-4.5 text-purple-400" /> Filters & Query Search
           </h3>
-          {(searchQuery || searchPhone || filterGender || filterVolunteer || filterSlot || filterDonation || filterPrasadam || filterArea || filterCompany || filterSkill || filterDate || filterService || filterOperator || filterOperatorType) && (
+          {(searchQuery || searchPhone || filterGender || filterVolunteer || filterSlot || filterOccupation || filterStandard || filterDonation || filterPrasadam || filterArea || filterCompany || filterSkill || filterDate || filterService || filterOperator || filterOperatorType) && (
             <button
               onClick={handleResetFilters}
               className="text-[10px] uppercase font-bold tracking-wider text-purple-400 hover:text-purple-300 flex items-center gap-1 cursor-pointer"
@@ -1409,6 +1424,21 @@ export default function RegistrationsPage() {
               <option key={occ} value={occ}>{occ}</option>
             ))}
           </select>
+
+          {/* Standard Filter — Krishnashtami only */}
+          {sourceConfig.isKrishnashtami && (
+            <select
+              value={filterStandard}
+              onChange={(e) => setFilterStandard(e.target.value)}
+              className="px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-800 text-slate-300 focus:outline-none cursor-pointer"
+            >
+              <option value="">Standard (All)</option>
+              <option value="1st Year">1st Year</option>
+              <option value="2nd Year">2nd Year</option>
+              <option value="3rd Year">3rd Year</option>
+              <option value="4th Year">4th Year</option>
+            </select>
+          )}
 
           {/* Prasadam — hidden on mobile */}
           <select
@@ -1658,6 +1688,7 @@ export default function RegistrationsPage() {
                         services={services}
                         onAssigned={handleServiceAssigned}
                         selectedEventId={selectedEventId}
+                        source={sourceConfig.isKrishnashtami ? 'krishnashtami' : 'rathayatra'}
                       />
                     </td>
 

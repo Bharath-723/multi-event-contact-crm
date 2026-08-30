@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { normalizeSource } from '@/lib/source-resolver';
 
 // ─── PATCH /api/registrations/[id]/service ───────────────────────────────────
 // Assigns or clears a service for a volunteer registration.
-// Body: { service_id: string | null }
+// Body: { service_id: string | null, source?: string }
+// Query: ?source=krishnashtami | rathayatra
 // Validation:
 //   - Registration must have interested_to_volunteer === true
 //   - Service (if provided) must exist and be active
@@ -31,15 +33,33 @@ export async function PATCH(
     }
 
     const { id: registrationId } = await params;
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     const serviceId: string | null = body.service_id ?? null;
+    const sourceParam = req.nextUrl.searchParams.get('source') || body.source || null;
+
+    const normalizedSource = normalizeSource(sourceParam);
+    const isKrishnashtami = normalizedSource === 'krishnashtami';
+    const regTable = isKrishnashtami ? 'krishnashtami_registrations' : 'registrations';
 
     // ── Fetch Registration ────────────────────────────────────────────────────
-    const { data: registration, error: regError } = await supabaseAdmin
-      .from('registrations')
+    let { data: registration, error: regError } = await supabaseAdmin
+      .from(regTable)
       .select('id, full_name, phone, interested_to_volunteer, service_id')
       .eq('id', registrationId)
-      .single();
+      .maybeSingle();
+
+    // Fallback: If not found in target table and source wasn't explicitly supplied, check the alternative table
+    if (!registration && !sourceParam) {
+      const altTable = isKrishnashtami ? 'registrations' : 'krishnashtami_registrations';
+      const { data: altReg } = await supabaseAdmin
+        .from(altTable)
+        .select('id, full_name, phone, interested_to_volunteer, service_id')
+        .eq('id', registrationId)
+        .maybeSingle();
+      if (altReg) {
+        registration = altReg;
+      }
+    }
 
     if (regError || !registration) {
       return NextResponse.json({ error: 'Registration not found' }, { status: 404 });
@@ -81,7 +101,7 @@ export async function PATCH(
 
     // ── Perform Update ────────────────────────────────────────────────────────
     const { data: updated, error: updateError } = await supabaseAdmin
-      .from('registrations')
+      .from(regTable)
       .update({ service_id: serviceId })
       .eq('id', registrationId)
       .select(`
@@ -114,6 +134,7 @@ export async function PATCH(
         new_service_id: serviceId,
         service_name: serviceName,
         admin_email: user.email,
+        source: normalizedSource,
         timestamp: new Date().toISOString(),
       },
     });
@@ -124,3 +145,4 @@ export async function PATCH(
     return NextResponse.json({ error: 'Failed to update service assignment' }, { status: 500 });
   }
 }
+
