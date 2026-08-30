@@ -205,27 +205,31 @@ function ConfirmDeleteModal({
     setLoading(false);
   };
 
+  const assignedCount = service.assigned_count ?? 0;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
       <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="glass-card rounded-2xl p-6 w-full max-w-sm relative border border-red-500/20">
         <div className="flex items-center gap-3 mb-4 text-red-400">
           <Trash2 className="w-6 h-6 shrink-0" />
           <div>
-            <h2 className="text-base font-extrabold">Delete Service?</h2>
-            <p className="text-xs text-slate-400 mt-0.5">{service.name}</p>
+            <h2 className="text-base font-extrabold text-slate-100">Delete Service?</h2>
+            <p className="text-xs text-slate-400 mt-0.5 font-semibold">{service.name}</p>
           </div>
         </div>
-        <p className="text-sm text-slate-400 mb-5">
-          This will permanently delete the service. This action cannot be undone.
+        <p className="text-sm text-slate-300 mb-5 leading-relaxed">
+          {assignedCount > 0
+            ? `This service has ${assignedCount} assigned volunteer(s). Deleting it will remove the service and its active assignments for the selected festival.`
+            : 'This will permanently delete the service. This action cannot be undone.'}
         </p>
         <div className="flex gap-2">
           <button
             onClick={handle}
             disabled={loading}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-red-950/40 border border-red-500/30 text-red-400 text-sm font-bold hover:bg-red-950/60 transition-all cursor-pointer disabled:opacity-60"
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-red-650 hover:bg-red-600 text-white text-sm font-bold transition-all cursor-pointer disabled:opacity-60 shadow-[0_0_15px_rgba(239,68,68,0.2)]"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-            {loading ? 'Deleting...' : 'Delete'}
+            {loading ? 'Deleting...' : 'Delete Service'}
           </button>
           <button onClick={onClose} className="px-4 py-2.5 rounded-xl bg-slate-900/60 border border-slate-700/40 text-slate-400 text-sm font-semibold hover:text-slate-100 transition-all cursor-pointer">
             Cancel
@@ -267,16 +271,20 @@ export default function ServicesPage() {
   // ── Realtime ───────────────────────────────────────────────────────────────
   useEffect(() => {
     const channel = supabase
-      .channel('services_management_realtime')
+      .channel(`services_management_realtime_${selectedEventId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, () => {
         queryClient.invalidateQueries({ queryKey: ['services-management'] });
+        queryClient.invalidateQueries({ queryKey: ['services-list'] });
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'registrations' }, () => {
         queryClient.invalidateQueries({ queryKey: ['services-management'] });
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'krishnashtami_registrations' }, () => {
+        queryClient.invalidateQueries({ queryKey: ['services-management'] });
+      })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [queryClient]);
+  }, [queryClient, selectedEventId]);
 
   // ── Toggle active ──────────────────────────────────────────────────────────
   const handleToggleActive = async (svc: Service) => {
@@ -303,7 +311,10 @@ export default function ServicesPage() {
   const handleDelete = async (svc: Service) => {
     try {
       const auth = await getAuthHeader();
-      const res = await fetch(`/api/services/${svc.id}`, {
+      const url = selectedEventId
+        ? `/api/services/${svc.id}?festival_event_id=${selectedEventId}`
+        : `/api/services/${svc.id}`;
+      const res = await fetch(url, {
         method: 'DELETE',
         headers: { Authorization: auth },
       });
@@ -315,6 +326,7 @@ export default function ServicesPage() {
       }
       queryClient.invalidateQueries({ queryKey: ['services-management'] });
       queryClient.invalidateQueries({ queryKey: ['services-list'] });
+      queryClient.invalidateQueries({ queryKey: ['registrations-list'] });
       showToast('Service deleted successfully');
     } catch {
       showToast('Network error', 'error');
@@ -465,24 +477,14 @@ export default function ServicesPage() {
                           </button>
                         )}
 
-                        {/* Delete (only if no assignments) */}
-                        {(svc.assigned_count ?? 0) === 0 ? (
-                          <button
-                            onClick={() => setDeleteService(svc)}
-                            title="Delete Service"
-                            className="p-2 rounded-lg bg-slate-900/60 border border-slate-800 text-red-400 hover:text-red-300 hover:border-red-500/40 transition-all cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        ) : (
-                          <button
-                            disabled
-                            title="Cannot delete — volunteers assigned"
-                            className="p-2 rounded-lg bg-slate-900/60 border border-slate-800 text-slate-600 cursor-not-allowed"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                        {/* Delete Service (Unrestricted — opens confirmation modal) */}
+                        <button
+                          onClick={() => setDeleteService(svc)}
+                          title="Delete Service"
+                          className="p-2 rounded-lg bg-slate-900/60 border border-slate-800 text-red-400 hover:text-red-300 hover:border-red-500/40 transition-all cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </td>
                   </tr>

@@ -1,16 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { supabase } from '@/lib/supabase';
+import { getRegistrationSource } from '@/lib/source-resolver';
 
 const client = supabaseAdmin || supabase;
 
 // ─── GET /api/services ───────────────────────────────────────────────────────
-// Returns canonical service catalog with assigned volunteer counts across all festivals.
+// Returns canonical service catalog with assigned volunteer counts strictly scoped to the selected festival.
 export async function GET(req: NextRequest) {
   try {
     const festivalEventId = req.nextUrl.searchParams.get('festival_event_id');
+    const sourceConfig = getRegistrationSource(festivalEventId);
+    const regTable = sourceConfig.isKrishnashtami ? 'krishnashtami_registrations' : 'registrations';
 
-    // Fetch all active services from canonical services table
+    // Fetch all services from master services catalog
     const { data: services, error } = await client
       .from('services')
       .select('*')
@@ -18,21 +21,17 @@ export async function GET(req: NextRequest) {
 
     if (error) throw error;
 
-    // For each service compute assigned_count across BOTH Rathayatra and Krishnashtami registrations
-    const [rathRes, krishRes] = await Promise.all([
-      client.from('registrations').select('service_id').not('service_id', 'is', null),
-      client.from('krishnashtami_registrations').select('service_id').not('service_id', 'is', null),
-    ]);
-
-    const countMap: Record<string, number> = {};
-    
-    for (const row of (rathRes.data || [])) {
-      if (row.service_id) {
-        countMap[row.service_id] = (countMap[row.service_id] || 0) + 1;
-      }
+    // Fetch assigned volunteer count strictly for the selected festival
+    let query = client.from(regTable).select('service_id').not('service_id', 'is', null);
+    if (!sourceConfig.isKrishnashtami && festivalEventId) {
+      query = query.eq('festival_event_id', festivalEventId);
     }
 
-    for (const row of (krishRes.data || [])) {
+    const { data: assignments, error: assignErr } = await query;
+    if (assignErr) throw assignErr;
+
+    const countMap: Record<string, number> = {};
+    for (const row of (assignments || [])) {
       if (row.service_id) {
         countMap[row.service_id] = (countMap[row.service_id] || 0) + 1;
       }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { getRegistrationSource } from '@/lib/source-resolver';
 
 // ─── Auth helper ─────────────────────────────────────────────────────────────
 async function requireAdmin(req: NextRequest) {
@@ -77,9 +78,9 @@ export async function PUT(
 }
 
 // ─── DELETE /api/services/[id] ───────────────────────────────────────────────
-// Soft-delete (disable) a service.
-// Hard-delete is only allowed when no volunteers are assigned.
-// Soft-delete (is_active=false) is always safe.
+// Delete a service safely for the selected festival.
+// 1. Clears service assignments for the selected festival (no orphaned FKs).
+// 2. Deletes or deactivates the service in public.services if safe across festivals.
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -89,37 +90,58 @@ export async function DELETE(
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { id } = await params;
+    const festivalEventId = req.nextUrl.searchParams.get('festival_event_id');
+    const sourceConfig = getRegistrationSource(festivalEventId);
 
-    // Check for existing volunteer assignments
-    const { count } = await supabaseAdmin
-      .from('registrations')
-      .select('id', { count: 'exact', head: true })
-      .eq('service_id', id);
-
-    if ((count ?? 0) > 0) {
-      // Cannot delete — volunteers still assigned — soft-disable instead
-      return NextResponse.json(
-        {
-          error: `Cannot delete: ${count} volunteer(s) currently assigned. Disable the service instead.`,
-          has_assignments: true,
-        },
-        { status: 409 }
-      );
-    }
-
-    // Fetch service name for audit log
+    // Fetch service for audit logging and ownership check
     const { data: service } = await supabaseAdmin
       .from('services')
-      .select('name')
+      .select('name, festival_event_id')
       .eq('id', id)
-      .single();
+      .maybeSingle();
 
-    const { error: deleteError } = await supabaseAdmin
-      .from('services')
-      .delete()
-      .eq('id', id);
+    if (!service) {
+      return NextResponse.json({ error: 'Service not found' }, { status: 404 });
+    }
 
-    if (deleteError) throw deleteError;
+    // 1. Clear service_id assignments for the selected festival's registrations table
+    const targetTable = sourceConfig.isKrishnashtami ? 'krishnashtami_registrations' : 'registrations';
+    
+    let clearQuery = supabaseAdmin
+      .from(targetTable)
+      .update({ service_id: null })
+      .eq('service_id', id);
+
+    if (!sourceConfig.isKrishnashtami && festivalEventId) {
+      clearQuery = clearQuery.eq('festival_event_id', festivalEventId);
+    }
+
+    const { error: clearErr } = await clearQuery;
+    if (clearErr) throw clearErr;
+
+    // 2. Also check whether service record can be safely deleted or preserved for other festival
+    if (sourceConfig.isKrishnashtami) {
+      const { count: rathCount } = await supabaseAdmin
+        .from('registrations')
+        .select('id', { count: 'exact', head: true })
+        .eq('service_id', id);
+
+      if ((rathCount ?? 0) === 0) {
+        await supabaseAdmin.from('services').delete().eq('id', id);
+      }
+    } else {
+      const { count: krishCount } = await supabaseAdmin
+        .from('krishnashtami_registrations')
+        .select('id', { count: 'exact', head: true })
+        .eq('service_id', id);
+
+      if ((krishCount ?? 0) === 0) {
+        await supabaseAdmin.from('registrations').update({ service_id: null }).eq('service_id', id);
+        await supabaseAdmin.from('services').delete().eq('id', id);
+      } else {
+        await supabaseAdmin.from('registrations').update({ service_id: null }).eq('service_id', id);
+      }
+    }
 
     // Audit log
     await supabaseAdmin.from('audit_logs').insert({
@@ -128,6 +150,7 @@ export async function DELETE(
       details: {
         service_id: id,
         service_name: service?.name ?? 'unknown',
+        festival_event_id: festivalEventId,
         admin_email: user.email,
         timestamp: new Date().toISOString(),
       },
@@ -139,3 +162,4 @@ export async function DELETE(
     return NextResponse.json({ error: 'Failed to delete service' }, { status: 500 });
   }
 }
+
