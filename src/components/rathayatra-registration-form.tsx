@@ -70,7 +70,8 @@ const COMPANY_COLLEGE_SUGGESTIONS = [
   'MGIT',
   'VASV',
   'VJIT',
-  'JBIT'
+  'JBIT',
+  'NIAT'
 ];
 
 export default function RegistrationForm() {

@@ -551,9 +551,11 @@ export default function AdminFeedbackDashboard() {
               <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">College (All)</option>
               <option value="CBIT" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">CBIT</option>
               <option value="MGIT" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">MGIT</option>
+              <option value="VASV" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">VASV</option>
               <option value="JBIT" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">JBIT</option>
               <option value="VJIT" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">VJIT</option>
               <option value="VBIT" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">VBIT</option>
+              <option value="NIAT" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">NIAT</option>
             </select>
 
             {/* Branch Filter Dropdown */}

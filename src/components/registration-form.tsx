@@ -375,9 +375,11 @@ export default function RegistrationForm() {
                   <option value="" disabled className="bg-slate-950 text-slate-500">Select College *</option>
                   <option value="CBIT" className="bg-slate-950 text-white">CBIT</option>
                   <option value="MGIT" className="bg-slate-950 text-white">MGIT</option>
+                  <option value="VASV" className="bg-slate-950 text-white">VASV</option>
                   <option value="JBIT" className="bg-slate-950 text-white">JBIT</option>
                   <option value="VJIT" className="bg-slate-950 text-white">VJIT</option>
                   <option value="VBIT" className="bg-slate-950 text-white">VBIT</option>
+                  <option value="NIAT" className="bg-slate-950 text-white">NIAT</option>
                   <option value="Other" className="bg-slate-950 text-white">Other / Enter College Name</option>
                 </select>
                 <span className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-slate-500">

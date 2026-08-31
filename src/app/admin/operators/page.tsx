@@ -528,11 +528,20 @@ interface DryRunSummary {
     area_of_stay: string | null;
     company_college: string | null;
     occupation: string | null;
+    standard: string | null;
+    service_id: string | null;
+    date: string | null;
+    volunteer: string | null;
   };
+  selected_operator_ids: string[];
   filter_options: {
     areas: string[];
     colleges: string[];
     occupations: string[];
+    standards: string[];
+    services: Array<{ id: string; name: string }>;
+    dates: string[];
+    volunteers: string[];
   };
   total_unassigned: number;
   skipped_female: number;
@@ -545,7 +554,16 @@ interface DryRunSummary {
   will_skip_capacity: number;
   will_skip: number;
   capacity_warning: boolean;
-  operator_breakdown: Array<{ id: string; name: string; current: number; capacity: number; available: number }>;
+  operator_breakdown: Array<{
+    id: string;
+    name: string;
+    current: number;
+    capacity: number;
+    available: number;
+    is_selected: boolean;
+    is_full: boolean;
+    can_receive: boolean;
+  }>;
 }
 
 interface BatchReport {
@@ -583,10 +601,20 @@ export default function ContactOperatorsPage() {
   const [batchReport, setBatchReport] = useState<BatchReport | null>(null);
   const [autoAssignError, setAutoAssignError] = useState<string | null>(null);
 
-  // Dry run filter state
+  // 7 Dry run filter states
   const [selectedArea, setSelectedArea] = useState<string>('');
   const [selectedCollege, setSelectedCollege] = useState<string>('');
   const [selectedOccupation, setSelectedOccupation] = useState<string>('');
+  const [selectedStandard, setSelectedStandard] = useState<string>('');
+  const [selectedService, setSelectedService] = useState<string>('');
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [selectedVolunteer, setSelectedVolunteer] = useState<string>('');
+
+  // Selected operator checkboxes state
+  const [selectedOperatorIds, setSelectedOperatorIds] = useState<string[]>([]);
+
+  // Request sequencing reference for out-of-order API response protection
+  const dryRunSeqRef = React.useRef(0);
 
   const setContactSource = (newSource: ContactSource) => {
     // Immediate clean state reset when source changes
@@ -602,6 +630,11 @@ export default function ContactOperatorsPage() {
     setSelectedArea('');
     setSelectedCollege('');
     setSelectedOccupation('');
+    setSelectedStandard('');
+    setSelectedService('');
+    setSelectedDate('');
+    setSelectedVolunteer('');
+    setSelectedOperatorIds([]);
     setContactSourceState(newSource);
   };
 
@@ -695,9 +728,29 @@ export default function ContactOperatorsPage() {
   };
 
   // ── Auto Assign handlers ────────────────────────────────────────────────────
-  const fetchDryRun = async (area?: string, college?: string, occupation?: string) => {
+  const fetchDryRun = useCallback(async (overrideParams?: {
+    area?: string;
+    college?: string;
+    occupation?: string;
+    standard?: string;
+    service?: string;
+    date?: string;
+    volunteer?: string;
+    operatorIds?: string[];
+  }) => {
+    const seq = ++dryRunSeqRef.current;
     setAutoAssignStep('loading-dry-run');
     setAutoAssignError(null);
+
+    const area = overrideParams?.area !== undefined ? overrideParams.area : selectedArea;
+    const college = overrideParams?.college !== undefined ? overrideParams.college : selectedCollege;
+    const occupation = overrideParams?.occupation !== undefined ? overrideParams.occupation : selectedOccupation;
+    const standard = overrideParams?.standard !== undefined ? overrideParams.standard : selectedStandard;
+    const service = overrideParams?.service !== undefined ? overrideParams.service : selectedService;
+    const date = overrideParams?.date !== undefined ? overrideParams.date : selectedDate;
+    const volunteer = overrideParams?.volunteer !== undefined ? overrideParams.volunteer : selectedVolunteer;
+    const opIds = overrideParams?.operatorIds !== undefined ? overrideParams.operatorIds : selectedOperatorIds;
+
     try {
       const auth = await getAuthHeader();
       const res = await fetch('/api/assignments/auto', {
@@ -706,11 +759,19 @@ export default function ContactOperatorsPage() {
         body: JSON.stringify({
           dry_run: true,
           source: contactSource,
-          area_of_stay: area !== undefined ? area : selectedArea,
-          company_college: college !== undefined ? college : selectedCollege,
-          occupation: occupation !== undefined ? occupation : selectedOccupation,
+          area_of_stay: area || undefined,
+          company_college: college || undefined,
+          occupation: occupation || undefined,
+          standard: standard || undefined,
+          service_id: service || undefined,
+          date: date || undefined,
+          volunteer: volunteer || undefined,
+          selected_operator_ids: opIds,
         }),
       });
+
+      if (seq !== dryRunSeqRef.current) return;
+
       const d = await res.json();
       if (!res.ok || !d.summary) {
         setAutoAssignError(d.error || 'Failed to fetch dry-run summary');
@@ -720,13 +781,15 @@ export default function ContactOperatorsPage() {
       setDryRunSummary(d.summary);
       setAutoAssignStep('dry-run');
     } catch {
+      if (seq !== dryRunSeqRef.current) return;
       setAutoAssignError('Network error. Please try again.');
       setAutoAssignStep('idle');
     }
-  };
+  }, [contactSource, selectedArea, selectedCollege, selectedOccupation, selectedStandard, selectedService, selectedDate, selectedVolunteer, selectedOperatorIds]);
 
   const handleAutoAssignDryRun = async () => {
-    await fetchDryRun(selectedArea, selectedCollege, selectedOccupation);
+    setSelectedOperatorIds([]);
+    await fetchDryRun({ operatorIds: [] });
   };
 
   const handleExecuteAutoAssign = async () => {
@@ -743,6 +806,11 @@ export default function ContactOperatorsPage() {
           area_of_stay: selectedArea || undefined,
           company_college: selectedCollege || undefined,
           occupation: selectedOccupation || undefined,
+          standard: selectedStandard || undefined,
+          service_id: selectedService || undefined,
+          date: selectedDate || undefined,
+          volunteer: selectedVolunteer || undefined,
+          selected_operator_ids: selectedOperatorIds,
         }),
       });
       const d = await res.json();
@@ -753,6 +821,7 @@ export default function ContactOperatorsPage() {
       }
       setBatchReport(d.report);
       setAutoAssignStep('report');
+      setSelectedOperatorIds([]);
       loadOperators();
     } catch {
       setAutoAssignError('Network error. Please try again.');
@@ -765,6 +834,34 @@ export default function ContactOperatorsPage() {
     setDryRunSummary(null);
     setBatchReport(null);
     setAutoAssignError(null);
+    setSelectedOperatorIds([]);
+  };
+
+  const handleClearFilters = () => {
+    setSelectedArea('');
+    setSelectedCollege('');
+    setSelectedOccupation('');
+    setSelectedStandard('');
+    setSelectedService('');
+    setSelectedDate('');
+    setSelectedVolunteer('');
+    fetchDryRun({
+      area: '',
+      college: '',
+      occupation: '',
+      standard: '',
+      service: '',
+      date: '',
+      volunteer: '',
+    });
+  };
+
+  const handleToggleOperatorCheckbox = (opId: string) => {
+    const nextOpIds = selectedOperatorIds.includes(opId)
+      ? selectedOperatorIds.filter((id) => id !== opId)
+      : [...selectedOperatorIds, opId];
+    setSelectedOperatorIds(nextOpIds);
+    fetchDryRun({ operatorIds: nextOpIds });
   };
 
   // Realtime subscription for contact assignments and operator updates
@@ -1141,14 +1238,14 @@ export default function ContactOperatorsPage() {
 
       {/* ── Auto Assign Dialogs ──────────────────────────────────────────── */}
       <AnimatePresence>
-        {/* Dry-Run Summary Dialog with Filter Controls */}
+        {/* Dry-Run Summary Dialog with 7 Filter Controls & Selected Operator Checkboxes */}
         {(autoAssignStep === 'dry-run' || autoAssignStep === 'loading-dry-run') && dryRunSummary && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="glass-card rounded-2xl p-6 w-full max-w-xl relative max-h-[90vh] flex flex-col"
+              className="glass-card rounded-2xl p-6 w-full max-w-2xl relative max-h-[90vh] flex flex-col"
             >
               <button onClick={closeAutoAssign} className="absolute top-4 right-4 text-slate-500 hover:text-slate-100 cursor-pointer">
                 <X className="w-5 h-5" />
@@ -1159,31 +1256,27 @@ export default function ContactOperatorsPage() {
                 </div>
                 <div>
                   <h2 className="text-base font-extrabold text-slate-100">Auto Assign — Dry Run Preview</h2>
-                  <p className="text-xs text-slate-500">Read-only preview. Choose filters before executing assignment.</p>
+                  <p className="text-xs text-slate-500">Read-only preview. Choose filters and target operators before executing assignment.</p>
                 </div>
               </div>
 
-              {/* Dynamic Filter Controls (AND semantics) */}
+              {/* Dynamic 7 Filter Controls (AND semantics) */}
               <div className="p-3 bg-slate-900/50 border border-slate-800 rounded-xl mb-4 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1">
                     <Filter className="w-3 h-3" /> Candidate Filters (AND Semantics)
                   </span>
-                  {(selectedArea || selectedCollege || selectedOccupation) && (
+                  {(selectedArea || selectedCollege || selectedOccupation || selectedStandard || selectedService || selectedDate || selectedVolunteer) && (
                     <button
-                      onClick={() => {
-                        setSelectedArea('');
-                        setSelectedCollege('');
-                        setSelectedOccupation('');
-                        fetchDryRun('', '', '');
-                      }}
+                      onClick={handleClearFilters}
                       className="text-[10px] text-slate-400 hover:text-slate-200 underline cursor-pointer"
                     >
                       Clear Filters
                     </button>
                   )}
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                  {/* 1. Area of Stay */}
                   <div>
                     <label className="text-[9px] text-slate-500 font-bold block mb-1">Area of Stay</label>
                     <select
@@ -1191,7 +1284,7 @@ export default function ContactOperatorsPage() {
                       onChange={(e) => {
                         const val = e.target.value;
                         setSelectedArea(val);
-                        fetchDryRun(val, selectedCollege, selectedOccupation);
+                        fetchDryRun({ area: val });
                       }}
                       className="w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none cursor-pointer"
                     >
@@ -1201,6 +1294,8 @@ export default function ContactOperatorsPage() {
                       ))}
                     </select>
                   </div>
+
+                  {/* 2. College / Company */}
                   <div>
                     <label className="text-[9px] text-slate-500 font-bold block mb-1">College / Company</label>
                     <select
@@ -1208,7 +1303,7 @@ export default function ContactOperatorsPage() {
                       onChange={(e) => {
                         const val = e.target.value;
                         setSelectedCollege(val);
-                        fetchDryRun(selectedArea, val, selectedOccupation);
+                        fetchDryRun({ college: val });
                       }}
                       className="w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none cursor-pointer"
                     >
@@ -1218,6 +1313,8 @@ export default function ContactOperatorsPage() {
                       ))}
                     </select>
                   </div>
+
+                  {/* 3. Occupation */}
                   <div>
                     <label className="text-[9px] text-slate-500 font-bold block mb-1">Occupation</label>
                     <select
@@ -1225,7 +1322,7 @@ export default function ContactOperatorsPage() {
                       onChange={(e) => {
                         const val = e.target.value;
                         setSelectedOccupation(val);
-                        fetchDryRun(selectedArea, selectedCollege, val);
+                        fetchDryRun({ occupation: val });
                       }}
                       className="w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none cursor-pointer"
                     >
@@ -1233,6 +1330,91 @@ export default function ContactOperatorsPage() {
                       {(dryRunSummary.filter_options?.occupations || []).map((occ) => (
                         <option key={occ} value={occ}>{occ}</option>
                       ))}
+                    </select>
+                  </div>
+
+                  {/* 4. Standard (Krishnashtami Only) */}
+                  {contactSource === 'krishnashtami' ? (
+                    <div>
+                      <label className="text-[9px] text-amber-400 font-bold block mb-1">Standard</label>
+                      <select
+                        value={selectedStandard}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSelectedStandard(val);
+                          fetchDryRun({ standard: val });
+                        }}
+                        className="w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-amber-500/30 text-xs text-slate-200 focus:outline-none cursor-pointer"
+                      >
+                        <option value="">All Standards</option>
+                        <option value="1st Year">1st Year</option>
+                        <option value="2nd Year">2nd Year</option>
+                        <option value="3rd Year">3rd Year</option>
+                        <option value="4th Year">4th Year</option>
+                      </select>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="text-[9px] text-slate-600 font-bold block mb-1">Standard</label>
+                      <select disabled className="w-full px-2 py-1.5 rounded-lg bg-slate-950/40 border border-slate-900 text-xs text-slate-600 cursor-not-allowed">
+                        <option>N/A ({contactSource})</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {/* 5. Service */}
+                  <div>
+                    <label className="text-[9px] text-slate-500 font-bold block mb-1">Service</label>
+                    <select
+                      value={selectedService}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSelectedService(val);
+                        fetchDryRun({ service: val });
+                      }}
+                      className="w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none cursor-pointer"
+                    >
+                      <option value="">All Services</option>
+                      {(dryRunSummary.filter_options?.services || []).map((svc) => (
+                        <option key={svc.id} value={svc.id}>{svc.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* 6. Date */}
+                  <div>
+                    <label className="text-[9px] text-slate-500 font-bold block mb-1">Date</label>
+                    <select
+                      value={selectedDate}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSelectedDate(val);
+                        fetchDryRun({ date: val });
+                      }}
+                      className="w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none cursor-pointer"
+                    >
+                      <option value="">All Dates</option>
+                      {(dryRunSummary.filter_options?.dates || []).map((dStr) => (
+                        <option key={dStr} value={dStr}>{dStr}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* 7. Volunteer */}
+                  <div>
+                    <label className="text-[9px] text-slate-500 font-bold block mb-1">Volunteer</label>
+                    <select
+                      value={selectedVolunteer}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSelectedVolunteer(val);
+                        fetchDryRun({ volunteer: val });
+                      }}
+                      className="w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none cursor-pointer"
+                    >
+                      <option value="">All</option>
+                      <option value="Volunteer">Volunteer (Yes)</option>
+                      <option value="Non-Volunteer">Non-Volunteer (No)</option>
                     </select>
                   </div>
                 </div>
@@ -1256,34 +1438,88 @@ export default function ContactOperatorsPage() {
                   ))}
                 </div>
 
-                {/* Capacity warning */}
-                {dryRunSummary.capacity_warning && (
+                {/* Warnings */}
+                {dryRunSummary.eligible_male === 0 && (
+                  <div className="p-3 bg-slate-900/60 border border-slate-800 rounded-xl text-center text-xs text-slate-400">
+                    No eligible contacts found for the selected filters.
+                  </div>
+                )}
+
+                {dryRunSummary.eligible_male > 0 && dryRunSummary.available_slots === 0 && (
+                  <div className="p-3 bg-amber-950/40 border border-amber-500/30 rounded-xl flex gap-2 items-center">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+                    <p className="text-xs text-amber-300 font-semibold">
+                      {selectedOperatorIds.length > 0
+                        ? 'Selected operators have no available capacity.'
+                        : 'No available capacity across active operators.'}
+                    </p>
+                  </div>
+                )}
+
+                {dryRunSummary.capacity_warning && dryRunSummary.available_slots > 0 && (
                   <div className="p-3 bg-red-950/40 border border-red-500/25 rounded-xl flex gap-2 items-start">
                     <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-red-400" />
                     <p className="text-xs text-red-300 leading-relaxed">
-                      <strong>Capacity Warning:</strong> There are {dryRunSummary.eligible_male} eligible male registrations matching filters but only {dryRunSummary.available_slots} available slots across active operators.
+                      <strong>Capacity Warning:</strong> There are {dryRunSummary.eligible_male} eligible male registrations matching filters but only {dryRunSummary.available_slots} available slots across selected/active operators.
                       {dryRunSummary.will_skip_capacity > 0 && <> <strong>{dryRunSummary.will_skip_capacity} registrations will be skipped</strong> due to capacity limit (40/operator).</> }
                     </p>
                   </div>
                 )}
 
-                {/* Operator breakdown */}
+                {/* Operator breakdown with interactive checkboxes */}
                 {dryRunSummary.operator_breakdown.length > 0 && (
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Operator Capacities</p>
-                    <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                        Operator Capacities {selectedOperatorIds.length > 0 ? `(${selectedOperatorIds.length} Selected)` : '(All Active)'}
+                      </p>
+                      {selectedOperatorIds.length > 0 && (
+                        <button
+                          onClick={() => {
+                            setSelectedOperatorIds([]);
+                            fetchDryRun({ operatorIds: [] });
+                          }}
+                          className="text-[10px] text-amber-400 hover:underline cursor-pointer"
+                        >
+                          Select All Operators
+                        </button>
+                      )}
+                    </div>
+                    <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
                       {dryRunSummary.operator_breakdown.map((op) => {
                         const pct = Math.round((op.current / op.capacity) * 100);
                         const barColor = pct >= 100 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-green-500';
                         const textColor = pct >= 100 ? 'text-red-400' : pct >= 70 ? 'text-amber-400' : 'text-green-400';
+                        const isChecked = selectedOperatorIds.includes(op.id);
+                        const isDisabled = op.is_full;
+
                         return (
-                          <div key={op.id} className="flex items-center gap-3">
-                            <p className="text-xs text-slate-300 w-28 shrink-0 truncate">{op.name}</p>
+                          <label
+                            key={op.id}
+                            className={`flex items-center gap-3 p-2 rounded-xl border transition-all cursor-pointer ${
+                              isDisabled
+                                ? 'bg-slate-950/40 border-slate-900 opacity-60 cursor-not-allowed'
+                                : isChecked
+                                ? 'bg-amber-950/30 border-amber-500/40'
+                                : 'bg-slate-900/30 border-slate-800/60 hover:bg-slate-900/60'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              disabled={isDisabled}
+                              onChange={() => !isDisabled && handleToggleOperatorCheckbox(op.id)}
+                              className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-amber-500 focus:ring-amber-500/30 cursor-pointer disabled:cursor-not-allowed"
+                            />
+                            <p className="text-xs text-slate-300 w-32 shrink-0 truncate font-semibold">
+                              {op.name}
+                              {op.is_full && <span className="ml-1.5 text-[9px] font-bold text-red-400 uppercase tracking-wider">(FULL)</span>}
+                            </p>
                             <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
                               <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${Math.min(pct, 100)}%` }} />
                             </div>
                             <p className={`text-[10px] font-bold w-14 text-right shrink-0 ${textColor}`}>{op.current}/{op.capacity}</p>
-                          </div>
+                          </label>
                         );
                       })}
                     </div>
@@ -1311,7 +1547,11 @@ export default function ContactOperatorsPage() {
                   className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold transition-all cursor-pointer"
                 >
                   <Zap className="w-3.5 h-3.5" />
-                  Assign All ({dryRunSummary.will_assign} contacts)
+                  {selectedOperatorIds.length === 0
+                    ? `Assign All (${dryRunSummary.will_assign} contacts)`
+                    : selectedOperatorIds.length === 1
+                    ? `Assign to Selected Operator (1) — ${dryRunSummary.will_assign} contacts`
+                    : `Assign to Selected Operators (${selectedOperatorIds.length}) — ${dryRunSummary.will_assign} contacts`}
                 </button>
                 <button
                   onClick={closeAutoAssign}
