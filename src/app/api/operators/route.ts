@@ -36,7 +36,9 @@ export async function GET(req: NextRequest) {
   const source = normalizeSource(rawSource);
 
   const assignTable =
-    source === 'krishnashtami'
+    source === 'master_dashboard'
+      ? 'master_contact_assignments'
+      : source === 'krishnashtami'
       ? 'krishnashtami_contact_assignments'
       : source === 'feedback_contacts'
       ? 'feedback_contact_assignments'
@@ -51,26 +53,20 @@ export async function GET(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   // 2. Fetch active contact assignments from source-specific assignment table
-  //    IMPORTANT: Do NOT join the registration table here — joining and then filtering
-  //    out null joins (orphaned assignments) causes Admin Portal counts to differ from
-  //    what operators see in their portal. Count ALL is_active=true assignments.
   const { data: assignments } = await supabaseAdmin
     .from(assignTable)
-    .select('id, operator_id, status, is_active')
+    .select('id, operator_id, status')
     .eq('is_active', true);
 
   type AssignmentRow = {
     id: string;
     operator_id: string;
     status: string;
-    is_active: boolean;
   };
 
-  const assignmentsByOp = new Map<string, Array<{ id: string; operator_id: string; status: string; is_active: boolean }>>();
+  const assignmentsByOp = new Map<string, Array<{ id: string; operator_id: string; status: string }>>();
   ((assignments as unknown as AssignmentRow[]) || []).forEach((fa) => {
     if (!fa.operator_id) return;
-    // Count ALL active assignments — including any with orphaned FK references.
-    // This matches how GET /api/assignments/my counts contacts in Operator Portal.
     const list = assignmentsByOp.get(fa.operator_id) || [];
     list.push(fa);
     assignmentsByOp.set(fa.operator_id, list);

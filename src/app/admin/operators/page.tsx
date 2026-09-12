@@ -938,7 +938,9 @@ export default function ContactOperatorsPage() {
   });
 
   const sourceTitle =
-    contactSource === 'krishnashtami'
+    contactSource === 'master_dashboard'
+      ? 'Master Dashboard Contact Assignments'
+      : contactSource === 'krishnashtami'
       ? 'Krishnashtami 2026 Contact Assignments'
       : contactSource === 'feedback_contacts'
       ? 'Feedback Contact Assignments'
@@ -971,6 +973,7 @@ export default function ContactOperatorsPage() {
               <option value="rathayatra" className="bg-slate-900 text-slate-100">Rathayatra 2026</option>
               <option value="krishnashtami" className="bg-slate-900 text-slate-100">Krishnashtami 2026</option>
               <option value="feedback_contacts" className="bg-slate-900 text-slate-100">Feedback Contacts</option>
+              <option value="master_dashboard" className="bg-slate-900 text-slate-100">Master Dashboard</option>
             </select>
           </div>
 
@@ -1333,8 +1336,8 @@ export default function ContactOperatorsPage() {
                     </select>
                   </div>
 
-                  {/* 4. Standard (Krishnashtami Only) */}
-                  {contactSource === 'krishnashtami' ? (
+                  {/* 4. Standard (Krishnashtami & Master Dashboard) */}
+                  {contactSource === 'krishnashtami' || contactSource === 'master_dashboard' ? (
                     <div>
                       <label className="text-[9px] text-amber-400 font-bold block mb-1">Standard</label>
                       <select
@@ -1347,10 +1350,9 @@ export default function ContactOperatorsPage() {
                         className="w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-amber-500/30 text-xs text-slate-200 focus:outline-none cursor-pointer"
                       >
                         <option value="">All Standards</option>
-                        <option value="1st Year">1st Year</option>
-                        <option value="2nd Year">2nd Year</option>
-                        <option value="3rd Year">3rd Year</option>
-                        <option value="4th Year">4th Year</option>
+                        {(dryRunSummary.filter_options?.standards || ['1st Year', '2nd Year', '3rd Year', '4th Year']).map((std) => (
+                          <option key={std} value={std}>{std}</option>
+                        ))}
                       </select>
                     </div>
                   ) : (

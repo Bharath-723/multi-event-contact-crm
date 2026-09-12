@@ -41,6 +41,59 @@ async function requireAdmin(
   return { error: null, userId: user.id };
 }
 
+// ─── Helper Utilities for Filter Evaluation ──────────────────────────────────
+function isFilterActive(val?: string | null): boolean {
+  if (!val) return false;
+  const s = String(val).trim().toLowerCase();
+  if (!s || s === 'all' || s.startsWith('all ') || s === 'n/a' || s === 'none') return false;
+  return true;
+}
+
+function normalizeOccupationCategory(raw: unknown): string | null {
+  if (!raw) return null;
+  const s = String(raw).trim().toLowerCase();
+  if (['student', 'studying', 'college', 'school'].some((k) => s.includes(k))) return 'Student';
+  if (['employee', 'employed', 'private', 'govt', 'government'].some((k) => s.includes(k))) return 'Employee';
+  if (['working', 'job', 'software', 'it', 'engineer', 'developer'].some((k) => s.includes(k))) return 'Working';
+  if (['business', 'shop', 'owner', 'self'].some((k) => s.includes(k))) return 'Business';
+  return null;
+}
+
+function parseToYMD(dateStr: unknown): string | null {
+  if (!dateStr) return null;
+  const str = String(dateStr).trim();
+  if (!str) return null;
+
+  // Handle YYYY-MM-DD directly
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    return str.slice(0, 10);
+  }
+
+  const d = new Date(str);
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+}
+
+// Helper: Fetch all rows for any table using 1000-row pagination loop
+async function fetchAllRowsFromTable(tableName: string): Promise<Array<Record<string, unknown>>> {
+  let allRows: Array<Record<string, unknown>> = [];
+  let page = 0;
+  const pageSize = 1000;
+  while (true) {
+    const { data, error } = await supabaseAdmin
+      .from(tableName)
+      .select('*')
+      .order('created_at', { ascending: true })
+      .range(page * pageSize, (page + 1) * pageSize - 1);
+    if (error) throw new Error(`Failed to fetch ${tableName}: ${error.message}`);
+    if (!data || data.length === 0) break;
+    allRows = allRows.concat(data as Array<Record<string, unknown>>);
+    if (data.length < pageSize) break;
+    page++;
+  }
+  return allRows;
+}
+
 // ─── GET /api/assignments/auto (status check) ────────────────────────────────
 export async function GET(req: Request) {
   const { error: authError } = await requireAdmin(req);
@@ -77,6 +130,9 @@ export async function POST(req: Request) {
   const rawSource = body.source ?? 'rathayatra';
   const source = normalizeSource(rawSource);
   const isFeedback = source === 'feedback_contacts';
+  const isMaster = source === 'master_dashboard';
+  const isKrishnashtami = source === 'krishnashtami';
+  const isRathayatra = source === 'rathayatra';
 
   // 7 Filters (normalized trimmed values or null)
   const filterArea = body.area_of_stay?.trim() || null;
@@ -84,28 +140,36 @@ export async function POST(req: Request) {
   const filterOccupation = body.occupation?.trim() || null;
   const filterStandard = body.standard?.trim() || null;
   const filterServiceId = body.service_id?.trim() || null;
-  const filterDate = body.date?.trim() || null; // YYYY-MM-DD format
-  const filterVolunteer = body.volunteer?.trim() || null; // 'yes' | 'no' | 'volunteer' | 'non-volunteer'
+  const filterDate = body.date?.trim() || null;
+  const filterVolunteer = body.volunteer?.trim() || null;
 
   const selectedOpIds = Array.isArray(body.selected_operator_ids)
     ? body.selected_operator_ids.filter((id): id is string => typeof id === 'string' && Boolean(id.trim()))
     : [];
 
   const targetRegTable =
-    source === 'krishnashtami'
+    isMaster
+      ? 'master_contacts'
+      : isKrishnashtami
       ? 'krishnashtami_registrations'
       : isFeedback
       ? 'feedback_contacts'
       : 'registrations';
 
   const assignTable =
-    source === 'krishnashtami'
+    isMaster
+      ? 'master_contact_assignments'
+      : isKrishnashtami
       ? 'krishnashtami_contact_assignments'
       : isFeedback
       ? 'feedback_contact_assignments'
       : 'contact_assignments';
 
-  const fkCol = isFeedback ? 'feedback_contact_id' : 'registration_id';
+  const fkCol = isMaster
+    ? 'master_contact_id'
+    : isFeedback
+    ? 'feedback_contact_id'
+    : 'registration_id';
 
   // ── 1. Fetch active operators ────────────────────────────────────────────────
   const { data: operators, error: opsError } = await supabaseAdmin
@@ -122,10 +186,12 @@ export async function POST(req: Request) {
   const activeOperators = operators ?? [];
 
   // ── 2. Fetch current active assignment counts per operator for this source ──
-  const { data: assignmentCounts, error: countError } = await supabaseAdmin
-    .from(assignTable)
-    .select('operator_id')
-    .eq('is_active', true);
+  let assignQuery = supabaseAdmin.from(assignTable).select('operator_id');
+  if (!isMaster) {
+    assignQuery = assignQuery.eq('is_active', true);
+  }
+
+  const { data: assignmentCounts, error: countError } = await assignQuery;
 
   if (countError) {
     return NextResponse.json({ error: 'Failed to fetch assignment counts: ' + countError.message }, { status: 500 });
@@ -139,154 +205,197 @@ export async function POST(req: Request) {
     }
   }
 
-  // ── 3. Fetch active service catalog for services filter dropdown options ────
-  const { data: serviceRows } = await supabaseAdmin
-    .from('services')
-    .select('id, name, is_active')
-    .eq('is_active', true)
-    .order('name', { ascending: true });
-
-  const activeServices = ((serviceRows ?? []) as Array<Record<string, unknown>>).map((s) => ({
-    id: String(s.id),
-    name: String(s.name),
-  }));
-
-  // ── 4. Fetch all registrations for target table ────────────────────────────
-  const { data: fetchedRegs, error: regsError } = await supabaseAdmin
-    .from(targetRegTable)
-    .select('*')
-    .order('created_at', { ascending: true });
-
-  if (regsError) {
-    return NextResponse.json({ error: 'Failed to fetch registrations: ' + regsError.message }, { status: 500 });
+  // ── 3. Fetch all registrations for target table using pagination ───────────
+  let allRegs: Array<Record<string, unknown>> = [];
+  try {
+    allRegs = await fetchAllRowsFromTable(targetRegTable);
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 
-  const allRegs = (fetchedRegs ?? []) as Array<Record<string, unknown>>;
+  // If Master Dashboard, fetch master_contact_events for event-specific filter evaluation
+  const masterEventsMap = new Map<string, Array<Record<string, unknown>>>();
+  if (isMaster) {
+    try {
+      const allEvents = await fetchAllRowsFromTable('master_contact_events');
+      for (const e of allEvents) {
+        const mcId = String(e.master_contact_id || '');
+        if (mcId) {
+          if (!masterEventsMap.has(mcId)) masterEventsMap.set(mcId, []);
+          masterEventsMap.get(mcId)!.push(e);
+        }
+      }
+    } catch (err) {
+      console.warn('[auto-assign] Warning fetching master_contact_events:', err);
+    }
+  }
 
-  // Get currently assigned contact IDs from assignTable (is_active = true)
-  const { data: assignedRows } = await supabaseAdmin
-    .from(assignTable)
-    .select(fkCol)
-    .eq('is_active', true);
+  // Get currently assigned contact IDs from assignTable
+  let assignedQuery = supabaseAdmin.from(assignTable).select(fkCol);
+  if (!isMaster) {
+    assignedQuery = assignedQuery.eq('is_active', true);
+  }
+  const { data: assignedRows } = await assignedQuery;
 
   const assignedSet = new Set(((assignedRows ?? []) as Array<Record<string, unknown>>).map((r) => String(r[fkCol])));
 
-  // ── 5. Extract available filter options strictly for current festival/source ──
-  const availableAreas = Array.from(
-    new Set(
-      allRegs
-        .map((r) => String(r.area_of_stay || r.current_stay || '').trim())
-        .filter(Boolean)
-    )
-  ).sort();
+  // ── 4. Filter unassigned registrations using 7-Filter AND-Semantics Pipeline ──
+  const unassignedBeforeFilter = allRegs.filter((r) => !assignedSet.has(String(r.id)));
 
-  const availableColleges = Array.from(
-    new Set(
-      allRegs
-        .map((r) => String(r.company_college || r.college_name || '').trim())
-        .filter(Boolean)
-    )
-  ).sort();
+  const unassigned = unassignedBeforeFilter.filter((r) => {
+    // 1. Area of Stay
+    if (isFilterActive(filterArea)) {
+      const candArea = isFeedback ? r.current_stay : r.area_of_stay;
+      if (!candArea || String(candArea).trim().toLowerCase() !== String(filterArea).trim().toLowerCase()) {
+        return false;
+      }
+    }
 
-  const availableOccupations = Array.from(
-    new Set(
-      allRegs
-        .map((r) => String(r.occupation || r.branch || '').trim())
-        .filter(Boolean)
-    )
-  ).sort();
+    // 2. College / Company
+    if (isFilterActive(filterCollege)) {
+      const candCollege = isFeedback ? r.college_name : r.company_college;
+      if (!candCollege || String(candCollege).trim().toLowerCase() !== String(filterCollege).trim().toLowerCase()) {
+        return false;
+      }
+    }
 
-  const availableStandards = source === 'krishnashtami'
-    ? Array.from(
-        new Set(
-          allRegs
-            .map((r) => String(r.standard || '').trim())
-            .filter(Boolean)
-        )
-      ).sort()
-    : [];
+    // 3. Occupation
+    if (isFilterActive(filterOccupation)) {
+      let candOcc = isFeedback ? r.branch : r.occupation;
+      if (isMaster) {
+        const events = masterEventsMap.get(String(r.id)) || [];
+        candOcc = events.map((e) => e.occupation).find(Boolean) || candOcc;
+      }
+      const targetNorm = normalizeOccupationCategory(filterOccupation) || String(filterOccupation).trim().toLowerCase();
+      const candNorm = normalizeOccupationCategory(candOcc) || String(candOcc || '').trim().toLowerCase();
+      if (candNorm !== targetNorm) {
+        return false;
+      }
+    }
 
-  // Extract distinct formatted dates (YYYY-MM-DD) from created_at
-  const availableDates = Array.from(
-    new Set(
-      allRegs
-        .map((r) => {
-          if (!r.created_at) return '';
-          const str = String(r.created_at);
-          return str.slice(0, 10); // YYYY-MM-DD
-        })
-        .filter(Boolean)
-    )
-  ).sort();
+    // 4. Standard (Krishnashtami & Master Dashboard)
+    if (isFilterActive(filterStandard) && (isKrishnashtami || isMaster)) {
+      let candStd = r.standard;
+      if (isMaster) {
+        const events = masterEventsMap.get(String(r.id)) || [];
+        candStd = events.map((e) => e.standard).find(Boolean) || candStd;
+      }
+      if (!candStd || String(candStd).trim().toLowerCase() !== String(filterStandard).trim().toLowerCase()) {
+        return false;
+      }
+    }
 
-  // Distinct volunteers options
-  const availableVolunteers = !isFeedback ? ['Volunteer', 'Non-Volunteer'] : [];
+    // 5. Service ID (Rathayatra, Krishnashtami, Master Dashboard)
+    if (isFilterActive(filterServiceId) && !isFeedback) {
+      let candService = r.service_id;
+      if (isMaster) {
+        const events = masterEventsMap.get(String(r.id)) || [];
+        candService = events.map((e) => e.service_id).find(Boolean) || candService;
+      }
+      if (!candService || String(candService).trim() !== String(filterServiceId).trim()) {
+        return false;
+      }
+    }
 
-  // ── 6. Filter unassigned registrations with AND semantics ───────────────────
-  let unassigned = allRegs.filter((r) => !assignedSet.has(String(r.id)));
+    // 6. Date (YYYY-MM-DD comparison against created_at / latest_registration_at)
+    if (isFilterActive(filterDate)) {
+      const filterYMD = parseToYMD(filterDate);
+      if (filterYMD) {
+        const candDate = r.created_at || r.latest_registration_at;
+        const candYMD = parseToYMD(candDate);
+        if (candYMD !== filterYMD) {
+          return false;
+        }
+      }
+    }
 
-  // Filter 1: Area of Stay
-  if (filterArea) {
-    unassigned = unassigned.filter((r) => {
-      const val = String(r.area_of_stay || r.current_stay || '').trim();
-      return val.toLowerCase() === filterArea.toLowerCase();
+    // 7. Volunteer Interest
+    if (isFilterActive(filterVolunteer)) {
+      const targetVol = String(filterVolunteer).trim().toLowerCase();
+      const wantVol = targetVol === 'volunteer' || targetVol === 'yes' || targetVol === 'true';
+      const wantNonVol = targetVol === 'non-volunteer' || targetVol === 'no' || targetVol === 'false';
+
+      if (isFeedback) {
+        const isVol = Boolean(r.interested_online_workshop || r.interested_online_work);
+        if (wantVol && !isVol) return false;
+        if (wantNonVol && isVol) return false;
+      } else {
+        let isVol = r.interested_to_volunteer;
+        if (isMaster) {
+          const events = masterEventsMap.get(String(r.id)) || [];
+          const volVal = events.map((e) => e.interested_to_volunteer).find((v) => v !== undefined && v !== null);
+          isVol = volVal === 'Yes' || volVal === true;
+        }
+        const isVolBool = isVol === true || isVol === 'Yes';
+        if (wantVol && !isVolBool) return false;
+        if (wantNonVol && isVolBool) return false;
+      }
+    }
+
+    return true;
+  });
+
+  // ── 5. Extract Filter Options dynamically from source records ──────────────
+  const areasSet = new Set<string>();
+  const collegesSet = new Set<string>();
+  const occupationsSet = new Set<string>(['Student', 'Employee', 'Working', 'Business']);
+  const standardsSet = new Set<string>(['1st Year', '2nd Year', '3rd Year', '4th Year']);
+  const datesSet = new Set<string>();
+
+  allRegs.forEach((r) => {
+    const area = isFeedback ? r.current_stay : r.area_of_stay;
+    if (area && String(area).trim()) areasSet.add(String(area).trim());
+
+    const col = isFeedback ? r.college_name : r.company_college;
+    if (col && String(col).trim()) collegesSet.add(String(col).trim());
+
+    const occ = isFeedback ? r.branch : r.occupation;
+    if (occ && String(occ).trim()) {
+      const norm = normalizeOccupationCategory(occ) || String(occ).trim();
+      occupationsSet.add(norm);
+    }
+
+    if (r.standard && String(r.standard).trim()) {
+      standardsSet.add(String(r.standard).trim());
+    }
+
+    const dVal = r.created_at || r.latest_registration_at;
+    const ymd = parseToYMD(dVal);
+    if (ymd) datesSet.add(ymd);
+  });
+
+  if (isMaster) {
+    masterEventsMap.forEach((events) => {
+      events.forEach((e) => {
+        if (e.occupation && String(e.occupation).trim()) {
+          const norm = normalizeOccupationCategory(e.occupation) || String(e.occupation).trim();
+          occupationsSet.add(norm);
+        }
+        if (e.standard && String(e.standard).trim()) {
+          standardsSet.add(String(e.standard).trim());
+        }
+        const ymd = parseToYMD(e.event_date);
+        if (ymd) datesSet.add(ymd);
+      });
     });
   }
 
-  // Filter 2: College / Company
-  if (filterCollege) {
-    unassigned = unassigned.filter((r) => {
-      const val = String(r.company_college || r.college_name || '').trim();
-      return val.toLowerCase() === filterCollege.toLowerCase();
-    });
-  }
+  const { data: servicesData } = await supabaseAdmin
+    .from('services')
+    .select('id, name')
+    .order('name', { ascending: true });
 
-  // Filter 3: Occupation
-  if (filterOccupation) {
-    unassigned = unassigned.filter((r) => {
-      const val = String(r.occupation || r.branch || '').trim();
-      return val.toLowerCase() === filterOccupation.toLowerCase();
-    });
-  }
+  const filterOptions = {
+    areas: Array.from(areasSet).sort((a, b) => a.localeCompare(b)),
+    colleges: Array.from(collegesSet).sort((a, b) => a.localeCompare(b)),
+    occupations: Array.from(occupationsSet),
+    standards: Array.from(standardsSet),
+    services: (servicesData || []).map((s) => ({ id: String(s.id), name: String(s.name) })),
+    dates: Array.from(datesSet).sort(),
+    volunteers: ['Volunteer', 'Non-Volunteer'],
+  };
 
-  // Filter 4: Standard (Krishnashtami only)
-  if (source === 'krishnashtami' && filterStandard) {
-    unassigned = unassigned.filter((r) => {
-      const val = String(r.standard || '').trim();
-      return val.toLowerCase() === filterStandard.toLowerCase();
-    });
-  }
-
-  // Filter 5: Service
-  if (filterServiceId) {
-    unassigned = unassigned.filter((r) => {
-      const val = String(r.service_id || '').trim();
-      return val === filterServiceId;
-    });
-  }
-
-  // Filter 6: Date
-  if (filterDate) {
-    unassigned = unassigned.filter((r) => {
-      if (!r.created_at) return false;
-      const dStr = String(r.created_at).slice(0, 10);
-      return dStr === filterDate;
-    });
-  }
-
-  // Filter 7: Volunteer
-  if (filterVolunteer) {
-    const isVol =
-      filterVolunteer.toLowerCase() === 'yes' ||
-      filterVolunteer.toLowerCase() === 'volunteer' ||
-      filterVolunteer.toLowerCase() === 'true';
-
-    unassigned = unassigned.filter((r) => {
-      return Boolean(r.interested_to_volunteer) === isVol;
-    });
-  }
-
-  // ── 7. Operator Breakdown & Capacity Calculations ────────────────────────────
+  // ── 6. Capacity & Eligibility Calculations ─────────────────────────────────
   const hasSelectedOps = selectedOpIds.length > 0;
   const selectedSet = new Set(selectedOpIds);
 
@@ -307,54 +416,32 @@ export async function POST(req: Request) {
     };
   });
 
-  // Target operators pool for capacity calculation
   const targetOperators = hasSelectedOps
     ? operatorSummaries.filter((op) => selectedSet.has(op.id))
     : operatorSummaries;
 
-  const totalCapacity = targetOperators.length * MAX_CONTACTS_PER_OPERATOR;
-  const currentlyAssigned = targetOperators.reduce((acc, op) => acc + op.current, 0);
   const availableSlots = targetOperators.reduce((acc, op) => acc + op.available, 0);
 
-  const skippedFemaleCount = unassigned.filter((r) => r.gender === 'Female').length;
-  const eligibleCount = unassigned.filter((r) => r.gender !== 'Female').length;
+  // Female policy restriction is preserved ONLY for Feedback contacts per feedback assignment policy
+  const skippedFemaleCount = isFeedback ? unassigned.filter((r) => r.gender === 'Female').length : 0;
+  const eligibleCount = isFeedback ? unassigned.filter((r) => r.gender !== 'Female').length : unassigned.length;
 
   const willAssign = Math.min(eligibleCount, Math.max(0, availableSlots));
   const willSkipCapacity = Math.max(0, eligibleCount - availableSlots);
 
   const dryRunSummary = {
     source,
-    filters: {
-      area_of_stay: filterArea,
-      company_college: filterCollege,
-      occupation: filterOccupation,
-      standard: filterStandard,
-      service_id: filterServiceId,
-      date: filterDate,
-      volunteer: filterVolunteer,
-    },
-    selected_operator_ids: selectedOpIds,
-    filter_options: {
-      areas: availableAreas,
-      colleges: availableColleges,
-      occupations: availableOccupations,
-      standards: availableStandards,
-      services: activeServices,
-      dates: availableDates,
-      volunteers: availableVolunteers,
-    },
-    total_unassigned: unassigned.length,
+    total_unassigned: unassignedBeforeFilter.length,
+    filtered_candidates: unassigned.length,
     skipped_female: skippedFemaleCount,
     eligible_male: eligibleCount,
+    eligible_candidates: eligibleCount,
     active_operators: targetOperators.length,
-    total_capacity: totalCapacity,
-    currently_assigned: currentlyAssigned,
     available_slots: availableSlots,
     will_assign: willAssign,
     will_skip_capacity: willSkipCapacity,
-    will_skip: skippedFemaleCount + willSkipCapacity,
-    capacity_warning: eligibleCount > availableSlots,
     operator_breakdown: operatorSummaries,
+    filter_options: filterOptions,
   };
 
   if (isDryRun) {
@@ -373,7 +460,6 @@ export async function POST(req: Request) {
   let failed = 0;
   const distribution: Record<string, { name: string; assigned_in_batch: number }> = {};
 
-  // Maintain live workload counts during batch execution
   const liveCountMap: Record<string, number> = {};
   activeOperators.forEach((op) => {
     liveCountMap[op.id] = countMap[op.id] ?? 0;
@@ -381,13 +467,11 @@ export async function POST(req: Request) {
 
   try {
     for (const reg of unassigned) {
-      if (reg.gender === 'Female') {
+      if (isFeedback && reg.gender === 'Female') {
         skippedFemale++;
         continue;
       }
 
-      // Filter eligible operators that are active and below MAX_CONTACTS_PER_OPERATOR (40)
-      // Restrict strictly to selected operators if selectedOpIds is provided
       let eligibleOps = activeOperators.filter((op) => {
         if (hasSelectedOps && !selectedSet.has(op.id)) return false;
         return (liveCountMap[op.id] ?? 0) < MAX_CONTACTS_PER_OPERATOR;
@@ -398,27 +482,37 @@ export async function POST(req: Request) {
         continue;
       }
 
-      // Sort by workload ascending (least loaded first)
       eligibleOps.sort((a, b) => (liveCountMap[a.id] ?? 0) - (liveCountMap[b.id] ?? 0));
       const chosenOp = eligibleOps[0];
 
       try {
-        // Execute atomic RPC assignment
-        const { data: rpcRes, error: rpcErr } = await supabaseAdmin.rpc('assign_contact_atomic', {
-          p_contact_id: String(reg.id),
-          p_operator_id: chosenOp.id,
-          p_source: source,
-          p_assigned_by: userId ?? null,
-          p_max_capacity: MAX_CONTACTS_PER_OPERATOR,
-        });
+        if (isMaster) {
+          const { data: rpcRes, error: rpcErr } = await supabaseAdmin.rpc('assign_master_contact_atomic', {
+            p_master_contact_id: String(reg.id),
+            p_operator_id: chosenOp.id,
+            p_assigned_by: userId ?? null,
+            p_max_capacity: MAX_CONTACTS_PER_OPERATOR,
+          });
 
-        if (rpcErr || !rpcRes?.success) {
-          console.error(`[auto-assign] Atomic RPC failed for ${reg.id}:`, rpcErr || rpcRes?.message);
-          skippedCapacity++;
-          continue;
+          if (rpcErr || !rpcRes?.success) {
+            skippedCapacity++;
+            continue;
+          }
+        } else {
+          const { data: rpcRes, error: rpcErr } = await supabaseAdmin.rpc('assign_contact_atomic', {
+            p_contact_id: String(reg.id),
+            p_operator_id: chosenOp.id,
+            p_source: source,
+            p_assigned_by: userId ?? null,
+            p_max_capacity: MAX_CONTACTS_PER_OPERATOR,
+          });
+
+          if (rpcErr || !rpcRes?.success) {
+            skippedCapacity++;
+            continue;
+          }
         }
 
-        // Update live workload counter
         liveCountMap[chosenOp.id] = (liveCountMap[chosenOp.id] ?? 0) + 1;
         assigned++;
 
@@ -428,19 +522,6 @@ export async function POST(req: Request) {
           distribution[opId] = { name: formattedName, assigned_in_batch: 0 };
         }
         distribution[opId].assigned_in_batch++;
-
-        // Log audit record
-        await supabaseAdmin.from('audit_logs').insert({
-          admin_id: userId ?? null,
-          action: 'AUTO_ASSIGNMENT',
-          details: {
-            source,
-            registration_id: reg.id,
-            operator_id: opId,
-            batch: true,
-            filters: dryRunSummary.filters,
-          },
-        });
       } catch (err) {
         console.error(`[auto-assign] Unexpected error for ${reg.id} (${source}):`, err);
         failed++;
@@ -450,19 +531,21 @@ export async function POST(req: Request) {
     isBatchRunning = false;
   }
 
-  const report = {
-    source,
-    total_unassigned: unassigned.length,
-    successfully_assigned: assigned,
-    skipped_female: skippedFemale,
-    skipped_no_capacity: skippedCapacity,
-    failed,
-    distribution: Object.entries(distribution).map(([id, d]) => ({
-      operator_id: id,
-      operator_name: d.name,
-      assigned_in_batch: d.assigned_in_batch,
-    })),
-  };
-
-  return NextResponse.json({ dry_run: false, report });
+  return NextResponse.json({
+    dry_run: false,
+    report: {
+      source,
+      total_unassigned: unassignedBeforeFilter.length,
+      filtered_candidates: unassigned.length,
+      successfully_assigned: assigned,
+      skipped_female: skippedFemale,
+      skipped_no_capacity: skippedCapacity,
+      failed,
+      distribution: Object.entries(distribution).map(([id, d]) => ({
+        operator_id: id,
+        operator_name: d.name,
+        assigned_in_batch: d.assigned_in_batch,
+      })),
+    },
+  });
 }

@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { 
   ShieldAlert, LayoutDashboard, Users, LogOut, 
-  Loader2, Menu, X, ShieldCheck, PhoneCall, Wrench, ClipboardList
+  Loader2, Menu, X, ShieldCheck, PhoneCall, Wrench, ClipboardList, Contact
 } from 'lucide-react';
 import Link from 'next/link';
 import NotificationBell from '@/components/notification-bell';
@@ -114,6 +114,7 @@ export default function AdminShell({
 
   const sidebarLinks = [
     { name: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
+    { name: 'Master Dashboard', path: '/admin/master_dashboard', icon: Contact },
     { name: 'Registrations', path: '/admin/registrations', icon: Users },
     { name: 'Feedback Dashboard', path: '/admin/feedback_dashboard', icon: ClipboardList },
     { name: 'Contact Operators', path: '/admin/operators', icon: PhoneCall },
@@ -271,13 +272,15 @@ export default function AdminShell({
               >
                 <Menu className="w-5 h-5" />
               </button>
-              <h2 className="font-extrabold text-lg text-slate-100 capitalize hidden lg:block">
-                {pathname.split('/').pop()}
-              </h2>
+              {pathname !== '/admin/master_dashboard' && (
+                <h2 className="font-extrabold text-lg text-slate-100 capitalize hidden lg:block">
+                  {pathname.split('/').pop()}
+                </h2>
+              )}
             </div>
 
             {/* Year -> Festival Selector */}
-            <FestivalSelector />
+            {pathname !== '/admin/master_dashboard' && <FestivalSelector />}
 
             {/* Action Tools */}
             <div className="flex items-center gap-4">

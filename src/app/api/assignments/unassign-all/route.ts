@@ -40,6 +40,46 @@ export async function POST(request: NextRequest) {
     const source = normalizeSource(body.source ?? 'rathayatra');
     const operatorId = body.operator_id ? String(body.operator_id) : null;
 
+    if (source === 'master_dashboard') {
+      let countQuery = supabaseAdmin
+        .from('master_contact_assignments')
+        .select('id', { count: 'exact', head: true });
+
+      if (operatorId) countQuery = countQuery.eq('operator_id', operatorId);
+
+      const { count: activeCount } = await countQuery;
+      const totalToUnassign = activeCount ?? 0;
+
+      if (totalToUnassign === 0) {
+        return NextResponse.json({
+          success: true,
+          affected_count: 0,
+          message: 'No active Master Dashboard contacts to unassign.',
+          source,
+        });
+      }
+
+      let deleteQuery = supabaseAdmin
+        .from('master_contact_assignments')
+        .delete();
+
+      if (operatorId) deleteQuery = deleteQuery.eq('operator_id', operatorId);
+      else deleteQuery = deleteQuery.neq('id', '00000000-0000-0000-0000-000000000000');
+
+      const { error: delErr } = await deleteQuery;
+
+      if (delErr) {
+        return NextResponse.json({ error: `Failed to unassign master contacts: ${delErr.message}` }, { status: 500 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        affected_count: totalToUnassign,
+        message: `Successfully unassigned ${totalToUnassign} Master Dashboard contact${totalToUnassign === 1 ? '' : 's'}.`,
+        source,
+      });
+    }
+
     const assignTable =
       source === 'krishnashtami'
         ? 'krishnashtami_contact_assignments'

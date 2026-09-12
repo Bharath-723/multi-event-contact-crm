@@ -215,7 +215,28 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 7. Attempt automatic operator assignment (DO NOT block or fail registration if this fails)
+    // 7. Sync to Master Contacts Global Directory
+    try {
+      const { syncMasterContact } = await import('@/lib/master-contacts');
+      await syncMasterContact({
+        source: isKrishnashtami ? 'krishnashtami' : 'rathayatra',
+        event_display_name: isKrishnashtami ? 'Krishnashtami 2026' : 'Rathayatra 2026',
+        event_record_id: String(registrationId),
+        phone,
+        name: fullName,
+        age,
+        gender,
+        area_of_stay: gender === 'Male' ? areaOfStay || null : null,
+        company_college: companyCollege,
+        occupation: occupation || null,
+        standard: cleanStandard,
+        interested_to_volunteer: interestedToVolunteer === 'Yes' ? 'Yes' : 'No',
+      });
+    } catch (masterSyncErr) {
+      console.warn('Master contact sync warning:', masterSyncErr);
+    }
+
+    // 8. Attempt automatic operator assignment (DO NOT block or fail registration if this fails)
     try {
       await assignOperator(registrationId, isKrishnashtami ? 'krishnashtami' : 'rathayatra');
     } catch (assignError) {
@@ -234,6 +255,134 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const authHeader = request.headers.get('Authorization') || '';
+    const token = authHeader.replace('Bearer ', '');
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized: Missing token' }, { status: 401 });
+    }
+    const { data: { user }, error: authErr } = await supabaseAdmin.auth.getUser(token);
+    if (authErr || !user) {
+      return NextResponse.json({ error: 'Unauthorized: Invalid token' }, { status: 401 });
+    }
+    const { data: adminRow } = await supabaseAdmin.from('admins').select('id').eq('id', user.id).single();
+    if (!adminRow) {
+      return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
+    }
+
+    const body = await request.json();
+    const {
+      id,
+      source: sourceParam,
+      full_name,
+      phone,
+      age,
+      gender,
+      area_of_stay,
+      company_college,
+      pg_name,
+      interested_to_volunteer,
+      volunteer_slot_id,
+      interested_to_dinner,
+      wants_to_donate,
+      donation_status,
+      occupation,
+      transportation_required,
+      standard,
+      skill_ids,
+    } = body;
+
+    if (!id || typeof id !== 'string') {
+      return NextResponse.json({ error: 'Missing or invalid registration id' }, { status: 400 });
+    }
+
+    const { normalizeSource } = await import('@/lib/source-resolver');
+    const normalized = normalizeSource(sourceParam);
+
+    if (normalized === 'krishnashtami') {
+      const updateData: Record<string, unknown> = {
+        full_name: full_name?.trim(),
+        phone: phone?.trim(),
+        age: Number(age),
+        gender,
+        area_of_stay: gender === 'Male' ? area_of_stay?.trim() : null,
+        company_college: company_college?.trim(),
+        pg_name: pg_name ? pg_name.trim() : null,
+        interested_to_volunteer: Boolean(interested_to_volunteer),
+        volunteer_slot_id: interested_to_volunteer ? (volunteer_slot_id || null) : null,
+        interested_to_dinner: Boolean(interested_to_dinner),
+        wants_to_donate: Boolean(wants_to_donate),
+        donation_status: wants_to_donate ? donation_status : 'Pending',
+        occupation: occupation || null,
+        transportation_required: transportation_required || 'No',
+        standard: occupation === 'Student' ? (standard || null) : null,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error: updateErr } = await supabaseAdmin
+        .from('krishnashtami_registrations')
+        .update(updateData)
+        .eq('id', id);
+
+      if (updateErr) {
+        return NextResponse.json({ error: `Update failed: ${updateErr.message}`, details: updateErr }, { status: 500 });
+      }
+
+      // Sync skills
+      await supabaseAdmin.from('krishnashtami_registration_skills').delete().eq('registration_id', id);
+      if (Array.isArray(skill_ids) && skill_ids.length > 0) {
+        const skillInserts = skill_ids.map((sid: string) => ({ registration_id: id, skill_id: sid }));
+        await supabaseAdmin.from('krishnashtami_registration_skills').insert(skillInserts);
+      }
+
+      return NextResponse.json({ success: true, message: 'Krishnashtami record updated successfully' });
+    } else if (normalized === 'rathayatra') {
+      const updateData: Record<string, unknown> = {
+        full_name: full_name?.trim(),
+        phone: phone?.trim(),
+        age: Number(age),
+        gender,
+        area_of_stay: gender === 'Male' ? area_of_stay?.trim() : null,
+        company_college: company_college?.trim(),
+        pg_name: pg_name ? pg_name.trim() : null,
+        interested_to_volunteer: Boolean(interested_to_volunteer),
+        volunteer_slot_id: interested_to_volunteer ? (volunteer_slot_id || null) : null,
+        interested_to_dinner: Boolean(interested_to_dinner),
+        wants_to_donate: Boolean(wants_to_donate),
+        donation_status: wants_to_donate ? donation_status : 'Pending',
+        occupation: occupation || null,
+        transportation_required: transportation_required || 'No',
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error: updateErr } = await supabaseAdmin
+        .from('registrations')
+        .update(updateData)
+        .eq('id', id);
+
+      if (updateErr) {
+        return NextResponse.json({ error: `Update failed: ${updateErr.message}`, details: updateErr }, { status: 500 });
+      }
+
+      // Sync skills
+      await supabaseAdmin.from('registration_skills').delete().eq('registration_id', id);
+      if (Array.isArray(skill_ids) && skill_ids.length > 0) {
+        const skillInserts = skill_ids.map((sid: string) => ({ registration_id: id, skill_id: sid }));
+        await supabaseAdmin.from('registration_skills').insert(skillInserts);
+      }
+
+      return NextResponse.json({ success: true, message: 'Rathayatra record updated successfully' });
+    } else {
+      return NextResponse.json({ error: 'Unsupported source for registration edit' }, { status: 400 });
+    }
+  } catch (err) {
+    console.error('Error in PATCH /api/registrations:', err);
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Server error during edit update' }, { status: 500 });
+  }
+}
+
 
 export async function DELETE(request: NextRequest) {
   try {

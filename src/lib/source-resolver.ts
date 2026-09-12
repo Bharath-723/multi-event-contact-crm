@@ -1,11 +1,12 @@
 export const RATHAYATRA_EVENT_ID = '4ce7287c-4aea-42f8-8d7d-03b698438e4c';
 export const KRISHNASHTAMI_EVENT_ID = '7852cff8-e784-4e91-b990-a9838ea59ff1';
 
-export type ContactSource = 'rathayatra' | 'krishnashtami' | 'feedback_contacts';
+export type ContactSource = 'rathayatra' | 'krishnashtami' | 'feedback_contacts' | 'master_dashboard';
 
 export function normalizeSource(source: string | null | undefined): ContactSource {
   if (!source) return 'rathayatra';
   const s = source.toLowerCase().trim();
+  if (s === 'master' || s === 'master_dashboard') return 'master_dashboard';
   if (s === 'krishnashtami') return 'krishnashtami';
   if (s === 'feedback' || s === 'feedback_contacts') return 'feedback_contacts';
   return 'rathayatra';

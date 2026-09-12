@@ -1,8 +1,3 @@
-/**
- * /api/assignments/[id]
- * Source-aware endpoint for updating or deactivating contact assignments.
- * Supports source query parameter: ?source=rathayatra | krishnashtami | feedback
- */
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getOperatorSessionFromRequest } from '@/lib/operator-auth';
@@ -15,6 +10,7 @@ const VALID_STATUSES: AssignmentStatus[] = [
 
 function getAssignmentTable(source: string | null) {
   const norm = normalizeSource(source);
+  if (norm === 'master_dashboard') return 'master_contact_assignments';
   if (norm === 'krishnashtami') return 'krishnashtami_contact_assignments';
   if (norm === 'feedback_contacts') return 'feedback_contact_assignments';
   return 'contact_assignments';
@@ -28,7 +24,6 @@ export async function PATCH(
   const sourceParam = url.searchParams.get('source');
   const assignTable = getAssignmentTable(sourceParam);
 
-  // Validate operator session from cookie
   const session = getOperatorSessionFromRequest(req);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -36,7 +31,6 @@ export async function PATCH(
 
   const { id } = await params;
 
-  // Fetch the assignment and verify it belongs to this operator
   const { data: assignment, error: fetchError } = await supabaseAdmin
     .from(assignTable)
     .select('id, operator_id, status, is_active')
@@ -47,19 +41,20 @@ export async function PATCH(
     return NextResponse.json({ error: 'Assignment not found' }, { status: 404 });
   }
 
-  // Security: reject if assignment belongs to another operator
   if (assignment.operator_id !== session.operatorId) {
     return NextResponse.json({ error: 'Forbidden: Not your assignment' }, { status: 403 });
   }
 
-  let body: { status?: string; remarks?: string; notes?: string };
+  let body: { status?: string; remarks?: string; notes?: string; comments?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const updates: Record<string, unknown> = {};
+  const updates: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
   const oldStatus = assignment.status as AssignmentStatus;
 
   if (body.status !== undefined) {
@@ -72,11 +67,17 @@ export async function PATCH(
     }
   }
 
-  if (body.notes !== undefined || body.remarks !== undefined) {
-    updates.notes = body.notes !== undefined ? body.notes : body.remarks;
+  if (body.notes !== undefined || body.remarks !== undefined || body.comments !== undefined) {
+    const textVal = body.notes !== undefined ? body.notes : body.remarks !== undefined ? body.remarks : body.comments;
+    if (assignTable === 'master_contact_assignments') {
+      updates.comments = textVal;
+    } else {
+      updates.notes = textVal;
+      updates.remarks = textVal;
+    }
   }
 
-  if (Object.keys(updates).length === 0) {
+  if (Object.keys(updates).length <= 1) {
     return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
   }
 
@@ -88,7 +89,6 @@ export async function PATCH(
     .single();
 
   if (updateError && updateError.code === '23514') {
-    // If DB check constraint has not been updated yet in Supabase SQL editor:
     if (updates.status === 'Not Answered') {
       updates.status = 'Not Connected';
     } else if (updates.status === 'Next Week') {
@@ -126,7 +126,6 @@ export async function PATCH(
   return NextResponse.json({ assignment: updated });
 }
 
-// Admin can also PUT (e.g., to add remarks from admin side)
 export async function PUT(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -144,18 +143,25 @@ export async function PUT(
   if (!adminRow) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const { id } = await params;
-  let body: { status?: string; remarks?: string; notes?: string };
+  let body: { status?: string; remarks?: string; notes?: string; comments?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  const updates: Record<string, unknown> = {};
+  const updates: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
   if (body.status) updates.status = body.status;
-  // Write to 'notes' column (the live DB column name). Support 'remarks' field name in body for backward compatibility.
-  if (body.notes !== undefined || body.remarks !== undefined) {
-    updates.notes = body.notes !== undefined ? body.notes : body.remarks;
+  if (body.notes !== undefined || body.remarks !== undefined || body.comments !== undefined) {
+    const textVal = body.notes !== undefined ? body.notes : body.remarks !== undefined ? body.remarks : body.comments;
+    if (assignTable === 'master_contact_assignments') {
+      updates.comments = textVal;
+    } else {
+      updates.notes = textVal;
+      updates.remarks = textVal;
+    }
   }
 
   const { data: updated, error: updateError } = await supabaseAdmin
@@ -169,7 +175,6 @@ export async function PUT(
   return NextResponse.json({ assignment: updated });
 }
 
-// DELETE /api/assignments/[id]
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -199,7 +204,6 @@ export async function DELETE(
 
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
   if (!updatedRows || updatedRows.length === 0) {
-    // If no row matched by assignment id, check if id was registration_id
     const { data: updatedByReg, error: regUpdateErr } = await supabaseAdmin
       .from(assignTable)
       .update({

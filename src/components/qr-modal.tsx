@@ -55,8 +55,10 @@ export default function QRModal({ isOpen, onClose }: QRModalProps) {
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (isOpen) {
-      // Use selected festival's explicit registration_url if available, else fallback to origin/feedback
-      const url = selectedFestival?.registration_url || `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/feedback`;
+      const isKrishnashtami = selectedFestival?.slug === 'krishnashtami-2026';
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
+      const fallbackUrl = isKrishnashtami ? `${baseUrl}/krishnashtami-complete` : `${baseUrl}/feedback`;
+      const url = selectedFestival?.registration_url || fallbackUrl;
       setQrUrl(url);
       generateQRCodes(url);
     }

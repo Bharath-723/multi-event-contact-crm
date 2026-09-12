@@ -309,7 +309,11 @@ function AssignContactModal({
         body: JSON.stringify({ registration_id: registration.id, operator_id: selectedOp, source }),
       });
       const d = await res.json();
-      if (!res.ok) { setError(d.message || d.error || 'Assignment failed'); return; }
+      if (!res.ok || !d.success || d.assigned_count === 0) {
+        const firstMsg = d.results?.[0]?.message;
+        setError(d.error || d.message || firstMsg || 'Assignment failed');
+        return;
+      }
       onAssigned();
     } catch { setError('Network error. Please try again.'); }
     finally { setAssigning(false); }
@@ -983,13 +987,19 @@ export default function RegistrationsPage() {
     try {
       const regId = selectedReg!.id;
       const sourceConfig = getRegistrationSource(selectedEventId);
-      const targetRegTable = sourceConfig.regTable;
-      const targetSkillsTable = sourceConfig.skillsJoinTable;
+      const source = sourceConfig.isKrishnashtami ? 'krishnashtami' : 'rathayatra';
+      const { data: { session } } = await supabase.auth.getSession();
+      const authHeader = session?.access_token ? `Bearer ${session.access_token}` : '';
 
-      // 1. Update registrations record
-      const { error: regErr } = await supabase
-        .from(targetRegTable)
-        .update({
+      const res = await fetch('/api/registrations', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: authHeader,
+        },
+        body: JSON.stringify({
+          id: regId,
+          source,
           full_name: sanitizeText(editFullName),
           phone: editPhone,
           age: editAge,
@@ -1002,30 +1012,17 @@ export default function RegistrationsPage() {
           interested_to_dinner: editPrasadam,
           wants_to_donate: editWantsDonate,
           donation_status: editWantsDonate ? editDonationStatus : 'Pending',
-        })
-        .eq('id', regId);
+          occupation: selectedReg?.occupation || null,
+          transportation_required: selectedReg?.transportation_required || 'No',
+          standard: selectedReg?.standard || null,
+          skill_ids: editSelectedSkills,
+        }),
+      });
 
-      if (regErr) throw regErr;
+      const responseData = await res.json().catch(() => ({}));
 
-      // 2. Sync associated skills mapping
-      // Delete existing skill mapping entries
-      await supabase
-        .from(targetSkillsTable)
-        .delete()
-        .eq('registration_id', regId);
-
-      // Insert new skill mappings
-      const skillInserts = editSelectedSkills.map(sid => ({
-        registration_id: regId,
-        skill_id: sid,
-      }));
-
-      if (skillInserts.length > 0) {
-        const { error: skillErr } = await supabase
-          .from(targetSkillsTable)
-          .insert(skillInserts);
-
-        if (skillErr) throw skillErr;
+      if (!res.ok) {
+        throw new Error(responseData.error || responseData.message || 'Failed to update record.');
       }
 
       // Success, invalidate queries
@@ -1087,41 +1084,62 @@ export default function RegistrationsPage() {
   const handleExportCSV = () => {
     if (filteredRegistrations.length === 0) return;
 
+    const sourceConfig = getRegistrationSource(selectedEventId);
+    const isKrish = sourceConfig.isKrishnashtami;
+
     const headers = [
-      'Name', 'Phone', 'Age', 'Gender', 'Area', 'Company', 'PG', 
-      'Skills', 'Volunteer', 'Volunteer Slot', 'Prasadam', 
-      'Donation Status', 'Registered Date', 'Occupation', 'Transportation Required', 'Service'
+      'Full Name', 'Phone', 'Age', 'Gender', 'Area of Stay', 'Company / College', 'PG Name', 
+      'Skills', 'Volunteer Interest', 'Volunteer Time Slot', 'Donation Status', 
+      'Registered Date', 'Occupation', 'Standard', 'Transportation', 'Service', 'Assignment / Operator'
     ];
 
-    const rows = filteredRegistrations.map(r => [
-      `"${r.full_name.replace(/"/g, '""')}"`,
-      r.phone,
-      r.age,
-      r.gender,
-      `"${(r.area_of_stay || '').replace(/"/g, '""')}"`,
-      `"${r.company_college.replace(/"/g, '""')}"`,
-      `"${(r.pg_name || '').replace(/"/g, '""')}"`,
-      `"${(r.skills || []).map(s => s.name).join(', ')}"`,
-      r.interested_to_volunteer ? 'Yes' : 'No',
-      r.volunteer_slots?.slot_time || 'N/A',
-      getPrasadamDisplay(r),
-      r.donation_status,
-      formatDate(r.created_at),
-      `"${(r.occupation || '').replace(/"/g, '""')}"`,
-      r.transportation_required || 'No',
-      `"${(r.services?.name || 'Unassigned').replace(/"/g, '""')}"`
-    ]);
+    const escapeCsvCell = (val: unknown): string => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    };
 
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    
-    const encodedUri = encodeURI(csvContent);
+    const rows = filteredRegistrations.map(r => {
+      const activeAssign = Array.isArray(r.contact_assignments)
+        ? r.contact_assignments.find((a: unknown) => (a as { is_active?: boolean }).is_active)
+        : null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const opName = (activeAssign as any)?.contact_operators?.name || 'Unassigned';
+
+      const regDateFormatted = r.created_at ? formatDate(r.created_at) : '';
+
+      return [
+        escapeCsvCell(r.full_name),
+        escapeCsvCell(r.phone),
+        escapeCsvCell(r.age),
+        escapeCsvCell(r.gender),
+        escapeCsvCell(r.area_of_stay || ''),
+        escapeCsvCell(r.company_college),
+        escapeCsvCell(r.pg_name || ''),
+        escapeCsvCell((r.skills || []).map(s => s.name).join(', ')),
+        escapeCsvCell(r.interested_to_volunteer ? 'Yes' : 'No'),
+        escapeCsvCell(r.volunteer_slots?.slot_time || 'N/A'),
+        escapeCsvCell(r.donation_status || 'Pending'),
+        escapeCsvCell(regDateFormatted),
+        escapeCsvCell(r.occupation || ''),
+        escapeCsvCell(isKrish ? (r.standard || '—') : '—'),
+        escapeCsvCell(r.transportation_required || 'No'),
+        escapeCsvCell(r.services?.name || 'Unassigned'),
+        escapeCsvCell(opName),
+      ];
+    });
+
+    const csvLines = [headers.map(h => `"${h}"`).join(','), ...rows.map(e => e.join(','))].join('\n');
+    const blob = new Blob(['\uFEFF' + csvLines], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `rathayatra_registrations_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('href', url);
+    const filePrefix = isKrish ? 'krishnashtami' : 'rathayatra';
+    link.setAttribute('download', `${filePrefix}_registrations_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   // 2. Export Print
@@ -1129,53 +1147,77 @@ export default function RegistrationsPage() {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
-    const tableRows = filteredRegistrations.map(r => `
-      <tr>
-        <td>${r.full_name}</td>
-        <td>${r.phone}</td>
-        <td>${r.age}</td>
-        <td>${r.gender}</td>
-        <td>${r.area_of_stay || 'N/A'}</td>
-        <td>${r.company_college}</td>
-        <td>${r.skills?.map(s => s.name).join(', ') || 'N/A'}</td>
-        <td>${r.interested_to_volunteer ? `Yes (${r.volunteer_slots?.slot_time})` : 'No'}</td>
-        <td>${getPrasadamDisplay(r)}</td>
-        <td>${r.donation_status}</td>
-        <td>${formatDate(r.created_at).split(',')[0]}</td>
-        <td>${r.services?.name || 'Unassigned'}</td>
-      </tr>
-    `).join('');
+    const sourceConfig = getRegistrationSource(selectedEventId);
+    const isKrish = sourceConfig.isKrishnashtami;
+    const titleText = isKrish ? 'Krishnashtami 2026 Registrations' : 'Rathayatra 2026 Registrations';
+
+    const tableRows = filteredRegistrations.map(r => {
+      const activeAssign = Array.isArray(r.contact_assignments)
+        ? r.contact_assignments.find((a: unknown) => (a as { is_active?: boolean }).is_active)
+        : null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const opName = (activeAssign as any)?.contact_operators?.name || 'Unassigned';
+
+      return `
+        <tr>
+          <td>${r.full_name || ''}</td>
+          <td>${r.phone || ''}</td>
+          <td>${r.age || ''}</td>
+          <td>${r.gender || ''}</td>
+          <td>${r.area_of_stay || 'N/A'}</td>
+          <td>${r.company_college || ''}</td>
+          <td>${r.occupation || 'N/A'}</td>
+          <td>${isKrish ? (r.standard || '—') : '—'}</td>
+          <td>${r.transportation_required || 'No'}</td>
+          <td>${r.skills?.map(s => s.name).join(', ') || 'N/A'}</td>
+          <td>${r.interested_to_volunteer ? `Yes (${r.volunteer_slots?.slot_time || 'N/A'})` : 'No'}</td>
+          <td>${r.donation_status || 'Pending'}</td>
+          <td>${r.created_at ? formatDate(r.created_at) : ''}</td>
+          <td>${r.services?.name || 'Unassigned'}</td>
+          <td>${opName}</td>
+        </tr>
+      `;
+    }).join('');
 
     printWindow.document.write(`
+      <!DOCTYPE html>
       <html>
         <head>
-          <title>Rathayatra 2026 Registrations</title>
+          <title>${titleText}</title>
           <style>
-            body { font-family: sans-serif; color: #1e293b; padding: 20px; }
-            h2 { text-align: center; color: #4f46e5; margin-bottom: 20px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; }
-            th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: left; }
-            th { background-color: #f1f5f9; font-weight: bold; }
+            @page { size: A4 landscape; margin: 12mm; }
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; margin: 0; padding: 16px; background: #fff; }
+            h2 { text-align: center; color: #4338ca; margin-top: 0; margin-bottom: 4px; font-size: 18px; }
+            p.sub { text-align: center; color: #64748b; font-size: 11px; margin-bottom: 16px; }
+            table { width: 100%; border-collapse: collapse; font-size: 10px; }
+            thead { display: table-header-group; }
+            tr { page-break-inside: avoid; }
+            th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; word-break: break-word; }
+            th { background-color: #f1f5f9; font-weight: 700; color: #334155; }
             tr:nth-child(even) { background-color: #f8fafc; }
           </style>
         </head>
         <body>
-          <h2>Rathayatra Volunteer Registrations (${filteredRegistrations.length} Records)</h2>
+          <h2>${titleText}</h2>
+          <p class="sub">Total Records: ${filteredRegistrations.length} • Generated on ${new Date().toLocaleString('en-IN')}</p>
           <table>
             <thead>
               <tr>
-                <th>Name</th>
+                <th>Full Name</th>
                 <th>Phone</th>
                 <th>Age</th>
                 <th>Gender</th>
                 <th>Area</th>
                 <th>Company/College</th>
+                <th>Occupation</th>
+                <th>Standard</th>
+                <th>Transport</th>
                 <th>Skills</th>
                 <th>Volunteer</th>
-                <th>Prasadam</th>
                 <th>Donation</th>
-                <th>Date</th>
+                <th>Registered Date</th>
                 <th>Service</th>
+                <th>Operator</th>
               </tr>
             </thead>
             <tbody>

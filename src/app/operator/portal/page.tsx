@@ -50,8 +50,11 @@ interface GenericAssignmentData {
   status: AllowedStatus | string;
   notes?: string | null;
   remarks?: string | null;
+  comments?: string | null;
   is_active: boolean;
   updated_at: string;
+  master_contacts?: Record<string, unknown> | null;
+  master_contact?: Record<string, unknown> | null;
   feedback_contact?: FeedbackContact | null;
   feedback_contacts?: Record<string, unknown> | null;
   krishnashtami_registrations?: Record<string, unknown> | null;
@@ -140,6 +143,8 @@ function ContactCard({
   onNotes: (id: string, current: string) => void;
 }) {
   const contact = (
+    assignment.master_contacts ||
+    assignment.master_contact ||
     assignment.feedback_contacts ||
     assignment.feedback_contact ||
     assignment.krishnashtami_registrations ||
@@ -158,17 +163,19 @@ function ContactCard({
 
   if (!contact) return null;
 
-  const fullName = String(contact.full_name ?? '—');
+  const fullName = String(contact.name ?? contact.full_name ?? '—');
   const rawPhone = String(contact.phone ?? '');
   const cleanPhone = sanitizePhone(rawPhone);
-  const college = String(contact.college_name || contact.company_college || '—');
-  const branch = String(contact.branch || contact.occupation || '');
+  const college = String(contact.company_college || contact.college_name || '—');
+  const branch = String(contact.occupation || contact.branch || '');
   const gender = String(contact.gender || '');
-  const stay = String(contact.current_stay || contact.area_of_stay || '');
+  const stay = String(contact.area_of_stay || contact.current_stay || '');
   const feedback = contact.feedback ? String(contact.feedback) : null;
   const skills = Array.isArray(contact.skills) ? (contact.skills as string[]) : [];
   const isOnlineWorkshop = Boolean(contact.interested_online_workshop ?? contact.interested_online_work);
-  const notesText = assignment.notes || assignment.remarks || '';
+  const notesText = (assignment as unknown as Record<string, unknown>).comments
+    ? String((assignment as unknown as Record<string, unknown>).comments)
+    : assignment.notes || assignment.remarks || '';
 
   return (
     <motion.div
@@ -426,7 +433,9 @@ function OperatorPortalContent() {
     if (!operator) return;
 
     const assignTable =
-      contactSource === 'krishnashtami'
+      contactSource === 'master_dashboard'
+        ? 'master_contact_assignments'
+        : contactSource === 'krishnashtami'
         ? 'krishnashtami_contact_assignments'
         : contactSource === 'feedback_contacts'
         ? 'feedback_contact_assignments'
@@ -497,7 +506,7 @@ function OperatorPortalContent() {
   const handleSaveNotes = async (assignmentId: string, notes: string) => {
     // Optimistic instant state update
     setAssignments((prev) =>
-      prev.map((item) => (item.id === assignmentId ? { ...item, notes, remarks: notes } : item))
+      prev.map((item) => (item.id === assignmentId ? { ...item, notes, remarks: notes, comments: notes } : item))
     );
     toast('Notes saved.');
 
@@ -525,6 +534,8 @@ function OperatorPortalContent() {
   // Filtered contacts list based on search string
   const filteredList = assignments.filter((a) => {
     const contact = (
+      (a as unknown as Record<string, unknown>).master_contacts ||
+      (a as unknown as Record<string, unknown>).master_contact ||
       (a as unknown as Record<string, unknown>).feedback_contacts ||
       a.feedback_contact ||
       a.krishnashtami_registrations ||
@@ -533,10 +544,10 @@ function OperatorPortalContent() {
     if (!contact) return false;
     if (!search.trim()) return true;
     const q = search.toLowerCase();
-    const name = String(contact.full_name ?? '').toLowerCase();
+    const name = String(contact.name ?? contact.full_name ?? '').toLowerCase();
     const phone = String(contact.phone ?? '');
-    const college = String(contact.college_name || contact.company_college || '').toLowerCase();
-    const branch = String(contact.branch || contact.occupation || '').toLowerCase();
+    const college = String(contact.company_college || contact.college_name || '').toLowerCase();
+    const branch = String(contact.occupation || contact.branch || '').toLowerCase();
     return name.includes(q) || phone.includes(q) || college.includes(q) || branch.includes(q);
   });
 
@@ -544,7 +555,9 @@ function OperatorPortalContent() {
   const paginatedList = filteredList.slice((page - 1) * LIMIT, page * LIMIT);
 
   const sourceTitle =
-    contactSource === 'krishnashtami'
+    contactSource === 'master_dashboard'
+      ? 'Master Dashboard'
+      : contactSource === 'krishnashtami'
       ? 'Krishnashtami 2026'
       : contactSource === 'feedback_contacts'
       ? 'Feedback Contacts'
@@ -604,6 +617,7 @@ function OperatorPortalContent() {
                 <option value="rathayatra" className="bg-slate-900 text-slate-100">Rathayatra 2026</option>
                 <option value="krishnashtami" className="bg-slate-900 text-slate-100">Krishnashtami 2026</option>
                 <option value="feedback_contacts" className="bg-slate-900 text-slate-100">Feedback Contacts</option>
+                <option value="master_dashboard" className="bg-slate-900 text-slate-100">Master Dashboard</option>
               </select>
             </div>
 

@@ -319,44 +319,194 @@ export default function AdminFeedbackDashboard() {
     loadData({ s: '', pageNum: 1, g: '', col: '', br: '', st: '', fb: '', ow: '' });
   };
 
-  // CSV Export
-  const handleExportCSV = () => {
-    if (contacts.length === 0) return;
-    const headers = ['Full Name', 'Phone', 'College', 'Branch', 'Gender', 'Current Stay', 'Skills', 'Feedback', 'Interested in Online Workshop', 'Assigned Operator', 'Status', 'Submitted Date'];
-    const rows = contacts.map(c => {
-      const assign = assignmentsMap[c.id];
-      const opName = c.gender === 'Female' ? 'Not Assignable' : (assign?.operator?.name || 'Unassigned');
-      const status = c.gender === 'Female' ? 'Not Assignable' : (assign?.status || 'Unassigned');
-      const validSkills = (c.skills || []).map(resolveSkillName).filter(Boolean).join(', ');
-      return [
-        `"${c.full_name.replace(/"/g, '""')}"`,
-        `"${c.phone}"`,
-        `"${c.college_name.replace(/"/g, '""')}"`,
-        `"${c.branch.replace(/"/g, '""')}"`,
-        `"${c.gender}"`,
-        `"${c.current_stay}"`,
-        `"${validSkills.replace(/"/g, '""')}"`,
-        `"${c.feedback}"`,
-        `"${(c.interested_online_workshop ?? c.interested_online_work) ? 'Yes' : 'No'}"`,
-        `"${opName}"`,
-        `"${status}"`,
-        `"${new Date(c.created_at).toLocaleString()}"`,
-      ];
-    });
+  // Helper: Fetch all matching feedback contacts for export/print with current filters applied
+  const fetchAllFilteredFeedbackContacts = async (): Promise<FeedbackContact[]> => {
+    const auth = await getAuthHeader();
+    const params = new URLSearchParams({ all: 'true' });
+    if (search.trim()) params.set('search', search.trim());
+    if (filterGender) params.set('gender', filterGender);
+    if (filterCollege.trim()) params.set('college', filterCollege.trim());
+    if (filterBranch.trim()) params.set('branch', filterBranch.trim());
+    if (filterStay) params.set('current_stay', filterStay);
+    if (filterFeedback) params.set('feedback', filterFeedback);
+    if (filterOnlineWork) params.set('interested_online_work', filterOnlineWork);
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `feedback_contacts_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const res = await fetch(`/api/feedback?${params.toString()}`, {
+      headers: { Authorization: auth },
+    });
+    if (!res.ok) throw new Error('Failed to fetch feedback contacts for export');
+    const data = await res.json();
+    return data.contacts || [];
   };
 
-  // PDF Print
-  const handleExportPDF = () => {
-    window.print();
+  // CSV Export (Full matching dataset, proper double quoting, single timestamp cell, UTF-8 BOM)
+  const handleExportCSV = async () => {
+    try {
+      setLoading(true);
+      const allMatchingContacts = await fetchAllFilteredFeedbackContacts();
+      if (allMatchingContacts.length === 0) return;
+
+      const headers = [
+        'Full Name', 'Phone', 'College Name', 'Branch', 'Gender', 
+        'Current Stay', 'Skills', 'Feedback', 'Interested in Online Workshop', 
+        'Assigned Operator', 'Status', 'Submitted Date'
+      ];
+
+      const escapeCsvCell = (val: unknown): string => {
+        if (val === null || val === undefined) return '""';
+        const str = String(val).replace(/"/g, '""');
+        return `"${str}"`;
+      };
+
+      const rows = allMatchingContacts.map(c => {
+        const contactWithStatus = c as FeedbackContact & { assigned_operator_name?: string; status?: string };
+        const opName = contactWithStatus.assigned_operator_name || (c.gender === 'Female' ? 'N/A (Female)' : 'Unassigned');
+        const status = contactWithStatus.status || (c.gender === 'Female' ? 'Not Assignable' : 'Pending Assignment');
+        const validSkills = (c.skills || []).map(resolveSkillName).filter(Boolean).join(', ');
+        const isOnlineWorkshop = Boolean(c.interested_online_workshop ?? c.interested_online_work);
+        const dateFormatted = c.created_at
+          ? new Date(c.created_at).toLocaleString('en-IN', {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true,
+            }).replace(',', ' •')
+          : '';
+
+        return [
+          escapeCsvCell(c.full_name),
+          escapeCsvCell(c.phone),
+          escapeCsvCell(c.college_name),
+          escapeCsvCell(c.branch),
+          escapeCsvCell(c.gender),
+          escapeCsvCell(c.current_stay),
+          escapeCsvCell(validSkills),
+          escapeCsvCell(c.feedback),
+          escapeCsvCell(isOnlineWorkshop ? 'Yes' : 'No'),
+          escapeCsvCell(opName),
+          escapeCsvCell(status),
+          escapeCsvCell(dateFormatted),
+        ];
+      });
+
+      const csvLines = [headers.map(h => `"${h}"`).join(','), ...rows.map(e => e.join(','))].join('\n');
+      const blob = new Blob(['\uFEFF' + csvLines], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `feedback_contacts_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Feedback CSV Export Error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // PDF Print (Real database print mechanism with multi-page table report & repeated headers)
+  const handleExportPDF = async () => {
+    try {
+      setLoading(true);
+      const allMatchingContacts = await fetchAllFilteredFeedbackContacts();
+      if (allMatchingContacts.length === 0) return;
+
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) return;
+
+      const tableRows = allMatchingContacts.map(c => {
+        const contactWithStatus = c as FeedbackContact & { assigned_operator_name?: string; status?: string };
+        const opName = contactWithStatus.assigned_operator_name || (c.gender === 'Female' ? 'N/A (Female)' : 'Unassigned');
+        const status = contactWithStatus.status || (c.gender === 'Female' ? 'Not Assignable' : 'Pending Assignment');
+        const validSkills = (c.skills || []).map(resolveSkillName).filter(Boolean).join(', ') || 'N/A';
+        const isOnlineWorkshop = Boolean(c.interested_online_workshop ?? c.interested_online_work);
+        const dateFormatted = c.created_at
+          ? new Date(c.created_at).toLocaleString('en-IN', {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true,
+            })
+          : '';
+
+        return `
+          <tr>
+            <td><strong>${c.full_name || ''}</strong></td>
+            <td>${c.phone || ''}</td>
+            <td>${c.college_name || ''}</td>
+            <td>${c.branch || ''}</td>
+            <td>${c.gender || ''}</td>
+            <td>${c.current_stay || ''}</td>
+            <td>${validSkills}</td>
+            <td>${c.feedback || ''}</td>
+            <td>${isOnlineWorkshop ? 'Yes' : 'No'}</td>
+            <td>${opName}</td>
+            <td>${status}</td>
+            <td>${dateFormatted}</td>
+          </tr>
+        `;
+      }).join('');
+
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Feedback Contacts Report</title>
+            <style>
+              @page { size: A4 landscape; margin: 12mm; }
+              body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; margin: 0; padding: 16px; background: #fff; }
+              h2 { text-align: center; color: #6b21a8; margin-top: 0; margin-bottom: 4px; font-size: 18px; }
+              p.sub { text-align: center; color: #64748b; font-size: 11px; margin-bottom: 16px; }
+              table { width: 100%; border-collapse: collapse; font-size: 10px; }
+              thead { display: table-header-group; }
+              tr { page-break-inside: avoid; }
+              th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; word-break: break-word; }
+              th { background-color: #f3e8ff; font-weight: 700; color: #581c87; }
+              tr:nth-child(even) { background-color: #faf5ff; }
+            </style>
+          </head>
+          <body>
+            <h2>Feedback Contacts Official Report</h2>
+            <p class="sub">Total Matching Records: ${allMatchingContacts.length} • Generated on ${new Date().toLocaleString('en-IN')}</p>
+            <table>
+              <thead>
+                <tr>
+                  <th>Full Name</th>
+                  <th>Phone</th>
+                  <th>College Name</th>
+                  <th>Branch</th>
+                  <th>Gender</th>
+                  <th>Current Stay</th>
+                  <th>Skills</th>
+                  <th>Feedback</th>
+                  <th>Online Workshop</th>
+                  <th>Assigned Operator</th>
+                  <th>Status</th>
+                  <th>Submitted Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${tableRows}
+              </tbody>
+            </table>
+            <script>
+              window.onload = function() { window.print(); }
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    } catch (err) {
+      console.error('Feedback PDF Print Error:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const totalPages = Math.ceil(total / limit) || 1;

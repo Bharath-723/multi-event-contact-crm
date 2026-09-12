@@ -222,6 +222,23 @@ export async function POST(request: NextRequest) {
 
     if (inserted?.id) {
       try {
+        const { syncMasterContact } = await import('@/lib/master-contacts');
+        await syncMasterContact({
+          source: 'feedback_contacts',
+          event_display_name: 'Feedback Contact',
+          event_record_id: String(inserted.id),
+          phone,
+          name: fullName,
+          gender,
+          area_of_stay: currentStay,
+          company_college: collegeName,
+          occupation: branch,
+        });
+      } catch (masterErr) {
+        console.warn('[POST /api/feedback] Master sync warning:', masterErr);
+      }
+
+      try {
         await autoAssignFeedbackContact(inserted.id, 'system_auto');
       } catch (assignErr) {
         console.warn('[POST /api/feedback] Auto-assign error:', assignErr);
@@ -254,10 +271,11 @@ export async function GET(request: NextRequest) {
   const currentStay = url.searchParams.get('current_stay') || '';
   const feedback = url.searchParams.get('feedback') || '';
   const interestedOnlineWork = url.searchParams.get('interested_online_work') || url.searchParams.get('interested_online_workshop') || '';
+  const isAll = url.searchParams.get('all') === 'true';
   const page = parseInt(url.searchParams.get('page') || '1', 10);
-  const limit = parseInt(url.searchParams.get('limit') || '20', 10);
+  const limit = isAll ? 10000 : parseInt(url.searchParams.get('limit') || '20', 10);
 
-  const from = (page - 1) * limit;
+  const from = isAll ? 0 : (page - 1) * limit;
   const to = from + limit - 1;
 
   try {
@@ -336,12 +354,55 @@ interface RawFeedbackRow {
       return NextResponse.json({ error: fetchError.message }, { status: 500 });
     }
 
-    // Process contacts to ensure interested_online_workshop field is normalized
-    const rawContacts = (contacts || []) as RawFeedbackRow[];
-    const normalizedContacts = rawContacts.map((c) => ({
-      ...c,
-      interested_online_workshop: Boolean(c.interested_online_workshop ?? c.interested_online_work),
-    }));
+    // Process contacts to attach active assignment and authoritative derived status
+    const rawContacts = (contacts || []) as Array<Record<string, unknown>>;
+    const contactIds = rawContacts.map((c) => String(c.id)).filter(Boolean);
+
+    const assignMap = new Map<string, Record<string, unknown>>();
+    if (contactIds.length > 0) {
+      const { data: activeAssignments } = await supabaseAdmin
+        .from('feedback_contact_assignments')
+        .select(`
+          id, feedback_contact_id, operator_id, status, is_active,
+          contact_operators!operator_id (id, name, email, phone)
+        `)
+        .in('feedback_contact_id', contactIds)
+        .eq('is_active', true);
+
+      (activeAssignments || []).forEach((a) => {
+        assignMap.set(String(a.feedback_contact_id), a as Record<string, unknown>);
+      });
+    }
+
+    const normalizedContacts = rawContacts.map((c) => {
+      const idStr = String(c.id);
+      const assign = assignMap.get(idStr);
+      const isFemale = c.gender === 'Female';
+      const opObj = assign?.contact_operators as { name?: string } | null | undefined;
+      const opName = isFemale ? 'N/A (Female)' : (opObj?.name || 'Unassigned');
+
+      let statusStr = 'Pending Assignment';
+      if (isFemale) {
+        statusStr = 'Not Assignable';
+      } else if (assign && assign.status) {
+        const s = String(assign.status).trim().toLowerCase();
+        if (s === 'assigned') statusStr = 'Assigned';
+        else if (s === 'contacted') statusStr = 'Contacted';
+        else if (s === 'interested') statusStr = 'Interested';
+        else if (s === 'not_interested' || s === 'not interested') statusStr = 'Not Interested';
+        else if (s === 'not_coming' || s === 'not coming') statusStr = 'Not Coming';
+        else if (s === 'completed') statusStr = 'Completed';
+        else statusStr = String(assign.status).charAt(0).toUpperCase() + String(assign.status).slice(1);
+      }
+
+      return {
+        ...c,
+        interested_online_workshop: Boolean(c.interested_online_workshop ?? c.interested_online_work),
+        assignment: assign || null,
+        assigned_operator_name: opName,
+        status: statusStr,
+      };
+    });
 
     return NextResponse.json({
       success: true,
