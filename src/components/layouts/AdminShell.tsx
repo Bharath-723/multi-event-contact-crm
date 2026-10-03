@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { 
   ShieldAlert, LayoutDashboard, Users, LogOut, 
-  Loader2, Menu, X, ShieldCheck, PhoneCall, Wrench, ClipboardList, Contact
+  Loader2, Menu, X, ShieldCheck, PhoneCall, Wrench, ClipboardList, Contact, BookUser
 } from 'lucide-react';
 import Link from 'next/link';
 import NotificationBell from '@/components/notification-bell';
@@ -116,6 +116,7 @@ export default function AdminShell({
     { name: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
     { name: 'Master Dashboard', path: '/admin/master_dashboard', icon: Contact },
     { name: 'Registrations', path: '/admin/registrations', icon: Users },
+    { name: 'Contacts Register', path: '/admin/contacts-register', icon: BookUser },
     { name: 'Feedback Dashboard', path: '/admin/feedback_dashboard', icon: ClipboardList },
     { name: 'Contact Operators', path: '/admin/operators', icon: PhoneCall },
     { name: 'Services', path: '/admin/services', icon: Wrench },

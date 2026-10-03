@@ -21,6 +21,124 @@ function checkRateLimit(ip: string): boolean {
   return true;
 }
 
+// ─── Guard: Validate admin session from Supabase Auth header ────────────────
+async function requireAdmin(req: Request): Promise<{ error: NextResponse | null }> {
+  const authHeader = req.headers.get('Authorization') || '';
+  const token = authHeader.replace('Bearer ', '');
+  if (!token) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
+
+  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+  if (error || !user) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
+
+  const { data: adminRow } = await supabaseAdmin
+    .from('admins')
+    .select('id')
+    .eq('id', user.id)
+    .single();
+  if (!adminRow) return { error: NextResponse.json({ error: 'Forbidden: Not an admin' }, { status: 403 }) };
+
+  return { error: null };
+}
+
+// ─── GET /api/contacts-register ─────────────────────────────────────────────
+export async function GET(request: NextRequest) {
+  const { error: authError } = await requireAdmin(request);
+  if (authError) return authError;
+
+  try {
+    const url = new URL(request.url);
+    const search = url.searchParams.get('search')?.trim() || '';
+    const gender = url.searchParams.get('gender')?.trim() || '';
+    const currentStay = url.searchParams.get('current_stay')?.trim() || '';
+    const workshopInterest = url.searchParams.get('interested_online_workshop')?.trim() || '';
+    const dateStr = url.searchParams.get('date')?.trim() || '';
+    const isExport = url.searchParams.get('export') === 'true' || url.searchParams.get('limit') === 'all';
+    const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
+    const limit = isExport ? 100000 : Math.max(1, Math.min(200, parseInt(url.searchParams.get('limit') || '20', 10)));
+
+    // 1. Fetch overall counts for statistics cards
+    const { data: allRows, error: statsErr } = await supabaseAdmin
+      .from('contacts_register')
+      .select('id, gender, current_stay, interested_online_workshop');
+
+    if (statsErr) {
+      if (statsErr.code === '42P01') {
+        return NextResponse.json(
+          {
+            error:
+              'contacts_register table not found. Please apply the migration first.',
+          },
+          { status: 503 }
+        );
+      }
+      return NextResponse.json({ error: statsErr.message }, { status: 500 });
+    }
+
+    const allList = allRows || [];
+    const stats = {
+      total_registrations: allList.length,
+      male_contacts: allList.filter((r) => r.gender === 'Male').length,
+      female_contacts: allList.filter((r) => r.gender === 'Female').length,
+      hostel_residents: allList.filter((r) => r.current_stay === 'In Hostel').length,
+      workshop_interested: allList.filter((r) => r.interested_online_workshop === true).length,
+    };
+
+    // 2. Query filtered dataset
+    let query = supabaseAdmin
+      .from('contacts_register')
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false });
+
+    if (gender) {
+      query = query.eq('gender', gender);
+    }
+    if (currentStay) {
+      query = query.eq('current_stay', currentStay);
+    }
+    if (workshopInterest === 'Yes') {
+      query = query.eq('interested_online_workshop', true);
+    } else if (workshopInterest === 'No') {
+      query = query.eq('interested_online_workshop', false);
+    }
+    if (dateStr) {
+      const startDate = `${dateStr}T00:00:00.000Z`;
+      const endDate = `${dateStr}T23:59:59.999Z`;
+      query = query.gte('created_at', startDate).lte('created_at', endDate);
+    }
+    if (search) {
+      const cleanSearch = search.replace(/\D/g, '');
+      if (cleanSearch.length >= 3) {
+        query = query.or(`full_name.ilike.%${search}%,college_name.ilike.%${search}%,area_of_stay.ilike.%${search}%,phone.ilike.%${cleanSearch}%`);
+      } else {
+        query = query.or(`full_name.ilike.%${search}%,college_name.ilike.%${search}%,area_of_stay.ilike.%${search}%`);
+      }
+    }
+
+    if (!isExport) {
+      const from = (page - 1) * limit;
+      const to = from + limit - 1;
+      query = query.range(from, to);
+    }
+
+    const { data: registrations, count: totalFiltered, error: queryErr } = await query;
+
+    if (queryErr) {
+      return NextResponse.json({ error: queryErr.message }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      registrations: registrations || [],
+      total: totalFiltered || 0,
+      page: isExport ? 1 : page,
+      limit: isExport ? (totalFiltered || 0) : limit,
+      stats,
+    });
+  } catch (err) {
+    console.error('GET /api/contacts-register error:', err);
+    return NextResponse.json({ error: 'Server error retrieving contacts register list' }, { status: 500 });
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     // 1. Rate limiting
