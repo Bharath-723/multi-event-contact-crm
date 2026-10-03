@@ -280,8 +280,8 @@ export default function AdminShell({
               )}
             </div>
 
-            {/* Year -> Festival Selector */}
-            {pathname !== '/admin/master_dashboard' && <FestivalSelector />}
+            {/* Year -> Festival Selector (Registrations page only) */}
+            {pathname === '/admin/registrations' && <FestivalSelector />}
 
             {/* Action Tools */}
             <div className="flex items-center gap-4">

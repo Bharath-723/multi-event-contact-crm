@@ -230,9 +230,7 @@ export const contactsRegisterSchema = z.object({
   }),
   pgName: z.string().optional(),
   skills: z.array(z.string()).optional().default([]),
-  interestedOnlineWork: z.enum(['Yes', 'No'], {
-    message: 'Please select your interest in online workshop',
-  }),
+  interestedOnlineWork: z.enum(['Yes', 'No']).optional(),
 }).superRefine((data, ctx) => {
   if (data.collegeName === 'Other') {
     if (!data.customCollegeName || data.customCollegeName.trim() === '') {

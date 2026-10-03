@@ -1,15 +1,16 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { formatDate } from '@/lib/utils';
 import { 
   Search, Download, Edit2, Trash2, ChevronLeft, ChevronRight, X, Eye, 
-  Loader2, Sparkles, BookUser, Users, User, Home, Laptop, Filter, 
-  RotateCcw, CheckCircle2, AlertCircle, Phone, Building, MapPin, Award
+  Loader2, BookUser, Users, User, Home, Filter, 
+  RotateCcw, CheckCircle2, AlertCircle, QrCode
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import QRModal from '@/components/qr-modal';
 
 export interface ContactsRegisterRecord {
   id: string;
@@ -21,7 +22,7 @@ export interface ContactsRegisterRecord {
   current_stay: 'With Parents' | 'In Hostel';
   pg_name?: string | null;
   skills: string[];
-  interested_online_workshop: boolean;
+  interested_online_workshop?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -31,17 +32,16 @@ export interface ContactsRegisterStats {
   male_contacts: number;
   female_contacts: number;
   hostel_residents: number;
-  workshop_interested: number;
 }
 
 export default function ContactsRegisterAdminPage() {
-  const queryClient = useQueryClient();
+  // --- QR MODAL STATE ---
+  const [qrModalOpen, setQrModalOpen] = useState(false);
 
   // --- FILTER STATES ---
   const [searchQuery, setSearchQuery] = useState('');
   const [filterGender, setFilterGender] = useState('');
   const [filterCurrentStay, setFilterCurrentStay] = useState('');
-  const [filterWorkshopInterest, setFilterWorkshopInterest] = useState('');
   const [filterDate, setFilterDate] = useState('');
 
   // --- PAGINATION STATE ---
@@ -51,13 +51,45 @@ export default function ContactsRegisterAdminPage() {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, filterGender, filterCurrentStay, filterWorkshopInterest, filterDate, itemsPerPage]);
+  }, [searchQuery, filterGender, filterCurrentStay, filterDate, itemsPerPage]);
 
   // --- MODAL STATES ---
   const [viewRecord, setViewRecord] = useState<ContactsRegisterRecord | null>(null);
   const [editRecord, setEditRecord] = useState<ContactsRegisterRecord | null>(null);
   const [deleteRecordId, setDeleteRecordId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // --- SKILLS CATALOG QUERY & UUID MAPPING ---
+  const { data: skillsCatalog = [] } = useQuery({
+    queryKey: ['skills-catalog'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('skills').select('id, name');
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const skillMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of skillsCatalog) {
+      map.set(s.id, s.name);
+    }
+    return map;
+  }, [skillsCatalog]);
+
+  const nameToIdMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of skillsCatalog) {
+      map.set(s.name.toLowerCase(), s.id);
+      map.set(s.id.toLowerCase(), s.id);
+    }
+    return map;
+  }, [skillsCatalog]);
+
+  const getSkillName = (val: string) => {
+    if (!val) return '';
+    return skillMap.get(val) || val;
+  };
 
   // --- EDIT FORM STATES ---
   const [editFullName, setEditFullName] = useState('');
@@ -68,7 +100,6 @@ export default function ContactsRegisterAdminPage() {
   const [editCurrentStay, setEditCurrentStay] = useState<'With Parents' | 'In Hostel'>('With Parents');
   const [editPgName, setEditPgName] = useState('');
   const [editSkillsInput, setEditSkillsInput] = useState('');
-  const [editWorkshopInterest, setEditWorkshopInterest] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -82,11 +113,14 @@ export default function ContactsRegisterAdminPage() {
       setEditGender(editRecord.gender || 'Male');
       setEditCurrentStay(editRecord.current_stay || 'With Parents');
       setEditPgName(editRecord.pg_name || '');
-      setEditSkillsInput(Array.isArray(editRecord.skills) ? editRecord.skills.join(', ') : '');
-      setEditWorkshopInterest(Boolean(editRecord.interested_online_workshop));
+      
+      const readableSkills = Array.isArray(editRecord.skills)
+        ? editRecord.skills.map((s) => skillMap.get(s) || s).join(', ')
+        : '';
+      setEditSkillsInput(readableSkills);
       setEditError(null);
     }
-  }, [editRecord]);
+  }, [editRecord, skillMap]);
 
   // Clear PG name when switching to With Parents
   useEffect(() => {
@@ -108,7 +142,6 @@ export default function ContactsRegisterAdminPage() {
       searchQuery,
       filterGender,
       filterCurrentStay,
-      filterWorkshopInterest,
       filterDate,
       currentPage,
       itemsPerPage,
@@ -121,7 +154,6 @@ export default function ContactsRegisterAdminPage() {
       if (searchQuery) params.set('search', searchQuery);
       if (filterGender) params.set('gender', filterGender);
       if (filterCurrentStay) params.set('current_stay', filterCurrentStay);
-      if (filterWorkshopInterest) params.set('interested_online_workshop', filterWorkshopInterest);
       if (filterDate) params.set('date', filterDate);
       params.set('page', String(currentPage));
       params.set('limit', String(itemsPerPage));
@@ -145,7 +177,6 @@ export default function ContactsRegisterAdminPage() {
     male_contacts: 0,
     female_contacts: 0,
     hostel_residents: 0,
-    workshop_interested: 0,
   };
   const totalRecords = data?.total || 0;
   const totalPages = Math.ceil(totalRecords / itemsPerPage) || 1;
@@ -163,7 +194,6 @@ export default function ContactsRegisterAdminPage() {
       if (searchQuery) params.set('search', searchQuery);
       if (filterGender) params.set('gender', filterGender);
       if (filterCurrentStay) params.set('current_stay', filterCurrentStay);
-      if (filterWorkshopInterest) params.set('interested_online_workshop', filterWorkshopInterest);
       if (filterDate) params.set('date', filterDate);
       params.set('export', 'true');
 
@@ -186,7 +216,6 @@ export default function ContactsRegisterAdminPage() {
         'Current Stay',
         'PG Name',
         'Skills',
-        'Online Workshop Interest',
         'Registered At',
       ];
 
@@ -199,8 +228,7 @@ export default function ContactsRegisterAdminPage() {
         `"${r.gender}"`,
         `"${r.current_stay}"`,
         `"${(r.pg_name || 'N/A').replace(/"/g, '""')}"`,
-        `"${(Array.isArray(r.skills) ? r.skills.join('; ') : '').replace(/"/g, '""')}"`,
-        `"${r.interested_online_workshop ? 'Yes' : 'No'}"`,
+        `"${(Array.isArray(r.skills) ? r.skills.map((s) => getSkillName(s)).join('; ') : '').replace(/"/g, '""')}"`,
         `"${formatDate(r.created_at)}"`,
       ]);
 
@@ -247,7 +275,8 @@ export default function ContactsRegisterAdminPage() {
       const skillsArray = editSkillsInput
         .split(',')
         .map((s) => s.trim())
-        .filter(Boolean);
+        .filter(Boolean)
+        .map((s) => nameToIdMap.get(s.toLowerCase()) || s);
 
       const res = await fetch(`/api/contacts-register/${editRecord.id}`, {
         method: 'PATCH',
@@ -261,7 +290,6 @@ export default function ContactsRegisterAdminPage() {
           current_stay: editCurrentStay,
           pg_name: editCurrentStay === 'In Hostel' ? editPgName.trim() : null,
           skills: skillsArray,
-          interested_online_workshop: editWorkshopInterest,
         }),
       });
 
@@ -312,7 +340,6 @@ export default function ContactsRegisterAdminPage() {
     setSearchQuery('');
     setFilterGender('');
     setFilterCurrentStay('');
-    setFilterWorkshopInterest('');
     setFilterDate('');
   };
 
@@ -339,7 +366,14 @@ export default function ContactsRegisterAdminPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => setQrModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-950/60 border border-purple-500/30 text-purple-300 hover:text-white text-xs sm:text-sm font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+          >
+            <QrCode className="w-4 h-4 text-purple-400" />
+            Configure QR Code
+          </button>
           <button
             onClick={handleExportCSV}
             disabled={isExporting || registrations.length === 0}
@@ -352,7 +386,7 @@ export default function ContactsRegisterAdminPage() {
       </div>
 
       {/* ─── SUMMARY STATS CARDS ────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
         {/* Card 1: Total Registrations */}
         <div className="glass-card rounded-2xl p-4 border border-purple-500/20 bg-slate-950/60 flex flex-col justify-between space-y-2">
           <div className="flex items-center justify-between">
@@ -396,31 +430,20 @@ export default function ContactsRegisterAdminPage() {
           </div>
           <p className="text-2xl sm:text-3xl font-black text-indigo-400">{stats.hostel_residents}</p>
         </div>
-
-        {/* Card 5: Online Workshop Interested */}
-        <div className="glass-card rounded-2xl p-4 border border-emerald-500/20 bg-slate-950/60 flex flex-col justify-between space-y-2 col-span-2 lg:col-span-1">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-400">Workshop Interest</span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-950/50 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-              <Laptop className="w-4 h-4" />
-            </div>
-          </div>
-          <p className="text-2xl sm:text-3xl font-black text-emerald-400">{stats.workshop_interested}</p>
-        </div>
       </div>
 
       {/* ─── CONTROLS & FILTER BAR ──────────────────────────────────────── */}
       <div className="glass-card rounded-2xl p-4 sm:p-5 border border-slate-800 bg-slate-950/70 space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Search Input */}
           <div className="relative col-span-1 sm:col-span-2">
-            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by Name, Phone, College, Area..."
-              className="w-full pl-10 pr-9 py-2.5 bg-slate-900/80 border border-slate-800 rounded-xl text-xs sm:text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500/50 transition-all"
+              className="w-full pl-10 pr-9 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs sm:text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500/50 transition-all"
             />
             {searchQuery && (
               <button
@@ -437,7 +460,7 @@ export default function ContactsRegisterAdminPage() {
             <select
               value={filterGender}
               onChange={(e) => setFilterGender(e.target.value)}
-              className="w-full px-3 py-2.5 bg-slate-900/80 border border-slate-800 rounded-xl text-xs sm:text-sm text-slate-200 focus:outline-none focus:border-indigo-500/50 transition-all cursor-pointer"
+              className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs sm:text-sm text-slate-200 focus:outline-none focus:border-indigo-500/50 transition-all cursor-pointer"
             >
               <option value="">All Genders</option>
               <option value="Male">Male</option>
@@ -450,24 +473,11 @@ export default function ContactsRegisterAdminPage() {
             <select
               value={filterCurrentStay}
               onChange={(e) => setFilterCurrentStay(e.target.value)}
-              className="w-full px-3 py-2.5 bg-slate-900/80 border border-slate-800 rounded-xl text-xs sm:text-sm text-slate-200 focus:outline-none focus:border-indigo-500/50 transition-all cursor-pointer"
+              className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs sm:text-sm text-slate-200 focus:outline-none focus:border-indigo-500/50 transition-all cursor-pointer"
             >
               <option value="">All Stay Types</option>
               <option value="With Parents">With Parents</option>
               <option value="In Hostel">In Hostel</option>
-            </select>
-          </div>
-
-          {/* Workshop Interest Filter */}
-          <div>
-            <select
-              value={filterWorkshopInterest}
-              onChange={(e) => setFilterWorkshopInterest(e.target.value)}
-              className="w-full px-3 py-2.5 bg-slate-900/80 border border-slate-800 rounded-xl text-xs sm:text-sm text-slate-200 focus:outline-none focus:border-indigo-500/50 transition-all cursor-pointer"
-            >
-              <option value="">Workshop Interest</option>
-              <option value="Yes">Yes</option>
-              <option value="No">No</option>
             </select>
           </div>
         </div>
@@ -482,11 +492,11 @@ export default function ContactsRegisterAdminPage() {
               type="date"
               value={filterDate}
               onChange={(e) => setFilterDate(e.target.value)}
-              className="px-3 py-1.5 bg-slate-900/80 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-indigo-500/50 transition-all cursor-pointer"
+              className="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-indigo-500/50 transition-all cursor-pointer"
             />
           </div>
 
-          {(searchQuery || filterGender || filterCurrentStay || filterWorkshopInterest || filterDate) && (
+          {(searchQuery || filterGender || filterCurrentStay || filterDate) && (
             <button
               onClick={clearFilters}
               className="text-xs font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1 transition-all cursor-pointer"
@@ -502,7 +512,7 @@ export default function ContactsRegisterAdminPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-slate-800 bg-slate-900/50 text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
+              <tr className="border-b border-slate-800 bg-slate-900/90 text-xs font-black uppercase tracking-wider text-slate-200">
                 <th className="py-3.5 px-4 text-center w-12">S.No.</th>
                 <th className="py-3.5 px-4">Full Name</th>
                 <th className="py-3.5 px-4">Phone Number</th>
@@ -512,29 +522,28 @@ export default function ContactsRegisterAdminPage() {
                 <th className="py-3.5 px-4">Current Stay</th>
                 <th className="py-3.5 px-4">PG Name</th>
                 <th className="py-3.5 px-4">Skills</th>
-                <th className="py-3.5 px-4 text-center">Workshop</th>
                 <th className="py-3.5 px-4">Registered At</th>
                 <th className="py-3.5 px-4 text-center">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60 text-xs sm:text-sm text-slate-200">
+            <tbody className="divide-y divide-slate-800/80 text-xs sm:text-sm text-slate-200">
               {isLoading ? (
                 <tr>
-                  <td colSpan={12} className="py-12 text-center text-slate-500">
+                  <td colSpan={11} className="py-12 text-center text-slate-400 font-medium">
                     <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-indigo-400" />
                     Loading contacts register records...
                   </td>
                 </tr>
               ) : isError ? (
                 <tr>
-                  <td colSpan={12} className="py-12 text-center text-red-400">
+                  <td colSpan={11} className="py-12 text-center text-red-400 font-medium">
                     <AlertCircle className="w-8 h-8 mx-auto mb-2 text-red-400" />
                     {error instanceof Error ? error.message : 'Error loading records'}
                   </td>
                 </tr>
               ) : registrations.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="py-12 text-center text-slate-500">
+                  <td colSpan={11} className="py-12 text-center text-slate-400 font-medium">
                     No contacts register submissions found matching the criteria.
                   </td>
                 </tr>
@@ -544,72 +553,67 @@ export default function ContactsRegisterAdminPage() {
                   return (
                     <tr
                       key={r.id}
-                      className="hover:bg-slate-900/50 transition-colors group"
+                      className="hover:bg-slate-900/60 transition-colors group"
                     >
-                      <td className="py-3.5 px-4 text-center text-slate-500 font-bold text-xs">
+                      <td className="py-3.5 px-4 text-center text-slate-400 font-extrabold text-xs">
                         {serialNo}
                       </td>
-                      <td className="py-3.5 px-4 font-bold text-slate-100">
+                      <td className="py-3.5 px-4 font-extrabold text-slate-100">
                         {r.full_name}
                       </td>
-                      <td className="py-3.5 px-4 font-mono text-xs text-indigo-300">
+                      <td className="py-3.5 px-4 font-mono text-xs text-indigo-300 font-extrabold tracking-wide">
                         {r.phone}
                       </td>
-                      <td className="py-3.5 px-4 max-w-[180px] truncate text-slate-300" title={r.college_name}>
+                      <td className="py-3.5 px-4 max-w-[180px] truncate text-slate-200 font-medium" title={r.college_name}>
                         {r.college_name}
                       </td>
-                      <td className="py-3.5 px-4 max-w-[150px] truncate text-slate-300" title={r.area_of_stay}>
+                      <td className="py-3.5 px-4 max-w-[150px] truncate text-slate-200 font-medium" title={r.area_of_stay}>
                         {r.area_of_stay}
                       </td>
                       <td className="py-3.5 px-4">
-                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-extrabold border ${
+                        <span className={`inline-block px-3 py-0.5 rounded-full text-xs font-extrabold border ${
                           r.gender === 'Male'
-                            ? 'bg-blue-950/60 border-blue-500/30 text-blue-400'
-                            : 'bg-pink-950/60 border-pink-500/30 text-pink-400'
+                            ? 'bg-blue-950/80 border-blue-400/50 text-blue-300'
+                            : 'bg-pink-950/80 border-pink-400/50 text-pink-300'
                         }`}>
                           {r.gender}
                         </span>
                       </td>
                       <td className="py-3.5 px-4">
-                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${
+                        <span className={`inline-block px-3 py-0.5 rounded-full text-xs font-bold border ${
                           r.current_stay === 'In Hostel'
-                            ? 'bg-indigo-950/60 border-indigo-500/30 text-indigo-300'
-                            : 'bg-slate-900 border-slate-800 text-slate-400'
+                            ? 'bg-indigo-950/80 border-indigo-400/50 text-indigo-300'
+                            : 'bg-slate-900 border-slate-700 text-slate-300'
                         }`}>
                           {r.current_stay}
                         </span>
                       </td>
-                      <td className="py-3.5 px-4 max-w-[120px] truncate text-slate-400">
+                      <td className="py-3.5 px-4 max-w-[120px] truncate text-slate-300 font-medium">
                         {r.current_stay === 'In Hostel' ? r.pg_name || '—' : '—'}
                       </td>
-                      <td className="py-3.5 px-4 max-w-[160px]">
+                      <td className="py-3.5 px-4 max-w-[200px]">
                         {Array.isArray(r.skills) && r.skills.length > 0 ? (
                           <div className="flex flex-wrap gap-1">
                             {r.skills.slice(0, 2).map((s, i) => (
-                              <span key={i} className="px-2 py-0.5 rounded bg-purple-950/40 border border-purple-500/20 text-purple-300 text-[10px] font-semibold">
-                                {s}
+                              <span
+                                key={i}
+                                className="px-2 py-0.5 rounded bg-purple-950/80 border border-purple-400/40 text-purple-200 text-[11px] font-bold max-w-[130px] truncate"
+                                title={getSkillName(s)}
+                              >
+                                {getSkillName(s)}
                               </span>
                             ))}
                             {r.skills.length > 2 && (
-                              <span className="px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 text-[10px] font-bold">
+                              <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-300 text-[10px] font-bold">
                                 +{r.skills.length - 2}
                               </span>
                             )}
                           </div>
                         ) : (
-                          <span className="text-slate-600 text-xs">—</span>
+                          <span className="text-slate-500 text-xs">—</span>
                         )}
                       </td>
-                      <td className="py-3.5 px-4 text-center">
-                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
-                          r.interested_online_workshop
-                            ? 'bg-emerald-950/60 border-emerald-500/30 text-emerald-400'
-                            : 'bg-slate-900 border-slate-800 text-slate-500'
-                        }`}>
-                          {r.interested_online_workshop ? 'Yes' : 'No'}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 text-xs text-slate-400 whitespace-nowrap">
+                      <td className="py-3.5 px-4 text-xs text-slate-300 font-medium whitespace-nowrap">
                         {formatDate(r.created_at)}
                       </td>
                       <td className="py-3.5 px-4 text-center">
@@ -646,7 +650,7 @@ export default function ContactsRegisterAdminPage() {
         </div>
 
         {/* ─── PAGINATION CONTROLS ────────────────────────────────────────── */}
-        <div className="px-4 py-3.5 border-t border-slate-800 bg-slate-900/40 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400">
+        <div className="px-4 py-3.5 border-t border-slate-800 bg-slate-900/40 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-300">
           <div className="flex items-center gap-3">
             <span>
               Showing {registrations.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} to{' '}
@@ -655,7 +659,7 @@ export default function ContactsRegisterAdminPage() {
             <select
               value={itemsPerPage}
               onChange={(e) => setItemsPerPage(Number(e.target.value))}
-              className="px-2 py-1 bg-slate-900 border border-slate-800 rounded text-slate-300 focus:outline-none text-xs cursor-pointer"
+              className="px-2 py-1 bg-slate-900 border border-slate-800 rounded text-slate-200 focus:outline-none text-xs cursor-pointer font-semibold"
             >
               <option value={10}>10 per page</option>
               <option value={20}>20 per page</option>
@@ -668,17 +672,17 @@ export default function ContactsRegisterAdminPage() {
             <button
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage <= 1}
-              className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <span className="font-semibold text-slate-200">
+            <span className="font-bold text-slate-200">
               Page {currentPage} of {totalPages}
             </span>
             <button
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage >= totalPages}
-              className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
@@ -694,85 +698,87 @@ export default function ContactsRegisterAdminPage() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="glass-card rounded-2xl p-6 sm:p-8 w-full max-w-lg relative border border-purple-500/20 bg-slate-950 space-y-6 shadow-2xl"
+              className="glass-card rounded-2xl p-6 sm:p-8 w-full max-w-lg relative border border-purple-500/30 bg-slate-950 space-y-6 shadow-2xl"
             >
               <button
                 onClick={() => setViewRecord(null)}
-                className="absolute top-4 right-4 text-slate-500 hover:text-slate-100 cursor-pointer"
+                className="absolute top-4 right-4 text-slate-400 hover:text-slate-100 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
 
               <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
-                <div className="w-10 h-10 rounded-xl bg-purple-950/60 border border-purple-500/30 flex items-center justify-center text-purple-300">
+                <div className="w-10 h-10 rounded-xl bg-purple-950/80 border border-purple-500/40 flex items-center justify-center text-purple-300">
                   <BookUser className="w-5 h-5" />
                 </div>
                 <div>
                   <h2 className="text-lg font-extrabold text-slate-100">{viewRecord.full_name}</h2>
-                  <p className="text-xs text-indigo-400 font-mono">{viewRecord.phone}</p>
+                  <p className="text-xs text-indigo-300 font-mono font-bold tracking-wide">{viewRecord.phone}</p>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4 text-xs sm:text-sm">
                 <div>
-                  <span className="text-slate-500 font-semibold block text-[10px] uppercase">College / Company</span>
-                  <span className="text-slate-200 font-bold">{viewRecord.college_name}</span>
+                  <span className="text-slate-400 font-bold block text-[10px] uppercase">College / Company</span>
+                  <span className="text-slate-100 font-extrabold">{viewRecord.college_name}</span>
                 </div>
 
                 <div>
-                  <span className="text-slate-500 font-semibold block text-[10px] uppercase">Area of Stay</span>
-                  <span className="text-slate-200 font-bold">{viewRecord.area_of_stay}</span>
+                  <span className="text-slate-400 font-bold block text-[10px] uppercase">Area of Stay</span>
+                  <span className="text-slate-100 font-extrabold">{viewRecord.area_of_stay}</span>
                 </div>
 
                 <div>
-                  <span className="text-slate-500 font-semibold block text-[10px] uppercase">Gender</span>
-                  <span className="text-slate-200 font-bold">{viewRecord.gender}</span>
+                  <span className="text-slate-400 font-bold block text-[10px] uppercase">Gender</span>
+                  <span className="text-slate-100 font-extrabold">{viewRecord.gender}</span>
                 </div>
 
                 <div>
-                  <span className="text-slate-500 font-semibold block text-[10px] uppercase">Current Stay</span>
-                  <span className="text-slate-200 font-bold">{viewRecord.current_stay}</span>
+                  <span className="text-slate-400 font-bold block text-[10px] uppercase">Current Stay</span>
+                  <span className="text-slate-100 font-extrabold">{viewRecord.current_stay}</span>
                 </div>
 
                 {viewRecord.current_stay === 'In Hostel' && (
                   <div className="col-span-2">
-                    <span className="text-slate-500 font-semibold block text-[10px] uppercase">PG Name</span>
-                    <span className="text-indigo-300 font-bold">{viewRecord.pg_name || 'N/A'}</span>
+                    <span className="text-slate-400 font-bold block text-[10px] uppercase">PG Name</span>
+                    <span className="text-indigo-300 font-extrabold">{viewRecord.pg_name || 'N/A'}</span>
                   </div>
                 )}
 
                 <div className="col-span-2">
-                  <span className="text-slate-500 font-semibold block text-[10px] uppercase mb-1">Skills</span>
+                  <span className="text-slate-400 font-bold block text-[10px] uppercase mb-1.5">Skills</span>
                   {Array.isArray(viewRecord.skills) && viewRecord.skills.length > 0 ? (
                     <div className="flex flex-wrap gap-1.5">
                       {viewRecord.skills.map((s, idx) => (
-                        <span key={idx} className="px-2.5 py-1 rounded-md bg-purple-950/50 border border-purple-500/30 text-purple-300 text-xs font-semibold">
-                          {s}
+                        <span key={idx} className="px-2.5 py-1 rounded-md bg-purple-950/80 border border-purple-400/40 text-purple-200 text-xs font-bold">
+                          {getSkillName(s)}
                         </span>
                       ))}
                     </div>
                   ) : (
-                    <span className="text-slate-500">None specified</span>
+                    <span className="text-slate-500 font-medium">None specified</span>
                   )}
                 </div>
 
-                <div>
-                  <span className="text-slate-500 font-semibold block text-[10px] uppercase">Online Workshop</span>
-                  <span className={`font-bold ${viewRecord.interested_online_workshop ? 'text-emerald-400' : 'text-slate-400'}`}>
-                    {viewRecord.interested_online_workshop ? 'Yes (Interested)' : 'No'}
-                  </span>
-                </div>
+                {viewRecord.interested_online_workshop !== undefined && (
+                  <div>
+                    <span className="text-slate-400 font-bold block text-[10px] uppercase">Online Workshop (Historical)</span>
+                    <span className={`font-bold ${viewRecord.interested_online_workshop ? 'text-emerald-400' : 'text-slate-400'}`}>
+                      {viewRecord.interested_online_workshop ? 'Yes' : 'No'}
+                    </span>
+                  </div>
+                )}
 
                 <div>
-                  <span className="text-slate-500 font-semibold block text-[10px] uppercase">Registered At</span>
-                  <span className="text-slate-300 font-medium">{formatDate(viewRecord.created_at)}</span>
+                  <span className="text-slate-400 font-bold block text-[10px] uppercase">Registered At</span>
+                  <span className="text-slate-200 font-medium">{formatDate(viewRecord.created_at)}</span>
                 </div>
               </div>
 
               <div className="pt-4 border-t border-slate-800 flex justify-end">
                 <button
                   onClick={() => setViewRecord(null)}
-                  className="px-4 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 text-xs font-bold transition-all cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-200 text-xs font-bold transition-all cursor-pointer"
                 >
                   Close
                 </button>
@@ -794,7 +800,7 @@ export default function ContactsRegisterAdminPage() {
             >
               <button
                 onClick={() => setEditRecord(null)}
-                className="absolute top-4 right-4 text-slate-500 hover:text-slate-100 cursor-pointer"
+                className="absolute top-4 right-4 text-slate-400 hover:text-slate-100 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -813,7 +819,7 @@ export default function ContactsRegisterAdminPage() {
 
               <div className="space-y-3.5 text-xs sm:text-sm">
                 <div>
-                  <label className="text-slate-400 font-semibold block mb-1">Full Name *</label>
+                  <label className="text-slate-300 font-bold block mb-1">Full Name *</label>
                   <input
                     type="text"
                     value={editFullName}
@@ -823,7 +829,7 @@ export default function ContactsRegisterAdminPage() {
                 </div>
 
                 <div>
-                  <label className="text-slate-400 font-semibold block mb-1">Mobile Number * (10 Digits)</label>
+                  <label className="text-slate-300 font-bold block mb-1">Mobile Number * (10 Digits)</label>
                   <input
                     type="text"
                     value={editPhone}
@@ -834,7 +840,7 @@ export default function ContactsRegisterAdminPage() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-slate-400 font-semibold block mb-1">College / Company *</label>
+                    <label className="text-slate-300 font-bold block mb-1">College / Company *</label>
                     <input
                       type="text"
                       value={editCollegeName}
@@ -844,7 +850,7 @@ export default function ContactsRegisterAdminPage() {
                   </div>
 
                   <div>
-                    <label className="text-slate-400 font-semibold block mb-1">Area of Stay *</label>
+                    <label className="text-slate-300 font-bold block mb-1">Area of Stay *</label>
                     <input
                       type="text"
                       value={editAreaOfStay}
@@ -856,7 +862,7 @@ export default function ContactsRegisterAdminPage() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-slate-400 font-semibold block mb-1">Gender *</label>
+                    <label className="text-slate-300 font-bold block mb-1">Gender *</label>
                     <select
                       value={editGender}
                       onChange={(e) => setEditGender(e.target.value as 'Male' | 'Female')}
@@ -868,7 +874,7 @@ export default function ContactsRegisterAdminPage() {
                   </div>
 
                   <div>
-                    <label className="text-slate-400 font-semibold block mb-1">Current Stay *</label>
+                    <label className="text-slate-300 font-bold block mb-1">Current Stay *</label>
                     <select
                       value={editCurrentStay}
                       onChange={(e) => setEditCurrentStay(e.target.value as 'With Parents' | 'In Hostel')}
@@ -882,7 +888,7 @@ export default function ContactsRegisterAdminPage() {
 
                 {editCurrentStay === 'In Hostel' && (
                   <div>
-                    <label className="text-slate-400 font-semibold block mb-1">PG Name *</label>
+                    <label className="text-slate-300 font-bold block mb-1">PG Name *</label>
                     <input
                       type="text"
                       value={editPgName}
@@ -894,27 +900,14 @@ export default function ContactsRegisterAdminPage() {
                 )}
 
                 <div>
-                  <label className="text-slate-400 font-semibold block mb-1">Skills (Comma-separated)</label>
+                  <label className="text-slate-300 font-bold block mb-1">Skills (Comma-separated)</label>
                   <input
                     type="text"
                     value={editSkillsInput}
                     onChange={(e) => setEditSkillsInput(e.target.value)}
-                    placeholder="e.g. Communication, Event Management, Singing"
+                    placeholder="e.g. Sound & Stage, Pujari / Alankaram, Harinam"
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500/50"
                   />
-                </div>
-
-                <div className="flex items-center gap-2 pt-1">
-                  <input
-                    type="checkbox"
-                    id="editWorkshopCheckbox"
-                    checked={editWorkshopInterest}
-                    onChange={(e) => setEditWorkshopInterest(e.target.checked)}
-                    className="w-4 h-4 rounded border-slate-800 text-indigo-600 focus:ring-0 cursor-pointer"
-                  />
-                  <label htmlFor="editWorkshopCheckbox" className="text-xs font-semibold text-slate-200 cursor-pointer">
-                    Interested in Online Workshop
-                  </label>
                 </div>
               </div>
 
@@ -953,7 +946,7 @@ export default function ContactsRegisterAdminPage() {
             >
               <button
                 onClick={() => setDeleteRecordId(null)}
-                className="absolute top-4 right-4 text-slate-500 hover:text-slate-100 cursor-pointer"
+                className="absolute top-4 right-4 text-slate-400 hover:text-slate-100 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -991,6 +984,14 @@ export default function ContactsRegisterAdminPage() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* ─── QR CONFIGURATION MODAL ─────────────────────────────────────── */}
+      <QRModal
+        isOpen={qrModalOpen}
+        onClose={() => setQrModalOpen(false)}
+        overrideUrl="/contacts-register"
+        title="Contacts Register QR Code"
+      />
     </div>
   );
 }

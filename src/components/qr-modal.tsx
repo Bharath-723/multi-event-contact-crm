@@ -9,9 +9,11 @@ import { useFestival } from '@/lib/contexts/FestivalContext';
 interface QRModalProps {
   isOpen: boolean;
   onClose: () => void;
+  overrideUrl?: string;
+  title?: string;
 }
 
-export default function QRModal({ isOpen, onClose }: QRModalProps) {
+export default function QRModal({ isOpen, onClose, overrideUrl, title }: QRModalProps) {
   const [qrUrl, setQrUrl] = useState<string>('');
   const [qrPngUrl, setQrPngUrl] = useState('');
   const [qrSvgString, setQrSvgString] = useState('');
@@ -55,14 +57,19 @@ export default function QRModal({ isOpen, onClose }: QRModalProps) {
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (isOpen) {
-      const isKrishnashtami = selectedFestival?.slug === 'krishnashtami-2026';
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
-      const fallbackUrl = isKrishnashtami ? `${baseUrl}/krishnashtami-complete` : `${baseUrl}/feedback`;
-      const url = selectedFestival?.registration_url || fallbackUrl;
+      let url = '';
+      if (overrideUrl) {
+        url = overrideUrl.startsWith('http') ? overrideUrl : `${baseUrl}${overrideUrl.startsWith('/') ? '' : '/'}${overrideUrl}`;
+      } else {
+        const isKrishnashtami = selectedFestival?.slug === 'krishnashtami-2026';
+        const fallbackUrl = isKrishnashtami ? `${baseUrl}/krishnashtami-complete` : `${baseUrl}/feedback`;
+        url = selectedFestival?.registration_url || fallbackUrl;
+      }
       setQrUrl(url);
       generateQRCodes(url);
     }
-  }, [isOpen, selectedFestival]);
+  }, [isOpen, selectedFestival, overrideUrl]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleCopyLink = () => {
@@ -185,7 +192,7 @@ export default function QRModal({ isOpen, onClose }: QRModalProps) {
         <div className="flex justify-between items-center mb-4 shrink-0">
           <h3 className="font-bold text-lg text-slate-100 flex items-center gap-2">
             <QrCode className="w-5 h-5 text-purple-400" />
-            Registration QR Code
+            {title || 'Registration QR Code'}
           </h3>
           <button
             onClick={onClose}

@@ -8,7 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import confetti from 'canvas-confetti';
 import {
   User, Phone, CheckCircle2,
-  ChevronDown, ShieldAlert, Sparkles, Loader2, Home, Laptop, MapPin, Building
+  ChevronDown, ShieldAlert, Sparkles, Loader2, Home, MapPin, Building
 } from 'lucide-react';
 import { contactsRegisterSchema, ContactsRegisterSchemaInput } from '@/lib/validation';
 import { supabase } from '@/lib/supabase';
@@ -91,7 +91,6 @@ export default function ContactsRegisterForm() {
       currentStay: undefined,
       pgName: '',
       skills: [],
-      interestedOnlineWork: undefined,
     } as unknown as ContactsRegisterSchemaInput,
   });
 
@@ -211,7 +210,6 @@ export default function ContactsRegisterForm() {
           currentStay: undefined,
           pgName: '',
           skills: [],
-          interestedOnlineWork: undefined,
         } as unknown as ContactsRegisterSchemaInput);
         setAreaSearch('');
         return;
@@ -242,7 +240,7 @@ export default function ContactsRegisterForm() {
   const calculateProgress = () => {
     const values = getValues();
     let completed = 0;
-    let total = 7;
+    let total = 6;
 
     if (values.fullName && values.fullName.trim().length >= 2) completed++;
     if (values.phone && values.phone.length === 10) completed++;
@@ -262,7 +260,6 @@ export default function ContactsRegisterForm() {
         if (values.pgName && values.pgName.trim().length >= 2) completed++;
       }
     }
-    if (values.interestedOnlineWork) completed++;
 
     return Math.min(Math.round((completed / total) * 100), 100);
   };
@@ -851,48 +848,6 @@ export default function ContactsRegisterForm() {
                 })}
               </div>
             )}
-          </div>
-
-          {/* ─── SECTION 3: ONLINE WORKSHOP ─── */}
-          <div className="space-y-4 pt-2" style={{ borderTop: '1px solid #f1f5f9' }}>
-            <h3 className="text-xs font-bold tracking-wider uppercase" style={{ color: '#4338ca' }}>
-              3. Online Workshop
-            </h3>
-
-            <div className="space-y-2">
-              <label className="flex items-center gap-1.5 text-xs font-bold" style={{ color: '#334155' }}>
-                <Laptop className="w-4 h-4" style={{ color: '#4f46e5' }} />
-                Interested in Online Workshop? <span style={{ color: '#b91c1c' }}>*</span>
-              </label>
-              <div className="grid grid-cols-2 gap-4">
-                {(['Yes', 'No'] as const).map((opt) => {
-                  const selected = watchedFields.interestedOnlineWork === opt;
-                  return (
-                    <label
-                      key={opt}
-                      className="flex items-center justify-center gap-2.5 py-3 rounded-xl font-bold text-base cursor-pointer transition-all"
-                      style={{
-                        backgroundColor: selected ? '#eef2ff' : '#f8fafc',
-                        border: selected ? '1.5px solid #4f46e5' : '1.5px solid #cbd5e1',
-                        color: selected ? '#3730a3' : '#475569',
-                        boxShadow: selected ? '0 0 0 2px rgba(79,70,229,0.12)' : 'none',
-                      }}
-                    >
-                      <input
-                        type="radio"
-                        value={opt}
-                        className="sr-only"
-                        {...register('interestedOnlineWork')}
-                      />
-                      <span>{opt}</span>
-                    </label>
-                  );
-                })}
-              </div>
-              {errors.interestedOnlineWork && (
-                <p className="text-xs font-semibold mt-1 pl-1" style={{ color: '#b91c1c' }}>{errors.interestedOnlineWork.message}</p>
-              )}
-            </div>
           </div>
 
           {/* ── Submit Button ── */}

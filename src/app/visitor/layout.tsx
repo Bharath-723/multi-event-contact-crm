@@ -30,8 +30,7 @@ export default function VisitorLayout({
             </div>
           </div>
 
-          {/* Festival Selector — same component used in AdminShell */}
-          <FestivalSelector />
+
 
           <div className="flex items-center gap-4">
             <ThemeToggle />
