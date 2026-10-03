@@ -8,11 +8,16 @@ import { useQuery } from '@tanstack/react-query';
 import confetti from 'canvas-confetti';
 import {
   User, Phone, CheckCircle2,
-  ChevronDown, ShieldAlert, Sparkles, Loader2, Home, Laptop, GraduationCap, MapPin, Search, Building
+  ChevronDown, ShieldAlert, Sparkles, Loader2, Home, Laptop, MapPin, Building
 } from 'lucide-react';
 import { contactsRegisterSchema, ContactsRegisterSchemaInput } from '@/lib/validation';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
+
+// ─── Light-theme design tokens (hardcoded — immune to ThemeProvider remapping) ─
+// bg:     #f8fafc  surface: #ffffff  text: #172033    heading: #111827
+// label:  #334155  placeholder: #64748b  border: #94a3b8
+// primary:#4f46e5  error: #b91c1c
 
 const LOCAL_STORAGE_KEY = 'contacts_register_draft';
 
@@ -24,6 +29,19 @@ const ALLOWED_AREAS = [
   'Moinabad',
   'Banjara Hills'
 ].sort();
+
+// ─── Shared input class string — hardcoded, ThemeProvider-immune ──────────────
+const inputCls =
+  'w-full py-3 rounded-xl border text-[#172033] placeholder-[#64748b] ' +
+  'bg-white focus:outline-none focus:ring-2 focus:ring-[#4f46e5]/25 ' +
+  'focus:border-[#4f46e5] transition-all text-base';
+
+const inputPl11 = `${inputCls} pl-11 pr-4 border-[#94a3b8]`;
+const inputPl11Pr10 = `${inputCls} pl-11 pr-10 border-[#94a3b8]`;
+const selectCls =
+  'w-full px-4 py-3 rounded-xl border border-[#94a3b8] bg-white ' +
+  'text-[#172033] appearance-none cursor-pointer ' +
+  'focus:outline-none focus:ring-2 focus:ring-[#4f46e5]/25 focus:border-[#4f46e5] transition-all text-base';
 
 export default function ContactsRegisterForm() {
   const router = useRouter();
@@ -338,35 +356,47 @@ export default function ContactsRegisterForm() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-indigo-900/90 backdrop-blur-md text-center p-6 text-white"
+            className="fixed inset-0 z-50 flex flex-col items-center justify-center backdrop-blur-md text-center p-6"
+            style={{ backgroundColor: 'rgba(79,70,229,0.85)' }}
           >
-            <div className="relative max-w-sm flex flex-col items-center p-8 bg-white text-slate-900 rounded-3xl shadow-2xl border border-slate-100">
-              <h2 className="text-xl font-bold text-slate-900 mb-2 tracking-wide">
+            <div className="relative max-w-sm flex flex-col items-center p-8 bg-white rounded-3xl shadow-2xl border border-[#e2e8f0]">
+              <h2 className="text-xl font-bold text-[#111827] mb-2 tracking-wide">
                 Submitting your registration...
               </h2>
-              <p className="text-slate-600 text-sm mb-6 max-w-xs">
+              <p className="text-[#475569] text-sm mb-6 max-w-xs">
                 Please wait...
               </p>
               <div className="relative w-12 h-12">
-                <div className="absolute inset-0 rounded-full border-4 border-slate-200" />
-                <div className="absolute inset-0 rounded-full border-4 border-t-indigo-600 animate-spin" />
+                <div className="absolute inset-0 rounded-full border-4 border-[#e2e8f0]" />
+                <div className="absolute inset-0 rounded-full border-4 border-t-[#4f46e5] animate-spin" />
               </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <div className="bg-white rounded-3xl p-6 sm:p-10 relative overflow-hidden border border-slate-200/80 shadow-2xl text-slate-900">
-        {/* Decorative Light Top Accent */}
+      {/* ── Main Form Card ── */}
+      <div
+        className="rounded-3xl p-6 sm:p-10 relative overflow-hidden shadow-2xl"
+        style={{
+          backgroundColor: '#ffffff',
+          border: '1px solid #e2e8f0',
+          color: '#172033',
+        }}
+      >
+        {/* Decorative Top Accent Bar */}
         <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
 
-        {/* Form Progress bar */}
+        {/* ── Progress Bar ── */}
         <div className="mb-6">
-          <div className="flex justify-between items-center text-xs text-slate-600 mb-2 font-medium">
+          <div className="flex justify-between items-center text-xs mb-2 font-medium" style={{ color: '#334155' }}>
             <span>Form Completion</span>
-            <span className="font-bold text-indigo-600">{progress}%</span>
+            <span className="font-bold" style={{ color: '#4f46e5' }}>{progress}%</span>
           </div>
-          <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+          <div
+            className="w-full h-2.5 rounded-full overflow-hidden"
+            style={{ backgroundColor: '#f1f5f9', border: '1px solid #e2e8f0' }}
+          >
             <motion.div
               className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"
               initial={{ width: 0 }}
@@ -376,193 +406,212 @@ export default function ContactsRegisterForm() {
           </div>
         </div>
 
-        {/* Header Section */}
+        {/* ── Header ── */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-semibold mb-3">
-            <Sparkles className="w-3.5 h-3.5 text-indigo-600" /> Registration Portal
+          <div
+            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold mb-3"
+            style={{ backgroundColor: '#eef2ff', border: '1px solid #c7d2fe', color: '#4338ca' }}
+          >
+            <Sparkles className="w-3.5 h-3.5" style={{ color: '#4f46e5' }} />
+            Registration Portal
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 mb-2">
+          <h1
+            className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-2"
+            style={{ color: '#111827' }}
+          >
             Contacts Register
           </h1>
-          <p className="text-slate-600 text-sm sm:text-base">
+          <p className="text-sm sm:text-base" style={{ color: '#475569' }}>
             Please fill in your details below.
           </p>
         </div>
 
-        {/* Error Alert Box */}
+        {/* ── Error Alert ── */}
         {submissionError && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mb-6 p-4 rounded-2xl bg-red-50 border border-red-200 flex gap-3 text-red-800 text-sm shadow-sm"
+            className="mb-6 p-4 rounded-2xl flex gap-3 text-sm shadow-sm"
+            style={{ backgroundColor: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b' }}
           >
-            <ShieldAlert className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+            <ShieldAlert className="w-5 h-5 shrink-0 mt-0.5" style={{ color: '#b91c1c' }} />
             <div>
-              <p className="font-bold text-red-900">Submission Blocked</p>
-              <p className="text-red-700 mt-0.5 whitespace-pre-line font-medium">{submissionError}</p>
+              <p className="font-bold" style={{ color: '#7f1d1d' }}>Submission Blocked</p>
+              <p className="mt-0.5 whitespace-pre-line font-medium" style={{ color: '#991b1b' }}>{submissionError}</p>
             </div>
           </motion.div>
         )}
 
-        {/* Form Body */}
+        {/* ── Form Body ── */}
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
 
-          {/* --- SECTION 1: PERSONAL & LOCATION DETAILS --- */}
+          {/* ─── SECTION 1: PERSONAL & LOCATION ─── */}
           <div className="space-y-4">
-            <h3 className="text-xs font-bold tracking-wider text-indigo-600 uppercase">
-              1. Personal & Location Details
+            <h3
+              className="text-xs font-bold tracking-wider uppercase"
+              style={{ color: '#4338ca' }}
+            >
+              1. Personal &amp; Location Details
             </h3>
 
-            {/* Name Input */}
+            {/* Full Name */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                Full Name <span className="text-red-500">*</span>
+              <label className="block text-xs font-bold mb-1.5" style={{ color: '#334155' }}>
+                Full Name <span style={{ color: '#b91c1c' }}>*</span>
               </label>
               <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
-                  <User className="w-5 h-5" />
+                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                  <User className="w-5 h-5" style={{ color: '#94a3b8' }} />
                 </span>
                 <input
                   type="text"
                   {...register('fullName')}
                   placeholder="Enter Full Name *"
-                  className="w-full pl-11 pr-4 py-3 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 text-base placeholder-slate-400 focus:bg-white focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600/20 transition-all"
+                  className={inputPl11}
+                  style={{ color: '#172033', backgroundColor: '#ffffff', borderColor: errors.fullName ? '#b91c1c' : '#94a3b8' }}
                   aria-invalid={errors.fullName ? 'true' : 'false'}
                 />
               </div>
               {errors.fullName && (
-                <p className="text-red-600 text-xs font-semibold mt-1 pl-1">{errors.fullName.message}</p>
+                <p className="text-xs font-semibold mt-1 pl-1" style={{ color: '#b91c1c' }}>{errors.fullName.message}</p>
               )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Phone Input */}
+              {/* Phone */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Mobile Number <span className="text-red-500">*</span>
+                <label className="block text-xs font-bold mb-1.5" style={{ color: '#334155' }}>
+                  Mobile Number <span style={{ color: '#b91c1c' }}>*</span>
                 </label>
                 <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
-                    <Phone className="w-5 h-5" />
+                  <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                    <Phone className="w-5 h-5" style={{ color: '#94a3b8' }} />
                   </span>
                   <input
                     type="tel"
                     maxLength={10}
                     {...register('phone')}
                     placeholder="10 digit mobile number *"
-                    className="w-full pl-11 pr-10 py-3 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 text-base placeholder-slate-400 focus:bg-white focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600/20 transition-all"
+                    className={inputPl11Pr10}
+                    style={{ color: '#172033', backgroundColor: '#ffffff', borderColor: (errors.phone || duplicateWarning) ? '#b91c1c' : '#94a3b8' }}
                     aria-invalid={errors.phone || Boolean(duplicateWarning) ? 'true' : 'false'}
                   />
                   {isCheckingDuplicate && (
                     <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center">
-                      <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
+                      <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#4f46e5' }} />
                     </span>
                   )}
                 </div>
                 {errors.phone && (
-                  <p className="text-red-600 text-xs font-semibold mt-1 pl-1">{errors.phone.message}</p>
+                  <p className="text-xs font-semibold mt-1 pl-1" style={{ color: '#b91c1c' }}>{errors.phone.message}</p>
                 )}
                 {duplicateWarning && (
-                  <div className="mt-2 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold flex items-start gap-2">
-                    <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div
+                    className="mt-2 p-3 rounded-xl text-xs font-semibold flex items-start gap-2"
+                    style={{ backgroundColor: '#fffbeb', border: '1px solid #fde68a', color: '#92400e' }}
+                  >
+                    <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" style={{ color: '#b45309' }} />
                     <span>{duplicateWarning}</span>
                   </div>
                 )}
               </div>
 
-              {/* Gender Dropdown */}
+              {/* Gender */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Gender <span className="text-red-500">*</span>
+                <label className="block text-xs font-bold mb-1.5" style={{ color: '#334155' }}>
+                  Gender <span style={{ color: '#b91c1c' }}>*</span>
                 </label>
                 <div className="relative">
                   <select
                     {...register('gender')}
-                    className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 text-base appearance-none cursor-pointer focus:bg-white focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600/20 transition-all"
+                    className={selectCls}
+                    style={{ color: '#172033', backgroundColor: '#ffffff', borderColor: errors.gender ? '#b91c1c' : '#94a3b8' }}
                     aria-invalid={errors.gender ? 'true' : 'false'}
                     defaultValue=""
                   >
-                    <option value="" disabled className="text-slate-400">Select Gender *</option>
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
+                    <option value="" disabled style={{ color: '#64748b', backgroundColor: '#ffffff' }}>Select Gender *</option>
+                    <option value="Male" style={{ color: '#172033', backgroundColor: '#ffffff' }}>Male</option>
+                    <option value="Female" style={{ color: '#172033', backgroundColor: '#ffffff' }}>Female</option>
                   </select>
-                  <span className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-slate-400">
-                    <ChevronDown className="w-5 h-5" />
+                  <span className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
+                    <ChevronDown className="w-5 h-5" style={{ color: '#64748b' }} />
                   </span>
                 </div>
                 {errors.gender && (
-                  <p className="text-red-600 text-xs font-semibold mt-1 pl-1">{errors.gender.message}</p>
+                  <p className="text-xs font-semibold mt-1 pl-1" style={{ color: '#b91c1c' }}>{errors.gender.message}</p>
                 )}
               </div>
             </div>
 
-            {/* College / Company Selection */}
+            {/* College / Company */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                College / Company <span className="text-red-500">*</span>
+              <label className="block text-xs font-bold mb-1.5" style={{ color: '#334155' }}>
+                College / Company <span style={{ color: '#b91c1c' }}>*</span>
               </label>
               <div className="relative">
                 <select
                   {...register('collegeName')}
-                  className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 text-base appearance-none cursor-pointer focus:bg-white focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600/20 transition-all"
+                  className={selectCls}
+                  style={{ color: '#172033', backgroundColor: '#ffffff', borderColor: errors.collegeName ? '#b91c1c' : '#94a3b8' }}
                   aria-invalid={errors.collegeName ? 'true' : 'false'}
                   defaultValue=""
                 >
-                  <option value="" disabled className="text-slate-400">Select College / Company *</option>
-                  <option value="CBIT">CBIT</option>
-                  <option value="MGIT">MGIT</option>
-                  <option value="VASV">VASV</option>
-                  <option value="JBIT">JBIT</option>
-                  <option value="VJIT">VJIT</option>
-                  <option value="VBIT">VBIT</option>
-                  <option value="NIAT">NIAT</option>
-                  <option value="Other">Other / Enter Name</option>
+                  <option value="" disabled style={{ color: '#64748b', backgroundColor: '#ffffff' }}>Select College / Company *</option>
+                  <option value="CBIT" style={{ color: '#172033', backgroundColor: '#ffffff' }}>CBIT</option>
+                  <option value="MGIT" style={{ color: '#172033', backgroundColor: '#ffffff' }}>MGIT</option>
+                  <option value="VASV" style={{ color: '#172033', backgroundColor: '#ffffff' }}>VASV</option>
+                  <option value="JBIT" style={{ color: '#172033', backgroundColor: '#ffffff' }}>JBIT</option>
+                  <option value="VJIT" style={{ color: '#172033', backgroundColor: '#ffffff' }}>VJIT</option>
+                  <option value="VBIT" style={{ color: '#172033', backgroundColor: '#ffffff' }}>VBIT</option>
+                  <option value="NIAT" style={{ color: '#172033', backgroundColor: '#ffffff' }}>NIAT</option>
+                  <option value="Other" style={{ color: '#172033', backgroundColor: '#ffffff' }}>Other / Enter Name</option>
                 </select>
-                <span className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-slate-400">
-                  <ChevronDown className="w-5 h-5" />
+                <span className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
+                  <ChevronDown className="w-5 h-5" style={{ color: '#64748b' }} />
                 </span>
               </div>
               {errors.collegeName && (
-                <p className="text-red-600 text-xs font-semibold mt-1 pl-1">{errors.collegeName.message}</p>
+                <p className="text-xs font-semibold mt-1 pl-1" style={{ color: '#b91c1c' }}>{errors.collegeName.message}</p>
               )}
             </div>
 
-            {/* Manual Custom College Input (when Other selected) */}
+            {/* Custom College Name (when Other selected) */}
             {watchedFields.collegeName === 'Other' && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
               >
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Enter College / Company Name <span className="text-red-500">*</span>
+                <label className="block text-xs font-bold mb-1.5" style={{ color: '#334155' }}>
+                  Enter College / Company Name <span style={{ color: '#b91c1c' }}>*</span>
                 </label>
                 <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
-                    <Building className="w-5 h-5" />
+                  <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                    <Building className="w-5 h-5" style={{ color: '#94a3b8' }} />
                   </span>
                   <input
                     type="text"
                     {...register('customCollegeName')}
                     placeholder="Enter College or Company Name *"
-                    className="w-full pl-11 pr-4 py-3 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 text-base placeholder-slate-400 focus:bg-white focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600/20 transition-all"
+                    className={inputPl11}
+                    style={{ color: '#172033', backgroundColor: '#ffffff', borderColor: errors.customCollegeName ? '#b91c1c' : '#94a3b8' }}
                     aria-invalid={errors.customCollegeName ? 'true' : 'false'}
                   />
                 </div>
                 {errors.customCollegeName && (
-                  <p className="text-red-600 text-xs font-semibold mt-1 pl-1">{errors.customCollegeName.message}</p>
+                  <p className="text-xs font-semibold mt-1 pl-1" style={{ color: '#b91c1c' }}>{errors.customCollegeName.message}</p>
                 )}
               </motion.div>
             )}
 
-            {/* Area of Stay (Location API + Searchable Autocomplete + Manual Entry) */}
+            {/* Area of Stay */}
             <div className="relative" ref={areaDropdownRef}>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                Area of Stay <span className="text-red-500">*</span>
+              <label className="block text-xs font-bold mb-1.5" style={{ color: '#334155' }}>
+                Area of Stay <span style={{ color: '#b91c1c' }}>*</span>
               </label>
               <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
-                  <MapPin className="w-5 h-5" />
+                <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                  <MapPin className="w-5 h-5" style={{ color: '#94a3b8' }} />
                 </span>
                 <input
                   type="text"
@@ -581,23 +630,35 @@ export default function ContactsRegisterForm() {
                       trigger('areaOfStay');
                     }, 200);
                   }}
-                  className="w-full pl-11 pr-10 py-3 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 text-base placeholder-slate-400 focus:bg-white focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600/20 transition-all"
+                  className={inputPl11Pr10}
+                  style={{
+                    color: '#172033',
+                    backgroundColor: '#ffffff',
+                    borderColor: errors.areaOfStay ? '#b91c1c' : '#94a3b8',
+                  }}
                   aria-invalid={errors.areaOfStay ? 'true' : 'false'}
                 />
                 {isLoadingAreaSuggestions && (
                   <span className="absolute inset-y-0 right-0 pr-3.5 flex items-center">
-                    <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
+                    <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#4f46e5' }} />
                   </span>
                 )}
               </div>
 
-              {/* Location Autocomplete Dropdown Menu */}
+              {/* Location Autocomplete Dropdown */}
               {showAreaDropdown && (
-                <div className="absolute z-20 w-full mt-1.5 max-h-56 overflow-y-auto rounded-2xl bg-white border border-slate-200 shadow-2xl py-1 text-slate-900">
-                  {/* Geoapify Server Location Suggestions */}
+                <div
+                  className="absolute z-20 w-full mt-1.5 max-h-56 overflow-y-auto rounded-2xl shadow-2xl py-1"
+                  style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0' }}
+                >
+                  {/* Geoapify suggestions header */}
                   {locationSuggestions.length > 0 && (
-                    <div className="px-3 py-1.5 text-[10px] font-bold text-indigo-600 uppercase tracking-wider bg-slate-50 border-b border-slate-100 flex items-center gap-1">
-                      <MapPin className="w-3 h-3" /> Location Suggestions
+                    <div
+                      className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1"
+                      style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #f1f5f9', color: '#4338ca' }}
+                    >
+                      <MapPin className="w-3 h-3" />
+                      Location Suggestions
                     </div>
                   )}
                   {locationSuggestions.map((sug) => (
@@ -611,15 +672,21 @@ export default function ContactsRegisterForm() {
                         setShowAreaDropdown(false);
                         trigger('areaOfStay');
                       }}
-                      className="w-full text-left px-4 py-2.5 hover:bg-indigo-50 text-sm text-slate-800 transition-colors flex items-start gap-2 border-b border-slate-50"
+                      className="w-full text-left px-4 py-2.5 text-sm flex items-start gap-2 transition-colors"
+                      style={{ color: '#172033', borderBottom: '1px solid #f8fafc' }}
+                      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#eef2ff'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
                     >
-                      <MapPin className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                      <MapPin className="w-4 h-4 shrink-0 mt-0.5" style={{ color: '#4f46e5' }} />
                       <span>{sug.description}</span>
                     </button>
                   ))}
 
-                  {/* Predefined Local Area Options */}
-                  <div className="px-3 py-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider bg-slate-50 border-b border-slate-100">
+                  {/* Predefined areas header */}
+                  <div
+                    className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider"
+                    style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #f1f5f9', color: '#64748b' }}
+                  >
                     Common Areas
                   </div>
                   {filteredAreas.length > 0 ? (
@@ -634,61 +701,73 @@ export default function ContactsRegisterForm() {
                           setShowAreaDropdown(false);
                           trigger('areaOfStay');
                         }}
-                        className="w-full text-left px-4 py-2 hover:bg-indigo-50 text-sm text-slate-700 transition-colors"
+                        className="w-full text-left px-4 py-2 text-sm transition-colors"
+                        style={{ color: '#334155' }}
+                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#eef2ff'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
                       >
                         {area}
                       </button>
                     ))
                   ) : locationSuggestions.length === 0 ? (
-                    <div className="px-4 py-3 text-sm text-slate-500 font-medium">
+                    <div className="px-4 py-3 text-sm font-medium" style={{ color: '#64748b' }}>
                       Press enter or keep typing your custom location.
                     </div>
                   ) : null}
                 </div>
               )}
+
               {errors.areaOfStay && (
-                <p className="text-red-600 text-xs font-semibold mt-1 pl-1">{errors.areaOfStay.message}</p>
+                <p className="text-xs font-semibold mt-1 pl-1" style={{ color: '#b91c1c' }}>{errors.areaOfStay.message}</p>
               )}
             </div>
 
-            {/* Current Stay Options */}
+            {/* Current Stay */}
             <div className="space-y-2 pt-2">
-              <label className="block text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                <Home className="w-4 h-4 text-indigo-600" /> Current Stay <span className="text-red-500">*</span>
+              <label className="flex items-center gap-1.5 text-xs font-bold" style={{ color: '#334155' }}>
+                <Home className="w-4 h-4" style={{ color: '#4f46e5' }} />
+                Current Stay <span style={{ color: '#b91c1c' }}>*</span>
               </label>
               <div className="grid grid-cols-2 gap-3">
-                {['With Parents', 'In Hostel'].map((opt) => (
-                  <label
-                    key={opt}
-                    className={`flex items-center justify-center gap-2.5 py-3 px-4 rounded-xl border font-bold text-sm cursor-pointer transition-all ${watchedFields.currentStay === opt
-                      ? 'bg-indigo-50 border-indigo-500 text-indigo-900 shadow-sm'
-                      : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-white'
-                      }`}
-                  >
-                    <input
-                      type="radio"
-                      value={opt}
-                      className="sr-only"
-                      {...register('currentStay')}
-                    />
-                    <div className={`w-4 h-4 rounded-full flex items-center justify-center border shrink-0 ${watchedFields.currentStay === opt
-                      ? 'border-indigo-600 bg-indigo-600'
-                      : 'border-slate-300'
-                      }`}>
-                      {watchedFields.currentStay === opt && (
-                        <div className="w-1.5 h-1.5 rounded-full bg-white" />
-                      )}
-                    </div>
-                    <span>{opt}</span>
-                  </label>
-                ))}
+                {(['With Parents', 'In Hostel'] as const).map((opt) => {
+                  const selected = watchedFields.currentStay === opt;
+                  return (
+                    <label
+                      key={opt}
+                      className="flex items-center justify-center gap-2.5 py-3 px-4 rounded-xl font-bold text-sm cursor-pointer transition-all"
+                      style={{
+                        backgroundColor: selected ? '#eef2ff' : '#f8fafc',
+                        border: selected ? '1.5px solid #4f46e5' : '1.5px solid #cbd5e1',
+                        color: selected ? '#3730a3' : '#475569',
+                        boxShadow: selected ? '0 0 0 2px rgba(79,70,229,0.12)' : 'none',
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        value={opt}
+                        className="sr-only"
+                        {...register('currentStay')}
+                      />
+                      <div
+                        className="w-4 h-4 rounded-full flex items-center justify-center shrink-0"
+                        style={{
+                          border: selected ? '2px solid #4f46e5' : '2px solid #94a3b8',
+                          backgroundColor: selected ? '#4f46e5' : 'transparent',
+                        }}
+                      >
+                        {selected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                      </div>
+                      <span>{opt}</span>
+                    </label>
+                  );
+                })}
               </div>
               {errors.currentStay && (
-                <p className="text-red-600 text-xs font-semibold mt-1 pl-1">{errors.currentStay.message}</p>
+                <p className="text-xs font-semibold mt-1 pl-1" style={{ color: '#b91c1c' }}>{errors.currentStay.message}</p>
               )}
             </div>
 
-            {/* Conditional Mandatory PG Name Field (Visible ONLY when In Hostel is selected) */}
+            {/* PG / Hostel Name (conditional) */}
             <AnimatePresence>
               {watchedFields.currentStay === 'In Hostel' && (
                 <motion.div
@@ -697,124 +776,151 @@ export default function ContactsRegisterForm() {
                   exit={{ opacity: 0, height: 0 }}
                   className="space-y-1.5 pt-1"
                 >
-                  <label className="block text-xs font-bold text-slate-700">
-                    PG / Hostel Name <span className="text-red-500">*</span>
+                  <label className="block text-xs font-bold" style={{ color: '#334155' }}>
+                    PG / Hostel Name <span style={{ color: '#b91c1c' }}>*</span>
                   </label>
                   <div className="relative">
-                    <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400">
-                      <Building className="w-5 h-5" />
+                    <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                      <Building className="w-5 h-5" style={{ color: '#94a3b8' }} />
                     </span>
                     <input
                       type="text"
                       {...register('pgName')}
                       placeholder="Enter PG or Hostel Name *"
-                      className="w-full pl-11 pr-4 py-3 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 text-base placeholder-slate-400 focus:bg-white focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600/20 transition-all"
+                      className={inputPl11}
+                      style={{ color: '#172033', backgroundColor: '#ffffff', borderColor: errors.pgName ? '#b91c1c' : '#94a3b8' }}
                       aria-invalid={errors.pgName ? 'true' : 'false'}
                     />
                   </div>
                   {errors.pgName && (
-                    <p className="text-red-600 text-xs font-semibold mt-1 pl-1">{errors.pgName.message}</p>
+                    <p className="text-xs font-semibold mt-1 pl-1" style={{ color: '#b91c1c' }}>{errors.pgName.message}</p>
                   )}
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
 
-          {/* --- SECTION 2: SKILLS --- */}
-          <div className="space-y-4 pt-2 border-t border-slate-100">
-            <h3 className="text-xs font-bold tracking-wider text-indigo-600 uppercase">
-              2. Skills & Interests (Optional)
+          {/* ─── SECTION 2: SKILLS ─── */}
+          <div className="space-y-4 pt-2" style={{ borderTop: '1px solid #f1f5f9' }}>
+            <h3 className="text-xs font-bold tracking-wider uppercase" style={{ color: '#4338ca' }}>
+              2. Skills &amp; Interests (Optional)
             </h3>
-            <p className="text-xs text-slate-500 -mt-2">
+            <p className="text-xs -mt-2" style={{ color: '#64748b' }}>
               Select any skills or domains you are interested in:
             </p>
 
             {isLoadingSkills ? (
               <div className="grid grid-cols-2 gap-3">
                 {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="h-12 rounded-xl bg-slate-100 animate-pulse" />
+                  <div key={i} className="h-12 rounded-xl animate-pulse" style={{ backgroundColor: '#f1f5f9' }} />
                 ))}
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3">
-                {skills.map((skill) => (
-                  <label
-                    key={skill.id}
-                    className={`flex items-center gap-3 p-3.5 rounded-xl border text-sm font-semibold cursor-pointer transition-all ${(watchedFields.skills || []).includes(skill.id)
-                      ? 'bg-indigo-50 border-indigo-500 text-indigo-900 shadow-sm'
-                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-white'
-                      }`}
-                  >
-                    <input
-                      type="checkbox"
-                      value={skill.id}
-                      className="sr-only"
-                      {...register('skills')}
-                    />
-                    <div className={`w-4 h-4 rounded flex items-center justify-center border shrink-0 ${(watchedFields.skills || []).includes(skill.id)
-                      ? 'border-indigo-600 bg-indigo-600 text-white'
-                      : 'border-slate-300'
-                      }`}>
-                      {(watchedFields.skills || []).includes(skill.id) && (
-                        <CheckCircle2 className="w-3.5 h-3.5 stroke-[3]" />
-                      )}
-                    </div>
-                    <span>{skill.name}</span>
-                  </label>
-                ))}
+                {skills.map((skill) => {
+                  const checked = (watchedFields.skills || []).includes(skill.id);
+                  return (
+                    <label
+                      key={skill.id}
+                      className="flex items-center gap-3 p-3.5 rounded-xl cursor-pointer transition-all"
+                      style={{
+                        backgroundColor: checked ? '#eef2ff' : '#f8fafc',
+                        border: checked ? '1.5px solid #4f46e5' : '1.5px solid #cbd5e1',
+                        color: checked ? '#3730a3' : '#334155',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        value={skill.id}
+                        className="sr-only"
+                        {...register('skills')}
+                      />
+                      <div
+                        className="w-4 h-4 rounded flex items-center justify-center shrink-0"
+                        style={{
+                          border: checked ? '2px solid #4f46e5' : '2px solid #94a3b8',
+                          backgroundColor: checked ? '#4f46e5' : 'transparent',
+                          color: '#ffffff',
+                        }}
+                      >
+                        {checked && <CheckCircle2 className="w-3.5 h-3.5 stroke-[3]" />}
+                      </div>
+                      <span className="text-sm font-semibold">{skill.name}</span>
+                    </label>
+                  );
+                })}
               </div>
             )}
           </div>
 
-          {/* --- SECTION 3: ONLINE WORKSHOP INTEREST --- */}
-          <div className="space-y-4 pt-2 border-t border-slate-100">
-            <h3 className="text-xs font-bold tracking-wider text-indigo-600 uppercase">
+          {/* ─── SECTION 3: ONLINE WORKSHOP ─── */}
+          <div className="space-y-4 pt-2" style={{ borderTop: '1px solid #f1f5f9' }}>
+            <h3 className="text-xs font-bold tracking-wider uppercase" style={{ color: '#4338ca' }}>
               3. Online Workshop
             </h3>
 
-            {/* Interested in Online Workshop */}
             <div className="space-y-2">
-              <label className="block text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                <Laptop className="w-4 h-4 text-indigo-600" /> Interested in Online Workshop? <span className="text-red-500">*</span>
+              <label className="flex items-center gap-1.5 text-xs font-bold" style={{ color: '#334155' }}>
+                <Laptop className="w-4 h-4" style={{ color: '#4f46e5' }} />
+                Interested in Online Workshop? <span style={{ color: '#b91c1c' }}>*</span>
               </label>
               <div className="grid grid-cols-2 gap-4">
-                {['Yes', 'No'].map((opt) => (
-                  <label
-                    key={opt}
-                    className={`flex items-center justify-center gap-2.5 py-3 rounded-xl border font-bold text-base cursor-pointer transition-all ${watchedFields.interestedOnlineWork === opt
-                      ? 'bg-indigo-50 border-indigo-500 text-indigo-900 shadow-sm'
-                      : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-white'
-                      }`}
-                  >
-                    <input
-                      type="radio"
-                      value={opt}
-                      className="sr-only"
-                      {...register('interestedOnlineWork')}
-                    />
-                    <span>{opt}</span>
-                  </label>
-                ))}
+                {(['Yes', 'No'] as const).map((opt) => {
+                  const selected = watchedFields.interestedOnlineWork === opt;
+                  return (
+                    <label
+                      key={opt}
+                      className="flex items-center justify-center gap-2.5 py-3 rounded-xl font-bold text-base cursor-pointer transition-all"
+                      style={{
+                        backgroundColor: selected ? '#eef2ff' : '#f8fafc',
+                        border: selected ? '1.5px solid #4f46e5' : '1.5px solid #cbd5e1',
+                        color: selected ? '#3730a3' : '#475569',
+                        boxShadow: selected ? '0 0 0 2px rgba(79,70,229,0.12)' : 'none',
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        value={opt}
+                        className="sr-only"
+                        {...register('interestedOnlineWork')}
+                      />
+                      <span>{opt}</span>
+                    </label>
+                  );
+                })}
               </div>
               {errors.interestedOnlineWork && (
-                <p className="text-red-600 text-xs font-semibold mt-1 pl-1">{errors.interestedOnlineWork.message}</p>
+                <p className="text-xs font-semibold mt-1 pl-1" style={{ color: '#b91c1c' }}>{errors.interestedOnlineWork.message}</p>
               )}
             </div>
           </div>
 
-          {/* Submit Button */}
-          <div className="pt-4 border-t border-slate-100">
+          {/* ── Submit Button ── */}
+          <div className="pt-4" style={{ borderTop: '1px solid #f1f5f9' }}>
             <button
               type="submit"
               disabled={isSubmitting || Boolean(duplicateWarning)}
-              className={`w-full py-4 rounded-xl font-extrabold text-base text-white transition-all transform active:scale-[0.98] ${isValid && !duplicateWarning
-                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-lg shadow-indigo-500/25 cursor-pointer'
-                : 'bg-slate-200 border border-slate-300 text-slate-400 cursor-not-allowed'
-                }`}
+              className="w-full py-4 rounded-xl font-extrabold text-base transition-all transform active:scale-[0.98]"
+              style={
+                isValid && !duplicateWarning
+                  ? {
+                      background: 'linear-gradient(to right, #4f46e5, #7c3aed)',
+                      color: '#ffffff',
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 15px rgba(79,70,229,0.35)',
+                    }
+                  : {
+                      backgroundColor: '#e2e8f0',
+                      border: '1px solid #cbd5e1',
+                      color: '#94a3b8',
+                      cursor: 'not-allowed',
+                    }
+              }
             >
               {isSubmitting ? (
                 <span className="flex items-center justify-center gap-2.5">
-                  <Loader2 className="w-5 h-5 animate-spin" /> Submitting Registration...
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Submitting Registration...
                 </span>
               ) : (
                 'Submit Registration'

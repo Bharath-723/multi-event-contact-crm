@@ -4,49 +4,7 @@ import { contactsRegisterSchema } from '@/lib/validation';
 import { normalizePhone, syncMasterContact } from '@/lib/master-contacts';
 import { calculateNameSimilarity } from '@/lib/name-similarity';
 
-const CREATE_CONTACTS_REGISTER_TABLE_SQL = `
-CREATE TABLE IF NOT EXISTS contacts_register (
-    id                         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    full_name                  TEXT NOT NULL,
-    phone                      TEXT NOT NULL,
-    college_name               TEXT NOT NULL,
-    area_of_stay               TEXT NOT NULL,
-    gender                     TEXT NOT NULL CHECK (gender IN ('Male', 'Female')),
-    current_stay               TEXT NOT NULL CHECK (current_stay IN ('With Parents', 'In Hostel')),
-    pg_name                    TEXT,
-    skills                     TEXT[] NOT NULL DEFAULT '{}',
-    interested_online_workshop BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at                 TIMESTAMPTZ DEFAULT NOW(),
-    updated_at                 TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_contacts_register_phone ON contacts_register(phone);
-CREATE INDEX IF NOT EXISTS idx_contacts_register_created_at ON contacts_register(created_at DESC);
-
-ALTER TABLE contacts_register ENABLE ROW LEVEL SECURITY;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies WHERE tablename = 'contacts_register' AND policyname = 'contacts_register_insert_public'
-  ) THEN
-    CREATE POLICY "contacts_register_insert_public" ON contacts_register FOR INSERT WITH CHECK (TRUE);
-  END IF;
-END$$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies WHERE tablename = 'contacts_register' AND policyname = 'contacts_register_read_authenticated'
-  ) THEN
-    CREATE POLICY "contacts_register_read_authenticated" ON contacts_register FOR SELECT USING (TRUE);
-  END IF;
-END$$;
-
-NOTIFY pgrst, 'reload schema';
-`;
-
-// Rate Limiter
+// ─── Rate Limiter (in-process, per-serverless-instance) ──────────────────────
 const rateLimitMap = new Map<string, { count: number; lastReset: number }>();
 const LIMIT = 5;
 const WINDOW_MS = 60 * 1000;
@@ -65,7 +23,11 @@ function checkRateLimit(ip: string): boolean {
 
 export async function POST(request: NextRequest) {
   try {
-    const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'anonymous';
+    // 1. Rate limiting
+    const ip =
+      request.headers.get('x-forwarded-for') ||
+      request.headers.get('x-real-ip') ||
+      'anonymous';
     if (!checkRateLimit(ip)) {
       return NextResponse.json(
         { error: 'Too many registration attempts. Please wait a minute and try again.' },
@@ -73,6 +35,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 2. Validate request body
     const body = await request.json();
     const validationResult = contactsRegisterSchema.safeParse(body);
 
@@ -100,6 +63,7 @@ export async function POST(request: NextRequest) {
       interestedOnlineWork,
     } = validationResult.data;
 
+    // 3. Phone normalization
     const cleanPhone = normalizePhone(phone);
     if (!cleanPhone || cleanPhone.length !== 10) {
       return NextResponse.json(
@@ -108,7 +72,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 1. Authoritative Duplicate Protection: Check Master Contacts FIRST
+    // 4. Authoritative duplicate check — master_contacts first (exact normalized match)
     const { data: masterContact } = await supabaseAdmin
       .from('master_contacts')
       .select('id, name, phone')
@@ -117,7 +81,8 @@ export async function POST(request: NextRequest) {
 
     if (masterContact) {
       const matchPercentage = calculateNameSimilarity(fullName, masterContact.name);
-      const isSubstantiallyDifferent = fullName.trim().length >= 2 && matchPercentage < 40;
+      const isSubstantiallyDifferent =
+        fullName.trim().length >= 2 && matchPercentage < 40;
 
       const warningMsg = isSubstantiallyDifferent
         ? 'This mobile number is already registered under another name. Please contact the administrator if you believe this is incorrect.'
@@ -129,16 +94,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 2. Check contacts_register table
+    // 5. Secondary duplicate check — contacts_register table (exact normalized match)
+    //    Uses eq() on the raw phone column; the DB unique index on normalize_phone(phone)
+    //    provides the final concurrency guarantee against simultaneous submissions.
     const { data: existingRegister } = await supabaseAdmin
       .from('contacts_register')
       .select('id, full_name, phone')
-      .ilike('phone', `%${cleanPhone}`)
+      .eq('phone', cleanPhone)
       .maybeSingle();
 
     if (existingRegister) {
       const matchPercentage = calculateNameSimilarity(fullName, existingRegister.full_name);
-      const isSubstantiallyDifferent = fullName.trim().length >= 2 && matchPercentage < 40;
+      const isSubstantiallyDifferent =
+        fullName.trim().length >= 2 && matchPercentage < 40;
 
       const warningMsg = isSubstantiallyDifferent
         ? 'This mobile number is already registered under another name. Please contact the administrator if you believe this is incorrect.'
@@ -150,12 +118,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Prepare clean final payload
-    const finalCollegeName = collegeName === 'Other'
-      ? customCollegeName?.trim() || 'Other'
-      : collegeName.trim();
+    // 6. Prepare insert payload
+    const finalCollegeName =
+      collegeName === 'Other'
+        ? customCollegeName?.trim() || 'Other'
+        : collegeName.trim();
 
-    const finalPgName = currentStay === 'In Hostel' ? (pgName?.trim() || null) : null;
+    const finalPgName =
+      currentStay === 'In Hostel' ? pgName?.trim() || null : null;
 
     const insertPayload = {
       full_name: fullName.trim(),
@@ -169,41 +139,45 @@ export async function POST(request: NextRequest) {
       interested_online_workshop: interestedOnlineWork === 'Yes',
     };
 
-    // Insert into contacts_register table with self-healing fallback
-    let { data: inserted, error } = await supabaseAdmin
+    // 7. Insert — NO self-healing DDL. If the table is missing, the approved
+    //    migration (20261003000000_contacts_register_schema.sql) must be applied
+    //    first. A missing table returns a clear 500 with the DB error message.
+    const { data: inserted, error } = await supabaseAdmin
       .from('contacts_register')
       .insert(insertPayload)
       .select('id')
       .single();
 
     if (error) {
-      console.warn('[POST /api/contacts-register] Initial insert error:', error.message);
-      try {
-        await supabaseAdmin.rpc('exec_sql', { sql: CREATE_CONTACTS_REGISTER_TABLE_SQL });
-      } catch (e) {
-        console.error('[POST /api/contacts-register] Self-healing DDL error:', e);
+      console.error('[POST /api/contacts-register] Insertion error:', error);
+
+      // Surface a clear configuration error if the table itself is missing.
+      if (error.code === '42P01') {
+        return NextResponse.json(
+          {
+            error:
+              'Server configuration error: contacts_register table not found. ' +
+              'The approved database migration must be applied before accepting registrations.',
+          },
+          { status: 503 }
+        );
       }
 
-      // Retry insertion
-      const retry = await supabaseAdmin
-        .from('contacts_register')
-        .insert(insertPayload)
-        .select('id')
-        .single();
+      // Unique constraint violation — concurrent duplicate submission.
+      if (error.code === '23505') {
+        return NextResponse.json(
+          { error: 'This mobile number was just registered. Duplicate submission rejected.' },
+          { status: 409 }
+        );
+      }
 
-      inserted = retry.data;
-      error = retry.error;
-    }
-
-    if (error) {
-      console.error('[POST /api/contacts-register] Insertion error:', error);
       return NextResponse.json(
         { error: `Database error: ${error.message}` },
         { status: 500 }
       );
     }
 
-    // Sync with Master Contacts Database
+    // 8. Master contact sync (non-blocking — failure does not fail the registration)
     if (inserted?.id) {
       try {
         await syncMasterContact({
@@ -217,14 +191,12 @@ export async function POST(request: NextRequest) {
           company_college: finalCollegeName,
         });
       } catch (masterErr) {
+        // Log but do not fail the user-facing response.
         console.warn('[POST /api/contacts-register] Master sync warning:', masterErr);
       }
     }
 
-    return NextResponse.json(
-      { success: true, id: inserted?.id },
-      { status: 201 }
-    );
+    return NextResponse.json({ success: true, id: inserted?.id }, { status: 201 });
   } catch (err) {
     console.error('[POST /api/contacts-register] Exception:', err);
     return NextResponse.json(

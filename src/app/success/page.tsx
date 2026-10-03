@@ -146,10 +146,10 @@ export default function RedoneSuccessPage() {
     );
   }
 
-  // Contacts Register Success View (light theme)
+  // Contacts Register Success View (light theme, dark-mode proof explicit hex styles)
   if (isContactsRegister) {
     return (
-      <div className="min-h-screen bg-slate-100 text-slate-900 overflow-x-hidden">
+      <div style={{ backgroundColor: '#f8fafc', color: '#172033' }} className="min-h-screen overflow-x-hidden">
         <main className="relative min-h-screen flex flex-col items-center justify-center py-12 px-4 sm:px-6 lg:px-8 overflow-hidden">
           {/* Subtle background accents */}
           <div className="absolute top-1/4 left-10 w-96 h-96 bg-indigo-500/10 rounded-full blur-[120px] pointer-events-none" />
@@ -162,14 +162,18 @@ export default function RedoneSuccessPage() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               transition={{ duration: 0.5, ease: 'easeOut' }}
-              className="w-full bg-white rounded-3xl p-8 sm:p-12 text-center border border-slate-200/80 shadow-2xl relative overflow-hidden flex flex-col items-center space-y-6"
+              style={{ backgroundColor: '#ffffff', borderColor: '#cbd5e1', color: '#172033' }}
+              className="w-full rounded-3xl p-8 sm:p-12 text-center border shadow-2xl relative overflow-hidden flex flex-col items-center space-y-6"
             >
               {/* Top Accent Bar */}
               <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
 
               {/* Badge */}
-              <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold tracking-wide">
-                <Sparkles className="w-4 h-4 text-indigo-600" />
+              <span
+                style={{ backgroundColor: '#eef2ff', borderColor: '#c7d2fe', color: '#4338ca' }}
+                className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full border text-xs font-bold tracking-wide"
+              >
+                <Sparkles style={{ color: '#4f46e5' }} className="w-4 h-4" />
                 Registration Confirmed
               </span>
 
@@ -178,11 +182,13 @@ export default function RedoneSuccessPage() {
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 transition={{ type: 'spring', stiffness: 200, damping: 15, delay: 0.15 }}
-                className="w-20 h-20 bg-indigo-50 border border-indigo-200 rounded-full flex items-center justify-center relative shadow-md my-2"
+                style={{ backgroundColor: '#eef2ff', borderColor: '#c7d2fe' }}
+                className="w-20 h-20 border rounded-full flex items-center justify-center relative shadow-md my-2"
               >
-                <CheckCircle2 className="w-12 h-12 text-indigo-600" />
+                <CheckCircle2 style={{ color: '#4338ca' }} className="w-12 h-12" />
                 <motion.div
-                  className="absolute inset-0 rounded-full border border-indigo-400"
+                  style={{ borderColor: '#818cf8' }}
+                  className="absolute inset-0 rounded-full border"
                   initial={{ scale: 1, opacity: 0.5 }}
                   animate={{ scale: 1.45, opacity: 0 }}
                   transition={{ repeat: Infinity, duration: 2.2, ease: 'easeOut' }}
@@ -191,21 +197,24 @@ export default function RedoneSuccessPage() {
 
               {/* Title */}
               <div className="space-y-2 max-w-md">
-                <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900">
+                <h1 style={{ color: '#172033' }} className="text-3xl sm:text-4xl font-extrabold tracking-tight">
                   Registration Successful!
                 </h1>
-                <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
+                <p style={{ color: '#334155' }} className="text-sm sm:text-base leading-relaxed">
                   Your contact details have been successfully recorded. Our team will reach out to you soon.
                 </p>
               </div>
 
               {/* Info Box */}
-              <div className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-5 text-left text-xs sm:text-sm text-slate-600 space-y-2">
-                <p className="font-semibold text-indigo-700 flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-indigo-600" />
+              <div
+                style={{ backgroundColor: '#f8fafc', borderColor: '#e2e8f0', color: '#334155' }}
+                className="w-full border rounded-2xl p-5 text-left text-xs sm:text-sm space-y-2"
+              >
+                <p style={{ color: '#4338ca' }} className="font-semibold flex items-center gap-2">
+                  <Sparkles style={{ color: '#4f46e5' }} className="w-4 h-4" />
                   What happens next?
                 </p>
-                <p className="text-slate-500 leading-relaxed">
+                <p style={{ color: '#475569' }} className="leading-relaxed">
                   Our co-ordinators will review your contact details and reach out regarding upcoming events and workshops.
                 </p>
               </div>
@@ -219,18 +228,19 @@ export default function RedoneSuccessPage() {
                     }
                     window.location.href = '/contacts-register?reset=true';
                   }}
-                  className="w-full py-3.5 px-5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-500/25 active:scale-95 cursor-pointer"
+                  style={{ color: '#ffffff' }}
+                  className="w-full py-3.5 px-5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-500/25 active:scale-95 cursor-pointer"
                 >
-                  <RotateCcw className="w-4 h-4" />
+                  <RotateCcw style={{ color: '#ffffff' }} className="w-4 h-4" />
                   Register Another Contact
                 </button>
               </div>
             </motion.div>
 
             {/* Footer */}
-            <footer className="text-center text-xs text-slate-500 space-y-1 pt-2">
-              <p className="text-indigo-600 font-bold text-sm tracking-wide">Hare Krishna</p>
-              <p>© 2026 Hare Krishna Movement. All rights reserved.</p>
+            <footer className="text-center text-xs space-y-1 pt-2">
+              <p style={{ color: '#4338ca' }} className="font-bold text-sm tracking-wide">Hare Krishna</p>
+              <p style={{ color: '#475569' }}>© 2026 Hare Krishna Movement. All rights reserved.</p>
             </footer>
 
           </div>

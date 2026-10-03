@@ -38,11 +38,11 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 2. Check contacts_register table
+    // 2. Check contacts_register table (exact normalized match — phone stored as 10-digit)
     const { data: contactsReg } = await supabaseAdmin
       .from('contacts_register')
       .select('id, full_name, phone')
-      .ilike('phone', `%${cleanPhone}`)
+      .eq('phone', cleanPhone)
       .maybeSingle();
 
     if (contactsReg) {

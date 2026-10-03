@@ -217,6 +217,7 @@ export async function backfillAllSources(): Promise<{
   rathayatra_count: number;
   krishnashtami_count: number;
   feedback_count: number;
+  contacts_register_count: number;
   total_synced: number;
 }> {
   const { data: ksRegs } = await supabaseAdmin
@@ -230,6 +231,10 @@ export async function backfillAllSources(): Promise<{
   const { data: fbRegs } = await supabaseAdmin
     .from('feedback_contacts')
     .select('id, full_name, phone, gender, current_stay, college_name, branch, created_at');
+
+  const { data: crRegs } = await supabaseAdmin
+    .from('contacts_register')
+    .select('id, full_name, phone, gender, area_of_stay, college_name, created_at');
 
   const allRecords: Array<{
     source: string;
@@ -312,23 +317,43 @@ export async function backfillAllSources(): Promise<{
     }
   }
 
+  if (crRegs) {
+    for (const r of crRegs) {
+      allRecords.push({
+        source: 'contacts_register',
+        event_display_name: 'Contacts Register',
+        event_record_id: String(r.id),
+        phone: String(r.phone),
+        name: r.full_name,
+        gender: r.gender,
+        area_of_stay: r.area_of_stay,
+        company_college: r.college_name,
+        occupation: null,
+        event_date: r.created_at || '1970-01-01T00:00:00Z',
+      });
+    }
+  }
+
   allRecords.sort((a, b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime());
 
   let ryCount = 0;
   let ksCount = 0;
   let fbCount = 0;
+  let crCount = 0;
 
   for (const rec of allRecords) {
     await syncMasterContact(rec);
     if (rec.source === 'rathayatra') ryCount++;
     else if (rec.source === 'krishnashtami') ksCount++;
     else if (rec.source === 'feedback_contacts') fbCount++;
+    else if (rec.source === 'contacts_register') crCount++;
   }
 
   return {
     rathayatra_count: ryCount,
     krishnashtami_count: ksCount,
     feedback_count: fbCount,
+    contacts_register_count: crCount,
     total_synced: allRecords.length,
   };
 }
