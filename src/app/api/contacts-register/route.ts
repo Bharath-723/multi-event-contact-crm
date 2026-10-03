@@ -162,8 +162,9 @@ export async function POST(request: NextRequest) {
         field: issue.path.join('.'),
         message: issue.message,
       }));
+      const firstMsg = errorMessages[0]?.message || 'Validation failed';
       return NextResponse.json(
-        { error: 'Validation failed', details: errorMessages },
+        { error: firstMsg, details: errorMessages },
         { status: 400 }
       );
     }
@@ -237,13 +238,14 @@ export async function POST(request: NextRequest) {
     }
 
     // 6. Prepare insert payload
-    const finalCollegeName =
-      collegeName === 'Other'
-        ? customCollegeName?.trim() || 'Other'
-        : collegeName.trim();
+    const isOtherCollege = collegeName === 'Other' || collegeName === 'Other / Enter Name';
+    const finalCollegeName = isOtherCollege
+      ? customCollegeName?.trim() || 'Other'
+      : collegeName.trim();
 
-    const finalPgName =
-      currentStay === 'In Hostel' ? pgName?.trim() || null : null;
+    const isMale = gender === 'Male';
+    const finalCurrentStay = isMale ? (currentStay || null) : null;
+    const finalPgName = (isMale && currentStay === 'In Hostel') ? pgName?.trim() || null : null;
 
     const insertPayload = {
       full_name: fullName.trim(),
@@ -251,7 +253,7 @@ export async function POST(request: NextRequest) {
       college_name: finalCollegeName,
       area_of_stay: areaOfStay.trim(),
       gender,
-      current_stay: currentStay,
+      current_stay: finalCurrentStay,
       pg_name: finalPgName,
       skills: skills || [],
       interested_online_workshop: interestedOnlineWork === 'Yes',

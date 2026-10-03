@@ -225,14 +225,14 @@ export const contactsRegisterSchema = z.object({
   gender: z.enum(['Male', 'Female'], {
     message: 'Please select a gender',
   }),
-  currentStay: z.enum(['With Parents', 'In Hostel'], {
-    message: 'Please select your current stay',
-  }),
-  pgName: z.string().optional(),
+  currentStay: z.enum(['With Parents', 'In Hostel']).optional().nullable(),
+  pgName: z.string().optional().nullable(),
   skills: z.array(z.string()).optional().default([]),
   interestedOnlineWork: z.enum(['Yes', 'No']).optional(),
 }).superRefine((data, ctx) => {
-  if (data.collegeName === 'Other') {
+  // College validation
+  const isOther = data.collegeName === 'Other' || data.collegeName === 'Other / Enter Name';
+  if (isOther) {
     if (!data.customCollegeName || data.customCollegeName.trim() === '') {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -248,19 +248,28 @@ export const contactsRegisterSchema = z.object({
     }
   }
 
-  if (data.currentStay === 'In Hostel') {
-    if (!data.pgName || data.pgName.trim() === '') {
+  // Current Stay validation (required ONLY when Gender is Male)
+  if (data.gender === 'Male') {
+    if (!data.currentStay) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'PG Name is required when staying in hostel',
-        path: ['pgName'],
+        message: 'Please select your current stay',
+        path: ['currentStay'],
       });
-    } else if (data.pgName.trim().length < 2) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'PG Name must be at least 2 characters',
-        path: ['pgName'],
-      });
+    } else if (data.currentStay === 'In Hostel') {
+      if (!data.pgName || data.pgName.trim() === '') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'PG Name is required when staying in hostel',
+          path: ['pgName'],
+        });
+      } else if (data.pgName.trim().length < 2) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'PG Name must be at least 2 characters',
+          path: ['pgName'],
+        });
+      }
     }
   }
 });

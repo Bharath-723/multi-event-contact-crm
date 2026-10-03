@@ -42,14 +42,14 @@ CREATE TABLE IF NOT EXISTS public.contacts_register (
     college_name               TEXT NOT NULL,
     area_of_stay               TEXT NOT NULL,
     gender                     TEXT NOT NULL CHECK (gender IN ('Male', 'Female')),
-    current_stay               TEXT NOT NULL CHECK (current_stay IN ('With Parents', 'In Hostel')),
+    current_stay               TEXT CHECK (current_stay IS NULL OR current_stay IN ('With Parents', 'In Hostel')),
     pg_name                    TEXT,
     skills                     TEXT[] NOT NULL DEFAULT '{}',
     interested_online_workshop BOOLEAN NOT NULL DEFAULT FALSE,
     created_at                 TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at                 TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT chk_contacts_register_pg_name CHECK (
-      (current_stay = 'With Parents' AND pg_name IS NULL) OR
+      (current_stay IS DISTINCT FROM 'In Hostel' AND pg_name IS NULL) OR
       (current_stay = 'In Hostel' AND pg_name IS NOT NULL AND length(trim(pg_name)) >= 2)
     )
 );

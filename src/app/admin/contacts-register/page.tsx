@@ -19,7 +19,7 @@ export interface ContactsRegisterRecord {
   college_name: string;
   area_of_stay: string;
   gender: 'Male' | 'Female';
-  current_stay: 'With Parents' | 'In Hostel';
+  current_stay?: 'With Parents' | 'In Hostel' | null;
   pg_name?: string | null;
   skills: string[];
   interested_online_workshop?: boolean;
@@ -262,7 +262,8 @@ export default function ContactsRegisterAdminPage() {
       setEditError('Phone number must be exactly 10 digits.');
       return;
     }
-    if (editCurrentStay === 'In Hostel' && (!editPgName.trim() || editPgName.trim().length < 2)) {
+    const isMale = editGender === 'Male';
+    if (isMale && editCurrentStay === 'In Hostel' && (!editPgName.trim() || editPgName.trim().length < 2)) {
       setEditError('PG Name is required when staying in hostel.');
       return;
     }
@@ -287,8 +288,8 @@ export default function ContactsRegisterAdminPage() {
           college_name: editCollegeName.trim() || 'Other',
           area_of_stay: editAreaOfStay.trim(),
           gender: editGender,
-          current_stay: editCurrentStay,
-          pg_name: editCurrentStay === 'In Hostel' ? editPgName.trim() : null,
+          current_stay: isMale ? editCurrentStay : null,
+          pg_name: (isMale && editCurrentStay === 'In Hostel') ? editPgName.trim() : null,
           skills: skillsArray,
         }),
       });
@@ -580,13 +581,17 @@ export default function ContactsRegisterAdminPage() {
                         </span>
                       </td>
                       <td className="py-3.5 px-4">
-                        <span className={`inline-block px-3 py-0.5 rounded-full text-xs font-bold border ${
-                          r.current_stay === 'In Hostel'
-                            ? 'bg-indigo-950/80 border-indigo-400/50 text-indigo-300'
-                            : 'bg-slate-900 border-slate-700 text-slate-300'
-                        }`}>
-                          {r.current_stay}
-                        </span>
+                        {r.current_stay ? (
+                          <span className={`inline-block px-3 py-0.5 rounded-full text-xs font-bold border ${
+                            r.current_stay === 'In Hostel'
+                              ? 'bg-indigo-950/80 border-indigo-400/50 text-indigo-300'
+                              : 'bg-slate-900 border-slate-700 text-slate-300'
+                          }`}>
+                            {r.current_stay}
+                          </span>
+                        ) : (
+                          <span className="text-slate-500 font-medium text-xs">—</span>
+                        )}
                       </td>
                       <td className="py-3.5 px-4 max-w-[120px] truncate text-slate-300 font-medium">
                         {r.current_stay === 'In Hostel' ? r.pg_name || '—' : '—'}
@@ -733,12 +738,14 @@ export default function ContactsRegisterAdminPage() {
                   <span className="text-slate-100 font-extrabold">{viewRecord.gender}</span>
                 </div>
 
-                <div>
-                  <span className="text-slate-400 font-bold block text-[10px] uppercase">Current Stay</span>
-                  <span className="text-slate-100 font-extrabold">{viewRecord.current_stay}</span>
-                </div>
+                {viewRecord.gender === 'Male' && (
+                  <div>
+                    <span className="text-slate-400 font-bold block text-[10px] uppercase">Current Stay</span>
+                    <span className="text-slate-100 font-extrabold">{viewRecord.current_stay || 'N/A'}</span>
+                  </div>
+                )}
 
-                {viewRecord.current_stay === 'In Hostel' && (
+                {viewRecord.gender === 'Male' && viewRecord.current_stay === 'In Hostel' && (
                   <div className="col-span-2">
                     <span className="text-slate-400 font-bold block text-[10px] uppercase">PG Name</span>
                     <span className="text-indigo-300 font-extrabold">{viewRecord.pg_name || 'N/A'}</span>
@@ -860,43 +867,52 @@ export default function ContactsRegisterAdminPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-slate-300 font-bold block mb-1">Gender *</label>
-                    <select
-                      value={editGender}
-                      onChange={(e) => setEditGender(e.target.value as 'Male' | 'Female')}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500/50 cursor-pointer"
-                    >
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-slate-300 font-bold block mb-1">Current Stay *</label>
-                    <select
-                      value={editCurrentStay}
-                      onChange={(e) => setEditCurrentStay(e.target.value as 'With Parents' | 'In Hostel')}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500/50 cursor-pointer"
-                    >
-                      <option value="With Parents">With Parents</option>
-                      <option value="In Hostel">In Hostel</option>
-                    </select>
-                  </div>
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1">Gender *</label>
+                  <select
+                    value={editGender}
+                    onChange={(e) => {
+                      const newGender = e.target.value as 'Male' | 'Female';
+                      setEditGender(newGender);
+                      if (newGender === 'Female') {
+                        setEditCurrentStay('With Parents');
+                        setEditPgName('');
+                      }
+                    }}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500/50 cursor-pointer"
+                  >
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                  </select>
                 </div>
 
-                {editCurrentStay === 'In Hostel' && (
-                  <div>
-                    <label className="text-slate-300 font-bold block mb-1">PG Name *</label>
-                    <input
-                      type="text"
-                      value={editPgName}
-                      onChange={(e) => setEditPgName(e.target.value)}
-                      placeholder="Enter PG Name"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500/50"
-                    />
-                  </div>
+                {editGender === 'Male' && (
+                  <>
+                    <div>
+                      <label className="text-slate-300 font-bold block mb-1">Current Stay *</label>
+                      <select
+                        value={editCurrentStay}
+                        onChange={(e) => setEditCurrentStay(e.target.value as 'With Parents' | 'In Hostel')}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500/50 cursor-pointer"
+                      >
+                        <option value="With Parents">With Parents</option>
+                        <option value="In Hostel">In Hostel</option>
+                      </select>
+                    </div>
+
+                    {editCurrentStay === 'In Hostel' && (
+                      <div>
+                        <label className="text-slate-300 font-bold block mb-1">PG Name *</label>
+                        <input
+                          type="text"
+                          value={editPgName}
+                          onChange={(e) => setEditPgName(e.target.value)}
+                          placeholder="Enter PG Name"
+                          className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500/50"
+                        />
+                      </div>
+                    )}
+                  </>
                 )}
 
                 <div>

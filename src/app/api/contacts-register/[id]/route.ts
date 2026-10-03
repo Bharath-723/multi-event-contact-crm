@@ -58,12 +58,14 @@ export async function PATCH(
     if (!['Male', 'Female'].includes(gender)) {
       return NextResponse.json({ error: 'Gender must be Male or Female' }, { status: 400 });
     }
-    if (!['With Parents', 'In Hostel'].includes(current_stay)) {
+    const isMale = gender === 'Male';
+    if (isMale && !['With Parents', 'In Hostel'].includes(current_stay)) {
       return NextResponse.json({ error: 'Current stay must be With Parents or In Hostel' }, { status: 400 });
     }
 
-    const finalPgName = current_stay === 'In Hostel' ? pg_name?.trim() || null : null;
-    if (current_stay === 'In Hostel' && (!finalPgName || finalPgName.length < 2)) {
+    const finalCurrentStay = isMale ? current_stay : null;
+    const finalPgName = (isMale && current_stay === 'In Hostel') ? pg_name?.trim() || null : null;
+    if (isMale && current_stay === 'In Hostel' && (!finalPgName || finalPgName.length < 2)) {
       return NextResponse.json({ error: 'PG Name is required when staying in hostel' }, { status: 400 });
     }
 
@@ -73,7 +75,7 @@ export async function PATCH(
       college_name: college_name ? college_name.trim() : 'Other',
       area_of_stay: area_of_stay ? area_of_stay.trim() : '',
       gender,
-      current_stay,
+      current_stay: finalCurrentStay,
       pg_name: finalPgName,
       skills: Array.isArray(skills) ? skills : [],
       interested_online_workshop: Boolean(interested_online_workshop),

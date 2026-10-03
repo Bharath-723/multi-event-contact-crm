@@ -71,11 +71,9 @@ export default function ContactsRegisterForm() {
   // Initialize Form
   const {
     register,
-    handleSubmit,
     setValue,
-    getValues,
     watch,
-    formState: { errors, isValid },
+    formState: { errors },
     trigger,
     reset,
   } = useForm<ContactsRegisterSchemaInput>({
@@ -106,6 +104,17 @@ export default function ContactsRegisterForm() {
       }
     }
   }, [watchedFields.currentStay, watchedFields.pgName, setValue, trigger]);
+
+  // Handle gender change to clear currentStay and pgName when Female is selected
+  useEffect(() => {
+    if (watchedFields.gender === 'Female') {
+      if (watchedFields.currentStay || watchedFields.pgName) {
+        setValue('currentStay', null as unknown as undefined);
+        setValue('pgName', '');
+        trigger(['currentStay', 'pgName']);
+      }
+    }
+  }, [watchedFields.gender, watchedFields.currentStay, watchedFields.pgName, setValue, trigger]);
 
   // Handle Area of Stay Geoapify location suggestions
   useEffect(() => {
@@ -218,6 +227,16 @@ export default function ContactsRegisterForm() {
       if (savedDraft) {
         try {
           const parsed = JSON.parse(savedDraft);
+          // Sanitize draft: clear invalid enum values that old drafts may have stored as ''
+          if (parsed.interestedOnlineWork !== 'Yes' && parsed.interestedOnlineWork !== 'No') {
+            delete parsed.interestedOnlineWork;
+          }
+          if (parsed.gender !== 'Male' && parsed.gender !== 'Female') {
+            delete parsed.gender;
+          }
+          if (parsed.currentStay !== 'With Parents' && parsed.currentStay !== 'In Hostel') {
+            parsed.currentStay = undefined;
+          }
           reset(parsed);
           if (parsed.areaOfStay) {
             setAreaSearch(parsed.areaOfStay);
@@ -236,28 +255,54 @@ export default function ContactsRegisterForm() {
     }
   }, [watchedFields]);
 
+  // Compute form validity directly from watchedFields — always reactive, not subject to
+  // stale react-hook-form `isValid` from unregistered setValue-only fields (e.g. areaOfStay)
+  const computeIsFormValid = () => {
+    const v = watchedFields;
+    // Use digit-count check so pasted/formatted phone values are handled correctly
+    const phoneDigits = (v.phone || '').replace(/\D/g, '');
+    if (!v.fullName || v.fullName.trim().length < 2) { console.debug('[CRF valid] BLOCKED: fullName', v.fullName); return false; }
+    if (phoneDigits.length !== 10) { console.debug('[CRF valid] BLOCKED: phone digits', phoneDigits.length, JSON.stringify(v.phone)); return false; }
+    if (!v.gender) { console.debug('[CRF valid] BLOCKED: gender'); return false; }
+    if (!v.collegeName || v.collegeName.trim() === '') { console.debug('[CRF valid] BLOCKED: collegeName'); return false; }
+    const isOtherCollege = v.collegeName === 'Other' || v.collegeName === 'Other / Enter Name';
+    if (isOtherCollege && (!v.customCollegeName || v.customCollegeName.trim().length < 2)) { console.debug('[CRF valid] BLOCKED: customCollegeName'); return false; }
+    if (!v.areaOfStay || v.areaOfStay.trim().length < 2) { console.debug('[CRF valid] BLOCKED: areaOfStay', JSON.stringify(v.areaOfStay)); return false; }
+    if (v.gender === 'Male') {
+      if (!v.currentStay) { console.debug('[CRF valid] BLOCKED: currentStay'); return false; }
+      if (v.currentStay === 'In Hostel' && (!v.pgName || v.pgName.trim().length < 2)) { console.debug('[CRF valid] BLOCKED: pgName'); return false; }
+    }
+    return true;
+  };
+
+  const isFormValid = computeIsFormValid();
+
   // Form completion progress calculation (across required fields)
   const calculateProgress = () => {
-    const values = getValues();
+    const values = watchedFields;
     let completed = 0;
-    let total = 6;
+    let total = values.gender === 'Male' ? 6 : 5;
 
     if (values.fullName && values.fullName.trim().length >= 2) completed++;
     if (values.phone && values.phone.length === 10) completed++;
     if (values.collegeName) {
-      if (values.collegeName === 'Other') {
+      if (values.collegeName === 'Other' || values.collegeName === 'Other / Enter Name') {
         if (values.customCollegeName && values.customCollegeName.trim().length >= 2) completed++;
       } else {
         completed++;
       }
     }
     if (values.areaOfStay && values.areaOfStay.trim().length >= 2) completed++;
-    if (values.gender) completed++;
-    if (values.currentStay) {
+    if (values.gender) {
       completed++;
-      if (values.currentStay === 'In Hostel') {
-        total++;
-        if (values.pgName && values.pgName.trim().length >= 2) completed++;
+      if (values.gender === 'Male') {
+        if (values.currentStay) {
+          completed++;
+          if (values.currentStay === 'In Hostel') {
+            total++;
+            if (values.pgName && values.pgName.trim().length >= 2) completed++;
+          }
+        }
       }
     }
 
@@ -270,8 +315,10 @@ export default function ContactsRegisterForm() {
     area.toLowerCase().includes(areaSearch.toLowerCase())
   );
 
-  // Submit Handler
+  // Submit Handler — called directly from button onClick (no handleSubmit wrapper)
   const onSubmit = async (data: ContactsRegisterSchemaInput) => {
+    console.debug('[CRF] onSubmit called', { data });
+
     if (duplicateWarning) {
       setSubmissionError(duplicateWarning);
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -289,20 +336,37 @@ export default function ContactsRegisterForm() {
     setIsSubmitting(true);
     setSubmissionError(null);
 
-    const finalCollegeName = data.collegeName === 'Other'
-      ? data.customCollegeName?.trim() || 'Other'
-      : data.collegeName.trim();
-
-    const finalPgName = data.currentStay === 'In Hostel' ? (data.pgName?.trim() || null) : null;
-
-    const payload = {
-      ...data,
-      collegeName: finalCollegeName,
-      pgName: finalPgName,
-    };
-    delete payload.customCollegeName;
-
     try {
+      const isOtherCollege = data.collegeName === 'Other' || data.collegeName === 'Other / Enter Name';
+      const finalCollegeName = isOtherCollege
+        ? (data.customCollegeName?.trim() || 'Other')
+        : (data.collegeName || '').trim();
+
+      const isMale = data.gender === 'Male';
+      const finalCurrentStay = isMale ? (data.currentStay || null) : null;
+      const finalPgName = (isMale && data.currentStay === 'In Hostel') ? (data.pgName?.trim() || null) : null;
+
+      // Normalize phone: strip non-digits, take last 10
+      const normalizedPhone = (data.phone || '').replace(/\D/g, '').slice(-10);
+
+      const payload: Record<string, unknown> = {
+        fullName: (data.fullName || '').trim(),
+        phone: normalizedPhone,
+        collegeName: finalCollegeName,
+        areaOfStay: (data.areaOfStay || '').trim(),
+        gender: data.gender,
+        currentStay: finalCurrentStay,
+        pgName: finalPgName,
+        skills: data.skills || [],
+        // Only include interestedOnlineWork if it's a valid enum value — omit '' or undefined
+        // to avoid Zod's z.enum(['Yes','No']).optional() rejecting empty strings from drafts
+        ...(data.interestedOnlineWork === 'Yes' || data.interestedOnlineWork === 'No'
+          ? { interestedOnlineWork: data.interestedOnlineWork }
+          : {}),
+      };
+
+      console.debug('[CRF] Sending payload:', payload);
+
       const response = await fetch('/api/contacts-register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -310,9 +374,14 @@ export default function ContactsRegisterForm() {
       });
 
       const result = await response.json();
+      console.debug('[CRF] API response:', response.status, result);
 
       if (!response.ok) {
-        throw new Error(result.error || 'Registration failed');
+        let errorMsg = result.error || 'Registration failed';
+        if (result.details && Array.isArray(result.details) && result.details.length > 0) {
+          errorMsg = result.details.map((d: { field: string; message: string }) => d.message).join('\n');
+        }
+        throw new Error(errorMsg);
       }
 
       // Successful registration!
@@ -440,7 +509,7 @@ export default function ContactsRegisterForm() {
         )}
 
         {/* ── Form Body ── */}
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
 
           {/* ─── SECTION 1: PERSONAL & LOCATION ─── */}
           <div className="space-y-4">
@@ -601,6 +670,9 @@ export default function ContactsRegisterForm() {
               </motion.div>
             )}
 
+            {/* Area of Stay — hidden registered input keeps RHF in sync with setValue calls */}
+            <input type="hidden" {...register('areaOfStay')} />
+
             {/* Area of Stay */}
             <div className="relative" ref={areaDropdownRef}>
               <label className="block text-xs font-bold mb-1.5" style={{ color: '#334155' }}>
@@ -719,78 +791,87 @@ export default function ContactsRegisterForm() {
               )}
             </div>
 
-            {/* Current Stay */}
-            <div className="space-y-2 pt-2">
-              <label className="flex items-center gap-1.5 text-xs font-bold" style={{ color: '#334155' }}>
-                <Home className="w-4 h-4" style={{ color: '#4f46e5' }} />
-                Current Stay <span style={{ color: '#b91c1c' }}>*</span>
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                {(['With Parents', 'In Hostel'] as const).map((opt) => {
-                  const selected = watchedFields.currentStay === opt;
-                  return (
-                    <label
-                      key={opt}
-                      className="flex items-center justify-center gap-2.5 py-3 px-4 rounded-xl font-bold text-sm cursor-pointer transition-all"
-                      style={{
-                        backgroundColor: selected ? '#eef2ff' : '#f8fafc',
-                        border: selected ? '1.5px solid #4f46e5' : '1.5px solid #cbd5e1',
-                        color: selected ? '#3730a3' : '#475569',
-                        boxShadow: selected ? '0 0 0 2px rgba(79,70,229,0.12)' : 'none',
-                      }}
-                    >
-                      <input
-                        type="radio"
-                        value={opt}
-                        className="sr-only"
-                        {...register('currentStay')}
-                      />
-                      <div
-                        className="w-4 h-4 rounded-full flex items-center justify-center shrink-0"
-                        style={{
-                          border: selected ? '2px solid #4f46e5' : '2px solid #94a3b8',
-                          backgroundColor: selected ? '#4f46e5' : 'transparent',
-                        }}
-                      >
-                        {selected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                      </div>
-                      <span>{opt}</span>
-                    </label>
-                  );
-                })}
-              </div>
-              {errors.currentStay && (
-                <p className="text-xs font-semibold mt-1 pl-1" style={{ color: '#b91c1c' }}>{errors.currentStay.message}</p>
-              )}
-            </div>
-
-            {/* PG / Hostel Name (conditional) */}
+            {/* Current Stay (Displayed ONLY when Gender is Male) */}
             <AnimatePresence>
-              {watchedFields.currentStay === 'In Hostel' && (
+              {watchedFields.gender === 'Male' && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="space-y-1.5 pt-1"
+                  className="space-y-4 pt-2"
                 >
-                  <label className="block text-xs font-bold" style={{ color: '#334155' }}>
-                    PG / Hostel Name <span style={{ color: '#b91c1c' }}>*</span>
-                  </label>
-                  <div className="relative">
-                    <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                      <Building className="w-5 h-5" style={{ color: '#94a3b8' }} />
-                    </span>
-                    <input
-                      type="text"
-                      {...register('pgName')}
-                      placeholder="Enter PG or Hostel Name *"
-                      className={inputPl11}
-                      style={{ color: '#172033', backgroundColor: '#ffffff', borderColor: errors.pgName ? '#b91c1c' : '#94a3b8' }}
-                      aria-invalid={errors.pgName ? 'true' : 'false'}
-                    />
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-1.5 text-xs font-bold" style={{ color: '#334155' }}>
+                      <Home className="w-4 h-4" style={{ color: '#4f46e5' }} />
+                      Current Stay <span style={{ color: '#b91c1c' }}>*</span>
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      {(['With Parents', 'In Hostel'] as const).map((opt) => {
+                        const selected = watchedFields.currentStay === opt;
+                        return (
+                          <label
+                            key={opt}
+                            className="flex items-center justify-center gap-2.5 py-3 px-4 rounded-xl font-bold text-sm cursor-pointer transition-all"
+                            style={{
+                              backgroundColor: selected ? '#eef2ff' : '#f8fafc',
+                              border: selected ? '1.5px solid #4f46e5' : '1.5px solid #cbd5e1',
+                              color: selected ? '#3730a3' : '#475569',
+                              boxShadow: selected ? '0 0 0 2px rgba(79,70,229,0.12)' : 'none',
+                            }}
+                          >
+                            <input
+                              type="radio"
+                              value={opt}
+                              className="sr-only"
+                              {...register('currentStay')}
+                            />
+                            <div
+                              className="w-4 h-4 rounded-full flex items-center justify-center shrink-0"
+                              style={{
+                                border: selected ? '2px solid #4f46e5' : '2px solid #94a3b8',
+                                backgroundColor: selected ? '#4f46e5' : 'transparent',
+                              }}
+                            >
+                              {selected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                            </div>
+                            <span>{opt}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    {errors.currentStay && (
+                      <p className="text-xs font-semibold mt-1 pl-1" style={{ color: '#b91c1c' }}>{errors.currentStay.message}</p>
+                    )}
                   </div>
-                  {errors.pgName && (
-                    <p className="text-xs font-semibold mt-1 pl-1" style={{ color: '#b91c1c' }}>{errors.pgName.message}</p>
+
+                  {/* PG / Hostel Name (conditional when In Hostel) */}
+                  {watchedFields.currentStay === 'In Hostel' && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="space-y-1.5 pt-1"
+                    >
+                      <label className="block text-xs font-bold" style={{ color: '#334155' }}>
+                        PG / Hostel Name <span style={{ color: '#b91c1c' }}>*</span>
+                      </label>
+                      <div className="relative">
+                        <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                          <Building className="w-5 h-5" style={{ color: '#94a3b8' }} />
+                        </span>
+                        <input
+                          type="text"
+                          {...register('pgName')}
+                          placeholder="Enter PG or Hostel Name *"
+                          className={inputPl11}
+                          style={{ color: '#172033', backgroundColor: '#ffffff', borderColor: errors.pgName ? '#b91c1c' : '#94a3b8' }}
+                          aria-invalid={errors.pgName ? 'true' : 'false'}
+                        />
+                      </div>
+                      {errors.pgName && (
+                        <p className="text-xs font-semibold mt-1 pl-1" style={{ color: '#b91c1c' }}>{errors.pgName.message}</p>
+                      )}
+                    </motion.div>
                   )}
                 </motion.div>
               )}
@@ -853,11 +934,20 @@ export default function ContactsRegisterForm() {
           {/* ── Submit Button ── */}
           <div className="pt-4" style={{ borderTop: '1px solid #f1f5f9' }}>
             <button
-              type="submit"
-              disabled={isSubmitting || Boolean(duplicateWarning)}
+              type="button"
+              disabled={isSubmitting || !isFormValid || Boolean(duplicateWarning)}
+              onClick={() => {
+                console.debug('[CRF] Button clicked — isFormValid:', isFormValid, 'isSubmitting:', isSubmitting, 'duplicate:', !!duplicateWarning);
+                if (!isFormValid || isSubmitting || duplicateWarning) { console.debug('[CRF] Click blocked by guard'); return; }
+                onSubmit(watchedFields as ContactsRegisterSchemaInput).catch((err) => {
+                  console.error('[CRF] Unhandled onSubmit rejection:', err);
+                  setSubmissionError(err instanceof Error ? err.message : 'An unexpected error occurred.');
+                  setIsSubmitting(false);
+                });
+              }}
               className="w-full py-4 rounded-xl font-extrabold text-base transition-all transform active:scale-[0.98]"
               style={
-                isValid && !duplicateWarning
+                isFormValid && !duplicateWarning && !isSubmitting
                   ? {
                       background: 'linear-gradient(to right, #4f46e5, #7c3aed)',
                       color: '#ffffff',
