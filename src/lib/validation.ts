@@ -204,3 +204,69 @@ export const feedbackSchema = z.object({
 
 export type FeedbackFormInput = z.infer<typeof feedbackSchema>;
 export type FeedbackSchemaInput = z.input<typeof feedbackSchema>;
+
+// --- CONTACTS REGISTER SCHEMA (v1.0.0) ---
+export const contactsRegisterSchema = z.object({
+  fullName: z.string()
+    .min(2, 'Full Name must be at least 2 characters')
+    .max(100, 'Full Name must be less than 100 characters')
+    .regex(/^[a-zA-Z\s.-]+$/, 'Name can only contain letters, spaces, dots, and hyphens')
+    .trim(),
+  phone: z.string()
+    .length(10, 'Phone number must be exactly 10 digits')
+    .regex(/^[0-9]+$/, 'Phone number must contain only numbers'),
+  collegeName: z.string({
+    message: 'Please select a college / company',
+  }).min(1, 'Please select a college / company').trim(),
+  customCollegeName: z.string().optional(),
+  areaOfStay: z.string({
+    message: 'Area of Stay is required',
+  }).min(2, 'Area of Stay must be at least 2 characters').trim(),
+  gender: z.enum(['Male', 'Female'], {
+    message: 'Please select a gender',
+  }),
+  currentStay: z.enum(['With Parents', 'In Hostel'], {
+    message: 'Please select your current stay',
+  }),
+  pgName: z.string().optional(),
+  skills: z.array(z.string()).optional().default([]),
+  interestedOnlineWork: z.enum(['Yes', 'No'], {
+    message: 'Please select your interest in online workshop',
+  }),
+}).superRefine((data, ctx) => {
+  if (data.collegeName === 'Other') {
+    if (!data.customCollegeName || data.customCollegeName.trim() === '') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Please enter your college / company name',
+        path: ['customCollegeName'],
+      });
+    } else if (data.customCollegeName.trim().length < 2) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'College / Company name must be at least 2 characters',
+        path: ['customCollegeName'],
+      });
+    }
+  }
+
+  if (data.currentStay === 'In Hostel') {
+    if (!data.pgName || data.pgName.trim() === '') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'PG Name is required when staying in hostel',
+        path: ['pgName'],
+      });
+    } else if (data.pgName.trim().length < 2) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'PG Name must be at least 2 characters',
+        path: ['pgName'],
+      });
+    }
+  }
+});
+
+export type ContactsRegisterFormInput = z.infer<typeof contactsRegisterSchema>;
+export type ContactsRegisterSchemaInput = z.input<typeof contactsRegisterSchema>;
+
