@@ -1,66 +1,102 @@
-# System Architecture — Rathayatra Attendance & Assignment System
+# System Architecture Documentation
 
-This document outlines the technical design, application flow, state management, and communication channels of the Rathayatra festival management app.
+## HKM CRM & Event Operations Platform
 
----
-
-## 1. Technical Stack
-
-- **Framework**: Next.js 16.2.9 (App Router)
-- **Database / Backend**: Supabase PostgreSQL (auth, schemas, triggers, realtime replication channels)
-- **State Management & Data Fetching**: React Query (TanStack Query v5) for server cache; React local state for UI transitions
-- **Styling**: Tailwind CSS & Vanilla CSS glassmorphic tokens
-- **Animations**: Framer Motion
-- **Icons**: Lucide React
-- **PWA Capabilities**: Service Worker caching, offline shell fallback, and upgrade lifecycle handlers
+This document describes the high-level system architecture, component distribution, data pipelines, state management, and backend interactions of the HKM CRM platform.
 
 ---
 
-## 2. Component Design & Structural Layout
+## 1. High-Level System Architecture
 
-The project follows Next.js App Router folder structure:
-
+```text
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                                CLIENT TIER                                       │
+│                                                                                 │
+│   ┌─────────────────────┐  ┌──────────────────────────┐  ┌────────────────────┐ │
+│   │ Public Attendees    │  │ Volunteer Operators      │  │ System Admins      │ │
+│   │ • Public Forms      │  │ • Operator Portal        │  │ • Master Dashboard │ │
+│   │ • Success / QR      │  │ • Call Queue & Log       │  │ • Assignment Mgmt  │ │
+│   │ • Feedback          │  │ • Visitor Reception      │  │ • Services & Stats │ │
+│   └──────────┬──────────┘  └─────────────┬────────────┘  └─────────┬──────────┘ │
+└──────────────┼───────────────────────────┼─────────────────────────┼────────────┘
+               │                           │                         │
+               ▼                           ▼                         ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                             NEXT.JS 16 APPLICATION TIER                         │
+│                                                                                 │
+│  ┌────────────────────────┐  ┌──────────────────────┐  ┌─────────────────────┐ │
+│  │ App Router Pages       │  │ API Routes & Proxy   │  │ Middleware / Auth   │ │
+│  │ (React Server/Client)  │  │ (Server-Side Logic)  │  │ (JWT Session Cookies)│ │
+│  └───────────┬────────────┘  └───────────┬──────────┘  └───────────┬─────────┘ │
+└──────────────┼───────────────────────────┼─────────────────────────┼────────────┘
+               │                           │                         │
+               ▼                           ▼                         ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                               DATABASE & BAAS TIER                              │
+│                                                                                 │
+│  ┌───────────────────────────────────────────────────────────────────────────┐  │
+│  │                              SUPABASE                                     │  │
+│  │                                                                           │  │
+│  │  ┌─────────────────────┐  ┌─────────────────────┐  ┌──────────────────┐  │  │
+│  │  │ Source Tables       │  │ Master Directory    │  │ SQL Functions    │  │  │
+│  │  │ • rathayatra_reg    │  │ • master_contacts   │  │ • auto_assign_rpc│  │  │
+│  │  │ • krishnashtami_reg │  │ • master_events     │  │ • capacity_checks│  │  │
+│  │  │ • contacts_register │  │ • assignments       │  │ • deduplication  │  │  │
+│  │  └─────────────────────┘  └─────────────────────┘  └──────────────────┘  │  │
+│  │                                                                           │  │
+│  │  ┌─────────────────────────────────────────────────────────────────────┐  │  │
+│  │  │ Row Level Security (RLS) & Realtime Engine                          │  │  │
+│  │  └─────────────────────────────────────────────────────────────────────┘  │  │
+│  └───────────────────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────────────┘
 ```
-src/
-├── app/
-│   ├── admin/                    # Admin Routes (Layout protected by admins table validation)
-│   │   ├── dashboard/            # Real-time metrics dashboard, check-ins log
-│   │   ├── operator/             # Operator Portal (Authentication portal & caller list)
-│   │   │   ├── portal/           # Seeding assignments queue, remarks notes editor
-│   │   │   └── visitor/          # Operator visitor manual search check-in
-│   │   ├── operators/            # Admin view to provision/edit Operators capacity
-│   │   ├── registrations/        # Admin tabular registrations view
-│   │   └── visitor/              # Admin-level Visitor Check-In Center
-│   ├── api/                      # Protected NextJS Route Handlers (APIs)
-│   │   ├── assignments/          # Auto assignments seeding & status patches
-│   │   ├── operators/            # Operator authentication and sessions hydration
-│   │   └── visitor/              # Real-time stats aggregates & check-in logs
-│   └── success/                  # Registration successful page (WhatsApp invite card)
-├── components/                   # Shared UI Components (Bell notifications, theme toggle)
-├── lib/                          # Client libraries (Supabase client, types, auth helpers)
-└── scripts/                      # Service worker compilers and seed helpers
-```
 
 ---
 
-## 3. Security Boundary & Gatekeeper Flow
+## 2. Layered Component Overview
 
-Authentication is split into two independent domains for security:
+### 2.1 Presentation & UI Layer
+* **Next.js App Router (`src/app`):** Declarative route-based layout rendering.
+* **Component Library (`src/components`):** Reusable UI elements including forms, charts, tables, modals, and navigation components.
+* **Styling:** Utility-first CSS via TailwindCSS v4 and CSS variables for theme switching (Dark/Light mode via `next-themes`).
 
-### Admin Authentication
-- Authenticated via **Supabase GoTrue Auth**.
-- **Gatekeeper Validation**: Before rendering any admin path `/admin/*` (except login `/admin`), the client layout queries the `admins` table. If the authenticated user ID is missing from `admins`, they are immediately logged out and redirected.
+### 2.2 Client-Side State & Persistence
+* **React Hook Form & Zod:** Managing client-side form state, real-time input validation, and error messaging.
+* **Local Storage Persistence:** Draft form caching in browser `localStorage` ensuring attendees do not lose inputs on accidental tab closure.
+* **TanStack React Query:** Asynchronous state caching, pagination, optimistic UI updates, and data fetching for administrative dashboards.
 
-### Operator Authentication
-- Authenticated via a custom **JWT cookie session** (`operator-session`).
-- Cookie settings: `HttpOnly`, `SameSite=Strict`, `Secure` (in production).
-- Operator sessions are validated server-side. Every operator API query is scoped to the operator's ID decoded from the JWT token.
+### 2.3 Backend API & Server Operations
+* **Next.js Server API Routes (`src/app/api/`):** Serverless handlers managing contact updates, bulk assignments, authentication verification, and geocoding proxies.
+* **Operator Session Management (`src/lib/operator-auth.ts`):** JWT token issue and HTTP-only cookie setting for volunteer operator security.
+* **Supabase Admin Client (`src/lib/supabase-admin.ts`):** Server-side client initialized with `SUPABASE_SERVICE_ROLE_KEY` for administrative operations bypassing RLS.
 
 ---
 
-## 4. Real-time Communication Channels
+## 3. Key Operational Workflows
 
-The application leverages Supabase Realtime replication channels:
-- **`dashboard_realtime_refetch`**: Listens to insertions on `registrations` and `visitor_visits` tables. Triggers automatic cache invalidations on TanStack Query client to keep charts and counters in sync.
-- **`visitor_visits_realtime`**: Refetches the Live Logs list and strip counters upon successful gate check-ins.
-- **`operator_assignments_realtime`**: Notifies active operators instantly when contacts are assigned, removed, or reassigned.
+### 3.1 Contact Ingestion & Normalization
+1. Attendee submits registration on `/`, `/krishnashtami-complete`, or `/contacts-register`.
+2. Form validates phone format (10-digit clean digits).
+3. Payload is inserted into source-specific table (e.g. `rathayatra_registrations`).
+4. Database triggers or server-side resolvers execute `upsert_master_contact` to ensure the phone number is added/updated in `master_contacts` with standard `+91XXXXXXXXXX` formatting.
+
+### 3.2 Auto-Assignment Engine
+1. Admin initiates assignment preview or execution from `/admin/registrations`.
+2. API calls Supabase RPC function `rpc_auto_assign_contacts`.
+3. RPC executes atomic matching algorithm:
+   - Queries unassigned registrations.
+   - Filters active operators (`active = true`).
+   - Matches language preferences between contact and operator.
+   - Checks operator capacity (`current_assigned_count < max_contacts`).
+   - Atomically inserts assignment records into `operator_assignments`.
+
+### 3.3 Operator Call Queue & Logging
+1. Operator logs into `/operator` with registered phone.
+2. Operator accesses `/operator/portal`.
+3. System fetches assignments for the operator ID.
+4. Operator dials contact, selects status (e.g. `Connected`, `Converted`, `Call Next Week`), enters call notes, and submits.
+5. Record updates immediately, and stats reflect across admin analytics dashboards.
+
+---
+
+*HKM Architecture Documentation — Last Updated October 2026*
