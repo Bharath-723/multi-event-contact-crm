@@ -49,6 +49,35 @@ function isFilterActive(val?: string | null): boolean {
   return true;
 }
 
+/**
+ * Normalize gender to a canonical comparable string.
+ * Returns 'female', 'male', or '' (unknown).
+ * Gender is NEVER inferred from any other attribute.
+ */
+function normalizeGender(raw: unknown): string {
+  if (raw === null || raw === undefined) return '';
+  return String(raw).trim().toLowerCase();
+}
+
+/**
+ * Returns true if the contact's gender is Female (any casing/whitespace variation).
+ * Missing or unresolvable gender is NOT treated as male — returns false here so
+ * callers can independently decide to fail-closed on unknown gender.
+ */
+function isFemale(raw: unknown): boolean {
+  return normalizeGender(raw) === 'female';
+}
+
+/**
+ * Returns true if gender is known and NOT female (i.e. contact is eligible).
+ * Contacts with missing/unknown gender are NOT eligible for assignment.
+ */
+function isGenderEligible(raw: unknown): boolean {
+  const g = normalizeGender(raw);
+  if (!g) return false; // missing gender → fail-closed, not eligible
+  return g !== 'female';
+}
+
 function normalizeOccupationCategory(raw: unknown): string | null {
   if (!raw) return null;
   const s = String(raw).trim().toLowerCase();
@@ -422,9 +451,14 @@ export async function POST(req: Request) {
 
   const availableSlots = targetOperators.reduce((acc, op) => acc + op.available, 0);
 
-  // Female policy restriction is preserved ONLY for Feedback contacts per feedback assignment policy
-  const skippedFemaleCount = isFeedback ? unassigned.filter((r) => r.gender === 'Female').length : 0;
-  const eligibleCount = isFeedback ? unassigned.filter((r) => r.gender !== 'Female').length : unassigned.length;
+  // ── Female Restriction: applies to ALL sources universally ────────────────
+  // Contacts with missing/unknown gender are also excluded (fail-closed policy).
+  const skippedFemaleCount = unassigned.filter((r) => isFemale(r.gender)).length;
+  const skippedUnknownGenderCount = unassigned.filter((r) => {
+    const g = normalizeGender(r.gender);
+    return !g; // empty/null/undefined gender
+  }).length;
+  const eligibleCount = unassigned.filter((r) => isGenderEligible(r.gender)).length;
 
   const willAssign = Math.min(eligibleCount, Math.max(0, availableSlots));
   const willSkipCapacity = Math.max(0, eligibleCount - availableSlots);
@@ -434,6 +468,7 @@ export async function POST(req: Request) {
     total_unassigned: unassignedBeforeFilter.length,
     filtered_candidates: unassigned.length,
     skipped_female: skippedFemaleCount,
+    skipped_unknown_gender: skippedUnknownGenderCount,
     eligible_male: eligibleCount,
     eligible_candidates: eligibleCount,
     active_operators: targetOperators.length,
@@ -456,6 +491,7 @@ export async function POST(req: Request) {
 
   let assigned = 0;
   let skippedFemale = 0;
+  let skippedUnknownGender = 0;
   let skippedCapacity = 0;
   let failed = 0;
   const distribution: Record<string, { name: string; assigned_in_batch: number }> = {};
@@ -467,8 +503,14 @@ export async function POST(req: Request) {
 
   try {
     for (const reg of unassigned) {
-      if (isFeedback && reg.gender === 'Female') {
+      // ── Universal female restriction — applies to every source ────────────
+      if (isFemale(reg.gender)) {
         skippedFemale++;
+        continue;
+      }
+      // ── Missing / unknown gender → fail-closed, do not assign ─────────────
+      if (!isGenderEligible(reg.gender)) {
+        skippedUnknownGender++;
         continue;
       }
 
@@ -539,6 +581,7 @@ export async function POST(req: Request) {
       filtered_candidates: unassigned.length,
       successfully_assigned: assigned,
       skipped_female: skippedFemale,
+      skipped_unknown_gender: skippedUnknownGender,
       skipped_no_capacity: skippedCapacity,
       failed,
       distribution: Object.entries(distribution).map(([id, d]) => ({

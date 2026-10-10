@@ -428,19 +428,32 @@ function ViewAssignedModal({
     }
   };
 
-  const statusColors: Record<string, string> = {
-    Pending:            'text-blue-400   bg-blue-950/30   border-blue-500/20',
-    Assigned:           'text-blue-400   bg-blue-950/30   border-blue-500/20',
-    Coming:             'text-green-400  bg-green-950/30  border-green-500/20',
-    'Not Coming':       'text-red-400    bg-red-950/30    border-red-500/20',
-    'Not Answered':     'text-amber-400  bg-amber-950/30  border-amber-500/20',
-    'Next Week':        'text-purple-400 bg-purple-950/30 border-purple-500/20',
-    'Not Interested':   'text-rose-400   bg-rose-950/30   border-rose-500/20',
-    'Not Connected':    'text-amber-400  bg-amber-950/30  border-amber-500/20',
+  const getStatusClass = (status: unknown) => {
+    const s = String(status ?? 'Pending').toLowerCase().replace(/[_\s]+/g, ' ').trim();
+    const colors: Record<string, string> = {
+      pending:          'text-blue-400   bg-blue-950/30   border-blue-500/20',
+      assigned:         'text-blue-400   bg-blue-950/30   border-blue-500/20',
+      coming:           'text-green-400  bg-green-950/30  border-green-500/20',
+      'not coming':     'text-red-400    bg-red-950/30    border-red-500/20',
+      'not answered':   'text-amber-400  bg-amber-950/30  border-amber-500/20',
+      'next week':      'text-purple-400 bg-purple-950/30 border-purple-500/20',
+      'not interested': 'text-rose-400   bg-rose-950/30   border-rose-500/20',
+      'not connected':  'text-amber-400  bg-amber-950/30  border-amber-500/20',
+      completed:        'text-emerald-400 bg-emerald-950/30 border-emerald-500/20',
+    };
+    return colors[s] ?? 'text-slate-400 bg-slate-900/40 border-slate-700/30';
+  };
+
+  const formatStatusDisplay = (status: unknown) => {
+    const s = String(status ?? 'Pending').replace(/_/g, ' ').trim();
+    if (!s) return 'Pending';
+    return s.charAt(0).toUpperCase() + s.slice(1);
   };
 
   const sourceTitle =
-    contactSource === 'krishnashtami'
+    contactSource === 'master_dashboard'
+      ? 'Master Dashboard'
+      : contactSource === 'krishnashtami'
       ? 'Krishnashtami 2026'
       : contactSource === 'feedback_contacts'
       ? 'Feedback Contacts'
@@ -474,22 +487,33 @@ function ViewAssignedModal({
           )}
           {assignments.map((a) => {
             const fc = (
+              a.master_contacts ||
+              a.master_contact ||
               a.krishnashtami_registrations ||
               a.registrations ||
               a.feedback_contacts ||
               a.feedback_contact
             ) as Record<string, unknown> | null;
 
-            const fullName = String(fc?.full_name ?? '—');
+            const fullName = String(fc?.name || fc?.full_name || '—');
             const phone = String(fc?.phone ?? '—');
             const subDetail = fc?.college_name
-              ? `${String(fc.college_name)} (${String(fc.branch ?? '')})`
+              ? `${String(fc.college_name)}${fc.branch ? ` (${String(fc.branch)})` : ''}`
               : fc?.company_college
               ? String(fc.company_college)
+              : fc?.area_of_stay
+              ? String(fc.area_of_stay)
               : '';
 
-            const statusClass = statusColors[(a.status as string)] ?? 'text-slate-400 bg-slate-900/40 border-slate-700/30';
-            const notesText: string | null = typeof a.notes === 'string' ? a.notes : typeof a.remarks === 'string' ? a.remarks : null;
+            const statusClass = getStatusClass(a.status);
+            const notesText: string | null =
+              typeof a.comments === 'string'
+                ? a.comments
+                : typeof a.notes === 'string'
+                ? a.notes
+                : typeof a.remarks === 'string'
+                ? a.remarks
+                : null;
             const isUnassigningThis = unassigningId === (a.id as string);
 
             return (
@@ -509,7 +533,7 @@ function ViewAssignedModal({
                     {isUnassigningThis ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Unassign'}
                   </button>
                   <span className={`text-[10px] font-bold px-2 py-1 rounded-lg border shrink-0 ${statusClass}`}>
-                    {String(a.status)}
+                    {formatStatusDisplay(a.status)}
                   </span>
                 </div>
               </div>
@@ -1097,7 +1121,7 @@ export default function ContactOperatorsPage() {
         )}
         {viewOp && (
           <ViewAssignedModal
-            key="view-modal"
+            key={`view-modal-${contactSource}-${viewOp.id}`}
             operator={viewOp}
             contactSource={contactSource}
             onClose={() => setViewOp(null)}

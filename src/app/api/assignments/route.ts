@@ -7,6 +7,26 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { normalizeSource } from '@/lib/source-resolver';
 
+/**
+ * Normalize gender string for comparison.
+ * Returns 'female', 'male', or '' (unknown/missing).
+ * Gender is NEVER inferred from any other attribute.
+ */
+function normalizeGender(raw: unknown): string {
+  if (raw === null || raw === undefined) return '';
+  return String(raw).trim().toLowerCase();
+}
+
+/**
+ * Returns true when the contact's gender is eligible for operator assignment.
+ * Female contacts are NEVER eligible. Missing/unknown gender is fail-closed (also ineligible).
+ */
+function isGenderEligible(raw: unknown): boolean {
+  const g = normalizeGender(raw);
+  if (!g) return false; // missing gender → fail-closed
+  return g !== 'female';
+}
+
 async function requireAdmin(
   req: Request
 ): Promise<{ error: NextResponse | null; userId?: string }> {
@@ -52,7 +72,7 @@ export async function GET(req: Request) {
       .from('master_contact_assignments')
       .select(`
         id, master_contact_id, operator_id, assigned_at,
-        status, comments, is_active, created_at, updated_at,
+        status, comments, is_active, updated_at,
         contact_operators!operator_id (id, name, email, phone),
         master_contacts!master_contact_id (*)
       `, { count: 'exact' })
@@ -61,7 +81,28 @@ export async function GET(req: Request) {
 
     if (operatorId) q = q.eq('operator_id', operatorId);
     const res = await q.range(from, to);
-    data = res.data;
+    data = (res.data ?? []).map((row: Record<string, unknown>) => {
+      const mc = (row.master_contacts as Record<string, unknown> | null) || {};
+      const contactObj = {
+        ...mc,
+        full_name: mc.name || mc.full_name || '—',
+        name: mc.name || mc.full_name || '—',
+        phone: mc.phone || '',
+        college_name: mc.company_college || mc.college_name || '',
+        company_college: mc.company_college || '',
+        branch: mc.occupation || mc.branch || '',
+        occupation: mc.occupation || '',
+        area_of_stay: mc.area_of_stay || '',
+        current_stay: mc.area_of_stay || '',
+      };
+      return {
+        ...row,
+        notes: row.comments || row.notes || '',
+        remarks: row.comments || row.remarks || '',
+        master_contacts: contactObj,
+        master_contact: contactObj,
+      };
+    });
     count = res.count;
     error = res.error;
   } else if (source === 'krishnashtami') {
@@ -171,6 +212,35 @@ export async function POST(req: Request) {
     const results: Array<{ master_contact_id: string; status: string; message: string }> = [];
 
     for (const mId of regIds) {
+      // ── Gender pre-validation: resolve authoritative gender from master_contacts ──
+      const { data: masterContact, error: mcFetchErr } = await supabaseAdmin
+        .from('master_contacts')
+        .select('id, gender')
+        .eq('id', mId)
+        .maybeSingle();
+
+      if (mcFetchErr || !masterContact) {
+        results.push({
+          master_contact_id: mId,
+          status: 'error',
+          message: 'Master contact not found or could not be resolved.',
+        });
+        continue;
+      }
+
+      if (!isGenderEligible(masterContact.gender)) {
+        const g = normalizeGender(masterContact.gender);
+        const reason = !g
+          ? 'Contact gender is missing or unknown. Assignment requires a confirmed eligible gender.'
+          : 'Female contacts are not eligible for operator assignment.';
+        results.push({
+          master_contact_id: mId,
+          status: 'error',
+          message: reason,
+        });
+        continue;
+      }
+
       const { data: rpcRes, error: rpcErr } = await supabaseAdmin.rpc('assign_master_contact_atomic', {
         p_master_contact_id: mId,
         p_operator_id: operator.id,
@@ -224,6 +294,16 @@ export async function POST(req: Request) {
       { error: `Cross-source assignment rejected: One or more IDs do not belong to ${source} table` },
       { status: 400 }
     );
+  }
+
+  // ── Gender validation: reject any female or unknown-gender contacts ──────────────────────
+  const ineligibleReg = verifiedRegs.find((r) => !isGenderEligible(r.gender));
+  if (ineligibleReg) {
+    const g = normalizeGender(ineligibleReg.gender);
+    const reason = !g
+      ? `Contact gender is missing or unknown (ID: ${ineligibleReg.id}). Assignment requires a confirmed eligible gender.`
+      : `Female contacts are not eligible for operator assignment (ID: ${ineligibleReg.id}).`;
+    return NextResponse.json({ error: reason }, { status: 400 });
   }
 
   const assignTable =
