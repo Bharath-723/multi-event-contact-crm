@@ -56,7 +56,7 @@ export async function GET(req: Request) {
   if (authError) return authError;
 
   const url = new URL(req.url);
-  const source = normalizeSource(url.searchParams.get('source'));
+  const source = normalizeSource(url.searchParams.get('source') ?? 'master_dashboard');
   const operatorId = url.searchParams.get('operator_id');
   const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
   const limit = Math.min(200, Math.max(1, parseInt(url.searchParams.get('limit') || '50', 10)));
@@ -183,7 +183,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const source = normalizeSource(body.source);
+  const source = normalizeSource(body.source ?? 'master_dashboard');
   const { operator_id } = body;
 
   const regIds: string[] = body.master_contact_ids?.length
@@ -209,6 +209,7 @@ export async function POST(req: Request) {
 
   // Handle Master Dashboard assignment via Atomic Database RPC assign_master_contact_atomic
   if (source === 'master_dashboard') {
+    const allowReassign = body.reassign !== undefined ? Boolean(body.reassign) : true;
     const results: Array<{ master_contact_id: string; status: string; message: string }> = [];
 
     for (const mId of regIds) {
@@ -246,6 +247,7 @@ export async function POST(req: Request) {
         p_operator_id: operator.id,
         p_assigned_by: userId ?? null,
         p_max_capacity: 40,
+        p_allow_reassign: allowReassign,
       });
 
       if (rpcErr || !rpcRes?.success) {
@@ -255,15 +257,16 @@ export async function POST(req: Request) {
           message: rpcErr?.message || rpcRes?.message || 'Assignment failed',
         });
       } else {
+        const resStatus = rpcRes.status || (rpcRes.code === 'REASSIGNED' ? 'reassigned' : rpcRes.code === 'ALREADY_ASSIGNED' ? 'already_assigned' : 'assigned');
         results.push({
           master_contact_id: mId,
-          status: 'assigned',
-          message: rpcRes.message || `Assigned to ${operator.name}`,
+          status: resStatus,
+          message: rpcRes.message || (resStatus === 'reassigned' ? `Reassigned to ${operator.name}` : `Assigned to ${operator.name}`),
         });
       }
     }
 
-    const assignedCount = results.filter((r) => r.status === 'assigned').length;
+    const assignedCount = results.filter((r) => r.status === 'assigned' || r.status === 'reassigned' || r.status === 'already_assigned').length;
     if (assignedCount === 0 && results.length > 0) {
       return NextResponse.json({ error: results[0].message, results, source }, { status: 400 });
     }
@@ -306,147 +309,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: reason }, { status: 400 });
   }
 
-  const assignTable =
-    source === 'krishnashtami'
-      ? 'krishnashtami_contact_assignments'
-      : source === 'feedback_contacts'
-      ? 'feedback_contact_assignments'
-      : 'contact_assignments';
-
-  const fkCol = source === 'feedback_contacts' ? 'feedback_contact_id' : 'registration_id';
-
+  const allowReassign = body.reassign !== undefined ? Boolean(body.reassign) : true;
   const results: Array<{ registration_id: string; status: string; message: string; assignment?: unknown }> = [];
 
   for (const regId of regIds) {
-    const { data: existingActive } = await supabaseAdmin
-      .from(assignTable)
-      .select('id, operator_id, contact_operators!operator_id (id, name)')
-      .eq(fkCol, regId)
-      .eq('is_active', true)
-      .maybeSingle();
-
-    if (existingActive) {
-      if (existingActive.operator_id === operator.id) {
-        results.push({
-          registration_id: regId,
-          status: 'already_assigned',
-          message: `Already assigned to ${operator.name}`,
-        });
-        continue;
-      }
-
-      // Check target operator capacity before deactivating old assignment
-      const { count: targetOpCount } = await supabaseAdmin
-        .from(assignTable)
-        .select('id', { count: 'exact', head: true })
-        .eq('operator_id', operator.id)
-        .eq('is_active', true);
-
-      if ((targetOpCount ?? 0) >= 40) {
-        results.push({
-          registration_id: regId,
-          status: 'error',
-          message: `Operator ${operator.name} has reached maximum capacity limit (Max 40 active contacts)`,
-        });
-        continue;
-      }
-
-      // Deactivate previous active assignment
-      const { error: deactErr } = await supabaseAdmin
-        .from(assignTable)
-        .update({ is_active: false, updated_at: new Date().toISOString() })
-        .eq('id', existingActive.id);
-
-      if (deactErr) {
-        results.push({
-          registration_id: regId,
-          status: 'error',
-          message: `Failed to deactivate previous assignment: ${deactErr.message}`,
-        });
-        continue;
-      }
-
-      // Insert new active assignment
-      const initialStatus = source === 'feedback_contacts' ? 'Assigned' : 'Pending';
-      const insertPayload: Record<string, unknown> = {
-        [fkCol]: regId,
-        operator_id: operator.id,
-        assigned_by: userId ?? null,
-        status: initialStatus,
-        is_active: true,
-      };
-
-      const { data: newAssign, error: insertErr } = await supabaseAdmin
-        .from(assignTable)
-        .insert(insertPayload)
-        .select('id')
-        .single();
-
-      if (insertErr || !newAssign) {
-        // Rollback previous assignment deactivation
-        await supabaseAdmin
-          .from(assignTable)
-          .update({ is_active: true, updated_at: new Date().toISOString() })
-          .eq('id', existingActive.id);
-
-        results.push({
-          registration_id: regId,
-          status: 'error',
-          message: `Failed to create new assignment: ${insertErr?.message || 'Unknown error'}`,
-        });
-        continue;
-      }
-
-      // Sync master contact assignment if master contact exists for this record
-      try {
-        const { data: regRow } = await supabaseAdmin
-          .from(targetRegTable)
-          .select('phone')
-          .eq('id', regId)
-          .single();
-        if (regRow?.phone) {
-          const { normalizePhone } = await import('@/lib/master-contacts');
-          const cleanPhone = normalizePhone(regRow.phone);
-          if (cleanPhone) {
-            const { data: mc } = await supabaseAdmin
-              .from('master_contacts')
-              .select('id')
-              .eq('phone', cleanPhone)
-              .maybeSingle();
-            if (mc?.id) {
-              await supabaseAdmin.rpc('assign_master_contact_atomic', {
-                p_master_contact_id: mc.id,
-                p_operator_id: operator.id,
-                p_assigned_by: userId ?? null,
-                p_max_capacity: 40,
-              });
-            }
-          }
-        }
-      } catch (masterSyncErr) {
-        console.warn('[reassign] Master contact assignment sync warning:', masterSyncErr);
-      }
-
-      const prevOpName = (
-        Array.isArray(existingActive.contact_operators)
-          ? existingActive.contact_operators[0]?.name
-          : (existingActive.contact_operators as { name?: string } | null)?.name
-      ) ?? 'previous operator';
-
-      results.push({
-        registration_id: regId,
-        status: 'reassigned',
-        message: `Reassigned from ${prevOpName} to ${operator.name}`,
-      });
-      continue;
-    }
-
     const { data: rpcRes, error: rpcErr } = await supabaseAdmin.rpc('assign_contact_atomic', {
       p_contact_id: regId,
       p_operator_id: operator.id,
       p_source: source,
       p_assigned_by: userId ?? null,
       p_max_capacity: 40,
+      p_allow_reassign: allowReassign,
     });
 
     if (rpcErr || !rpcRes?.success) {
@@ -455,49 +328,53 @@ export async function POST(req: Request) {
         status: 'error',
         message: rpcErr?.message || rpcRes?.message || 'Assignment failed',
       });
-    } else {
-      // Sync master contact assignment on initial assignment as well
-      try {
-        const { data: regRow } = await supabaseAdmin
-          .from(targetRegTable)
-          .select('phone')
-          .eq('id', regId)
-          .single();
-        if (regRow?.phone) {
-          const { normalizePhone } = await import('@/lib/master-contacts');
-          const cleanPhone = normalizePhone(regRow.phone);
-          if (cleanPhone) {
-            const { data: mc } = await supabaseAdmin
-              .from('master_contacts')
-              .select('id')
-              .eq('phone', cleanPhone)
-              .maybeSingle();
-            if (mc?.id) {
-              await supabaseAdmin.rpc('assign_master_contact_atomic', {
-                p_master_contact_id: mc.id,
-                p_operator_id: operator.id,
-                p_assigned_by: userId ?? null,
-                p_max_capacity: 40,
-              });
-            }
+      continue;
+    }
+
+    // Sync master contact assignment if master contact exists for this record
+    try {
+      const { data: regRow } = await supabaseAdmin
+        .from(targetRegTable)
+        .select('phone')
+        .eq('id', regId)
+        .single();
+      if (regRow?.phone) {
+        const { normalizePhone } = await import('@/lib/master-contacts');
+        const cleanPhone = normalizePhone(regRow.phone);
+        if (cleanPhone) {
+          const { data: mc } = await supabaseAdmin
+            .from('master_contacts')
+            .select('id')
+            .eq('phone', cleanPhone)
+            .maybeSingle();
+          if (mc?.id) {
+            await supabaseAdmin.rpc('assign_master_contact_atomic', {
+              p_master_contact_id: mc.id,
+              p_operator_id: operator.id,
+              p_assigned_by: userId ?? null,
+              p_max_capacity: 40,
+              p_allow_reassign: allowReassign,
+            });
           }
         }
-      } catch (masterSyncErr) {
-        console.warn('[assign] Master contact assignment sync warning:', masterSyncErr);
       }
-
-      results.push({
-        registration_id: regId,
-        status: 'assigned',
-        message: `Assigned to ${operator.name}`,
-      });
+    } catch (masterSyncErr) {
+      console.warn('[assign] Master contact assignment sync warning:', masterSyncErr);
     }
+
+    const resStatus = rpcRes.status || (rpcRes.code === 'REASSIGNED' ? 'reassigned' : rpcRes.code === 'ALREADY_ASSIGNED' ? 'already_assigned' : 'assigned');
+    results.push({
+      registration_id: regId,
+      status: resStatus,
+      message: rpcRes.message || (resStatus === 'reassigned' ? `Reassigned to ${operator.name}` : resStatus === 'already_assigned' ? `Already assigned to ${operator.name}` : `Assigned to ${operator.name}`),
+      assignment: rpcRes.assignment_id ? { id: rpcRes.assignment_id, operator_id: operator.id } : undefined,
+    });
   }
 
-  const assignedCount = results.filter((r) => r.status === 'assigned' || r.status === 'reassigned').length;
+  const assignedCount = results.filter((r) => r.status === 'assigned' || r.status === 'reassigned' || r.status === 'already_assigned').length;
 
   if (assignedCount === 0 && results.length > 0) {
-    const errRes = results.find((r) => r.status === 'error' || r.status === 'already_assigned');
+    const errRes = results.find((r) => r.status === 'error');
     return NextResponse.json(
       {
         success: false,

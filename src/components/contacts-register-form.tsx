@@ -88,6 +88,9 @@ export default function ContactsRegisterForm() {
       gender: undefined,
       currentStay: undefined,
       pgName: '',
+      profession: undefined,
+      interestedBhagavadGita: undefined,
+      comments: '',
       skills: [],
     } as unknown as ContactsRegisterSchemaInput,
   });
@@ -268,6 +271,8 @@ export default function ContactsRegisterForm() {
     const isOtherCollege = v.collegeName === 'Other' || v.collegeName === 'Other / Enter Name';
     if (isOtherCollege && (!v.customCollegeName || v.customCollegeName.trim().length < 2)) { console.debug('[CRF valid] BLOCKED: customCollegeName'); return false; }
     if (!v.areaOfStay || v.areaOfStay.trim().length < 2) { console.debug('[CRF valid] BLOCKED: areaOfStay', JSON.stringify(v.areaOfStay)); return false; }
+    if (!v.profession) { console.debug('[CRF valid] BLOCKED: profession'); return false; }
+    if (!v.interestedBhagavadGita) { console.debug('[CRF valid] BLOCKED: interestedBhagavadGita'); return false; }
     if (v.gender === 'Male') {
       if (!v.currentStay) { console.debug('[CRF valid] BLOCKED: currentStay'); return false; }
       if (v.currentStay === 'In Hostel' && (!v.pgName || v.pgName.trim().length < 2)) { console.debug('[CRF valid] BLOCKED: pgName'); return false; }
@@ -281,10 +286,11 @@ export default function ContactsRegisterForm() {
   const calculateProgress = () => {
     const values = watchedFields;
     let completed = 0;
-    let total = values.gender === 'Male' ? 6 : 5;
+    let total = values.gender === 'Male' ? 8 : 7;
 
     if (values.fullName && values.fullName.trim().length >= 2) completed++;
     if (values.phone && values.phone.length === 10) completed++;
+    if (values.profession) completed++;
     if (values.collegeName) {
       if (values.collegeName === 'Other' || values.collegeName === 'Other / Enter Name') {
         if (values.customCollegeName && values.customCollegeName.trim().length >= 2) completed++;
@@ -293,6 +299,7 @@ export default function ContactsRegisterForm() {
       }
     }
     if (values.areaOfStay && values.areaOfStay.trim().length >= 2) completed++;
+    if (values.interestedBhagavadGita) completed++;
     if (values.gender) {
       completed++;
       if (values.gender === 'Male') {
@@ -357,6 +364,9 @@ export default function ContactsRegisterForm() {
         gender: data.gender,
         currentStay: finalCurrentStay,
         pgName: finalPgName,
+        profession: data.profession,
+        interestedBhagavadGita: data.interestedBhagavadGita,
+        comments: data.comments?.trim() || null,
         skills: data.skills || [],
         // Only include interestedOnlineWork if it's a valid enum value — omit '' or undefined
         // to avoid Zod's z.enum(['Yes','No']).optional() rejecting empty strings from drafts
@@ -485,10 +495,10 @@ export default function ContactsRegisterForm() {
             className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-2"
             style={{ color: '#111827' }}
           >
-            Contacts Register
+            Bhajan Club
           </h1>
-          <p className="text-sm sm:text-base" style={{ color: '#475569' }}>
-            Please fill in your details below.
+          <p className="text-sm sm:text-base font-semibold" style={{ color: '#475569' }}>
+            Hare Krishna Heritage Tower, Kokapet
           </p>
         </div>
 
@@ -607,6 +617,34 @@ export default function ContactsRegisterForm() {
                   <p className="text-xs font-semibold mt-1 pl-1" style={{ color: '#b91c1c' }}>{errors.gender.message}</p>
                 )}
               </div>
+            </div>
+
+            {/* Profession */}
+            <div>
+              <label className="block text-xs font-bold mb-1.5" style={{ color: '#334155' }}>
+                Profession <span style={{ color: '#b91c1c' }}>*</span>
+              </label>
+              <div className="relative">
+                <select
+                  {...register('profession')}
+                  className={selectCls}
+                  style={{ color: '#172033', backgroundColor: '#ffffff', borderColor: errors.profession ? '#b91c1c' : '#94a3b8' }}
+                  aria-invalid={errors.profession ? 'true' : 'false'}
+                  defaultValue=""
+                >
+                  <option value="" disabled style={{ color: '#64748b', backgroundColor: '#ffffff' }}>Select Profession *</option>
+                  <option value="Student" style={{ color: '#172033', backgroundColor: '#ffffff' }}>Student</option>
+                  <option value="Working" style={{ color: '#172033', backgroundColor: '#ffffff' }}>Working</option>
+                  <option value="Business" style={{ color: '#172033', backgroundColor: '#ffffff' }}>Business</option>
+                  <option value="Others" style={{ color: '#172033', backgroundColor: '#ffffff' }}>Others</option>
+                </select>
+                <span className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
+                  <ChevronDown className="w-5 h-5" style={{ color: '#64748b' }} />
+                </span>
+              </div>
+              {errors.profession && (
+                <p className="text-xs font-semibold mt-1 pl-1" style={{ color: '#b91c1c' }}>{errors.profession.message}</p>
+              )}
             </div>
 
             {/* College / Company */}
@@ -884,7 +922,7 @@ export default function ContactsRegisterForm() {
               2. Skills &amp; Interests (Optional)
             </h3>
             <p className="text-xs -mt-2" style={{ color: '#64748b' }}>
-              Select any skills or domains you are interested in:
+              Select any skill you are interested to render service to the lord
             </p>
 
             {isLoadingSkills ? (
@@ -928,6 +966,73 @@ export default function ContactsRegisterForm() {
                   );
                 })}
               </div>
+            )}
+          </div>
+
+          {/* ─── SECTION 3: BHAGAVAD GITA INTEREST ─── */}
+          <div className="space-y-2 pt-2" style={{ borderTop: '1px solid #f1f5f9' }}>
+            <label className="block text-xs font-bold" style={{ color: '#334155' }}>
+              Interested to attend Bhagavad Gita? <span style={{ color: '#b91c1c' }}>*</span>
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              {(['Yes', 'No'] as const).map((opt) => {
+                const selected = watchedFields.interestedBhagavadGita === opt;
+                return (
+                  <label
+                    key={opt}
+                    className="flex items-center justify-center gap-2.5 py-3 px-4 rounded-xl font-bold text-sm cursor-pointer transition-all"
+                    style={{
+                      backgroundColor: selected ? '#eef2ff' : '#f8fafc',
+                      border: selected ? '1.5px solid #4f46e5' : '1.5px solid #cbd5e1',
+                      color: selected ? '#3730a3' : '#475569',
+                      boxShadow: selected ? '0 0 0 2px rgba(79,70,229,0.12)' : 'none',
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      value={opt}
+                      className="sr-only"
+                      {...register('interestedBhagavadGita')}
+                    />
+                    <div
+                      className="w-4 h-4 rounded-full flex items-center justify-center shrink-0"
+                      style={{
+                        border: selected ? '2px solid #4f46e5' : '2px solid #94a3b8',
+                        backgroundColor: selected ? '#4f46e5' : 'transparent',
+                      }}
+                    >
+                      {selected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                    </div>
+                    <span>{opt}</span>
+                  </label>
+                );
+              })}
+            </div>
+            {errors.interestedBhagavadGita && (
+              <p className="text-xs font-semibold mt-1 pl-1" style={{ color: '#b91c1c' }}>{errors.interestedBhagavadGita.message}</p>
+            )}
+          </div>
+
+          {/* ─── SECTION 4: COMMENTS / QUERY ─── */}
+          <div className="space-y-1.5 pt-2" style={{ borderTop: '1px solid #f1f5f9' }}>
+            <label className="block text-xs font-bold" style={{ color: '#334155' }}>
+              Comments / Query <span className="font-normal text-slate-400">(Optional)</span>
+            </label>
+            <textarea
+              {...register('comments')}
+              rows={3}
+              maxLength={1000}
+              placeholder="Any questions, comments, or queries..."
+              className="w-full px-4 py-3 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+              style={{
+                color: '#172033',
+                backgroundColor: '#ffffff',
+                borderColor: errors.comments ? '#b91c1c' : '#cbd5e1',
+                resize: 'vertical',
+              }}
+            />
+            {errors.comments && (
+              <p className="text-xs font-semibold mt-1 pl-1" style={{ color: '#b91c1c' }}>{errors.comments.message}</p>
             )}
           </div>
 

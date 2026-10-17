@@ -38,7 +38,7 @@ export async function PUT(
 
   try {
     const body = await request.json();
-    const { name, phone, age, gender, area_of_stay, company_college, occupation, standard } = body;
+    const { name, phone, age, gender, area_of_stay, company_college, occupation, standard, level, chanting, classes_attended } = body;
 
     const normPhone = phone ? normalizePhone(phone) : undefined;
 
@@ -52,6 +52,19 @@ export async function PUT(
     if (gender !== undefined) updatePayload.gender = gender ? String(gender).trim() : null;
     if (area_of_stay !== undefined) updatePayload.area_of_stay = area_of_stay ? String(area_of_stay).trim() : null;
     if (company_college !== undefined) updatePayload.company_college = company_college ? String(company_college).trim() : null;
+    if (level !== undefined) updatePayload.level = level ? String(level).trim() : 'level-0';
+    if (classes_attended !== undefined) {
+      const parsedCA = parseInt(String(classes_attended), 10);
+      if (!isNaN(parsedCA) && parsedCA >= 0) {
+        updatePayload.classes_attended = parsedCA;
+      }
+    }
+    if (chanting !== undefined) {
+      const parsedChanting = parseInt(String(chanting), 10);
+      if (!isNaN(parsedChanting) && parsedChanting >= 0) {
+        updatePayload.chanting = parsedChanting;
+      }
+    }
 
     const { data: updatedMaster, error: updateErr } = await supabaseAdmin
       .from('master_contacts')
@@ -64,11 +77,12 @@ export async function PUT(
       return NextResponse.json({ error: 'Failed to update master contact: ' + updateErr.message }, { status: 500 });
     }
 
-    // Also update master_contact_events if occupation/standard provided
-    if (occupation !== undefined || standard !== undefined) {
+    // Also update master_contact_events if occupation/standard/level provided
+    if (occupation !== undefined || standard !== undefined || level !== undefined) {
       const eventUpdate: Record<string, unknown> = {};
       if (occupation !== undefined) eventUpdate.occupation = occupation ? String(occupation).trim() : null;
       if (standard !== undefined) eventUpdate.standard = standard ? String(standard).trim() : null;
+      if (level !== undefined) eventUpdate.level = level ? String(level).trim() : 'level-0';
 
       await supabaseAdmin
         .from('master_contact_events')

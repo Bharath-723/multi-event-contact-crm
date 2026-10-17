@@ -227,6 +227,13 @@ export const contactsRegisterSchema = z.object({
   }),
   currentStay: z.enum(['With Parents', 'In Hostel']).optional().nullable(),
   pgName: z.string().optional().nullable(),
+  profession: z.enum(['Student', 'Working', 'Business', 'Others'], {
+    message: 'Please select your profession',
+  }),
+  interestedBhagavadGita: z.enum(['Yes', 'No'], {
+    message: 'Please select whether you are interested to attend Bhagavad Gita',
+  }),
+  comments: z.string().max(1000, 'Comments cannot exceed 1000 characters').optional().nullable(),
   skills: z.array(z.string()).optional().default([]),
   interestedOnlineWork: z.enum(['Yes', 'No']).optional(),
 }).superRefine((data, ctx) => {

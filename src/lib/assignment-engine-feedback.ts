@@ -176,30 +176,14 @@ export async function assignFeedbackContactManually(
       return { success: false, message: 'Target operator is inactive or does not exist' };
     }
 
-    // 2. Check current active assignment for this feedback contact
-    const { data: currentActive } = await supabaseAdmin
-      .from('feedback_contact_assignments')
-      .select('id, operator_id')
-      .eq('feedback_contact_id', feedbackContactId)
-      .eq('is_active', true)
-      .maybeSingle();
-
-    if (currentActive) {
-      return {
-        success: false,
-        assignmentId: currentActive.id,
-        operatorId: currentActive.operator_id,
-        message: 'This contact is already assigned to an operator.',
-      };
-    }
-
-    // 4. Create new active assignment atomically via RPC
+    // 2. Assign or reassign contact atomically via RPC (latest-assignment-wins)
     const { data: rpcRes, error: rpcErr } = await supabaseAdmin.rpc('assign_contact_atomic', {
       p_contact_id: feedbackContactId,
       p_operator_id: targetOperatorId,
       p_source: 'feedback_contacts',
       p_assigned_by: assignedBy || null,
       p_max_capacity: MAX_OPERATOR_FEEDBACK_CAPACITY,
+      p_allow_reassign: true,
     });
 
     if (rpcErr || !rpcRes?.success) {

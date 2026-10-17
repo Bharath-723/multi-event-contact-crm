@@ -45,6 +45,9 @@ export async function PATCH(
       pg_name,
       skills,
       interested_online_workshop,
+      profession,
+      interested_bhagavad_gita,
+      comments,
     } = body;
 
     // Basic Field Validations
@@ -63,13 +66,17 @@ export async function PATCH(
       return NextResponse.json({ error: 'Current stay must be With Parents or In Hostel' }, { status: 400 });
     }
 
+    if (profession && !['Student', 'Working', 'Business', 'Others'].includes(profession)) {
+      return NextResponse.json({ error: 'Profession must be Student, Working, Business, or Others' }, { status: 400 });
+    }
+
     const finalCurrentStay = isMale ? current_stay : null;
     const finalPgName = (isMale && current_stay === 'In Hostel') ? pg_name?.trim() || null : null;
     if (isMale && current_stay === 'In Hostel' && (!finalPgName || finalPgName.length < 2)) {
       return NextResponse.json({ error: 'PG Name is required when staying in hostel' }, { status: 400 });
     }
 
-    const updatePayload = {
+    const updatePayload: Record<string, unknown> = {
       full_name: full_name.trim(),
       phone: cleanPhone,
       college_name: college_name ? college_name.trim() : 'Other',
@@ -79,6 +86,9 @@ export async function PATCH(
       pg_name: finalPgName,
       skills: Array.isArray(skills) ? skills : [],
       interested_online_workshop: Boolean(interested_online_workshop),
+      ...(profession !== undefined ? { profession: profession || null } : {}),
+      ...(interested_bhagavad_gita !== undefined ? { interested_bhagavad_gita: interested_bhagavad_gita === null ? null : Boolean(interested_bhagavad_gita) } : {}),
+      ...(comments !== undefined ? { comments: comments ? String(comments).trim() : null } : {}),
       updated_at: new Date().toISOString(),
     };
 
@@ -107,6 +117,7 @@ export async function PATCH(
         gender,
         area_of_stay: area_of_stay?.trim(),
         company_college: college_name?.trim(),
+        occupation: updated.profession || profession || null,
       });
     } catch (masterErr) {
       console.warn('[PATCH /api/contacts-register/[id]] Master sync warning:', masterErr);

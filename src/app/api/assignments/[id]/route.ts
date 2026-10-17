@@ -21,7 +21,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const url = new URL(req.url);
-  const sourceParam = url.searchParams.get('source');
+  const sourceParam = url.searchParams.get('source') ?? 'master_dashboard';
   const assignTable = getAssignmentTable(sourceParam);
 
   const session = getOperatorSessionFromRequest(req);
@@ -131,7 +131,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const url = new URL(req.url);
-  const sourceParam = url.searchParams.get('source');
+  const sourceParam = url.searchParams.get('source') ?? 'master_dashboard';
   const assignTable = getAssignmentTable(sourceParam);
 
   const authHeader = req.headers.get('Authorization') || '';
@@ -180,7 +180,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const url = new URL(req.url);
-  const sourceParam = url.searchParams.get('source');
+  const sourceParam = url.searchParams.get('source') ?? 'master_dashboard';
   const assignTable = getAssignmentTable(sourceParam);
 
   const authHeader = req.headers.get('Authorization') || '';
@@ -204,13 +204,14 @@ export async function DELETE(
 
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
   if (!updatedRows || updatedRows.length === 0) {
+    const fkCol = assignTable === 'master_contact_assignments' ? 'master_contact_id' : assignTable === 'feedback_contact_assignments' ? 'feedback_contact_id' : 'registration_id';
     const { data: updatedByReg, error: regUpdateErr } = await supabaseAdmin
       .from(assignTable)
       .update({
         is_active: false,
         updated_at: new Date().toISOString()
       })
-      .eq('registration_id', id)
+      .eq(fkCol, id)
       .eq('is_active', true)
       .select();
 
@@ -225,8 +226,8 @@ export async function DELETE(
       action: 'ASSIGNMENT_DEACTIVATED',
       details: {
         assignment_id: updated.id,
-        registration_id: id,
-        source: sourceParam ?? 'rathayatra',
+        contact_id: id,
+        source: sourceParam,
         operator_id: (updated as { operator_id?: string }).operator_id
       },
     });

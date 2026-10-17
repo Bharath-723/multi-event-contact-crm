@@ -2,8 +2,8 @@ import React from 'react';
 import ContactsRegisterForm from '@/components/contacts-register-form';
 
 export const metadata = {
-  title: 'Contacts Register | Rathayatra',
-  description: 'Register your contact details securely with instant confirmation.',
+  title: 'Bhajan Club | Hare Krishna Heritage Tower, Kokapet',
+  description: 'Register your contact details securely for Bhajan Club at Hare Krishna Heritage Tower, Kokapet.',
 };
 
 export default function ContactsRegisterPage() {

@@ -20,7 +20,12 @@ export async function GET(req: Request) {
     .eq('id', session.operatorId)
     .single();
 
-  if (error || !operator) {
+  if (error) {
+    console.error('[/api/operators/me] Error fetching operator:', error.message || error);
+    return NextResponse.json({ error: 'Failed to fetch operator' }, { status: 500 });
+  }
+
+  if (!operator) {
     return NextResponse.json({ error: 'Operator not found' }, { status: 404 });
   }
 

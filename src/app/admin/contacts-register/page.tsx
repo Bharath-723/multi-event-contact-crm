@@ -21,6 +21,9 @@ export interface ContactsRegisterRecord {
   gender: 'Male' | 'Female';
   current_stay?: 'With Parents' | 'In Hostel' | null;
   pg_name?: string | null;
+  profession?: 'Student' | 'Working' | 'Business' | 'Others' | string | null;
+  interested_bhagavad_gita?: boolean | null;
+  comments?: string | null;
   skills: string[];
   interested_online_workshop?: boolean;
   created_at: string;
@@ -100,6 +103,9 @@ export default function ContactsRegisterAdminPage() {
   const [editCurrentStay, setEditCurrentStay] = useState<'With Parents' | 'In Hostel'>('With Parents');
   const [editPgName, setEditPgName] = useState('');
   const [editSkillsInput, setEditSkillsInput] = useState('');
+  const [editProfession, setEditProfession] = useState('Student');
+  const [editBhagavadGita, setEditBhagavadGita] = useState<'Yes' | 'No' | 'Unknown'>('Unknown');
+  const [editComments, setEditComments] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -113,6 +119,9 @@ export default function ContactsRegisterAdminPage() {
       setEditGender(editRecord.gender || 'Male');
       setEditCurrentStay(editRecord.current_stay || 'With Parents');
       setEditPgName(editRecord.pg_name || '');
+      setEditProfession(editRecord.profession || 'Student');
+      setEditBhagavadGita(editRecord.interested_bhagavad_gita === true ? 'Yes' : editRecord.interested_bhagavad_gita === false ? 'No' : 'Unknown');
+      setEditComments(editRecord.comments || '');
       
       const readableSkills = Array.isArray(editRecord.skills)
         ? editRecord.skills.map((s) => skillMap.get(s) || s).join(', ')
@@ -211,10 +220,13 @@ export default function ContactsRegisterAdminPage() {
         'Full Name',
         'Mobile Number',
         'College / Company',
+        'Profession',
         'Area of Stay',
         'Gender',
         'Current Stay',
         'PG Name',
+        'Bhagavad Gita',
+        'Comments / Query',
         'Skills',
         'Registered At',
       ];
@@ -224,10 +236,13 @@ export default function ContactsRegisterAdminPage() {
         `"${(r.full_name || '').replace(/"/g, '""')}"`,
         `"${r.phone}"`,
         `"${(r.college_name || '').replace(/"/g, '""')}"`,
+        `"${(r.profession || 'N/A').replace(/"/g, '""')}"`,
         `"${(r.area_of_stay || '').replace(/"/g, '""')}"`,
         `"${r.gender}"`,
-        `"${r.current_stay}"`,
+        `"${r.current_stay || 'N/A'}"`,
         `"${(r.pg_name || 'N/A').replace(/"/g, '""')}"`,
+        `"${r.interested_bhagavad_gita === true ? 'Yes' : r.interested_bhagavad_gita === false ? 'No' : 'N/A'}"`,
+        `"${(r.comments || '').replace(/"/g, '""')}"`,
         `"${(Array.isArray(r.skills) ? r.skills.map((s) => getSkillName(s)).join('; ') : '').replace(/"/g, '""')}"`,
         `"${formatDate(r.created_at)}"`,
       ]);
@@ -290,6 +305,9 @@ export default function ContactsRegisterAdminPage() {
           gender: editGender,
           current_stay: isMale ? editCurrentStay : null,
           pg_name: (isMale && editCurrentStay === 'In Hostel') ? editPgName.trim() : null,
+          profession: editProfession,
+          interested_bhagavad_gita: editBhagavadGita === 'Yes' ? true : editBhagavadGita === 'No' ? false : null,
+          comments: editComments.trim() || null,
           skills: skillsArray,
         }),
       });
@@ -518,10 +536,13 @@ export default function ContactsRegisterAdminPage() {
                 <th className="py-3.5 px-4">Full Name</th>
                 <th className="py-3.5 px-4">Phone Number</th>
                 <th className="py-3.5 px-4">College / Company</th>
+                <th className="py-3.5 px-4">Profession</th>
                 <th className="py-3.5 px-4">Area of Stay</th>
                 <th className="py-3.5 px-4">Gender</th>
                 <th className="py-3.5 px-4">Current Stay</th>
                 <th className="py-3.5 px-4">PG Name</th>
+                <th className="py-3.5 px-4">Bhagavad Gita</th>
+                <th className="py-3.5 px-4">Comments</th>
                 <th className="py-3.5 px-4">Skills</th>
                 <th className="py-3.5 px-4">Registered At</th>
                 <th className="py-3.5 px-4 text-center">Actions</th>
@@ -530,21 +551,21 @@ export default function ContactsRegisterAdminPage() {
             <tbody className="divide-y divide-slate-800/80 text-xs sm:text-sm text-slate-200">
               {isLoading ? (
                 <tr>
-                  <td colSpan={11} className="py-12 text-center text-slate-400 font-medium">
+                  <td colSpan={14} className="py-12 text-center text-slate-400 font-medium">
                     <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-indigo-400" />
                     Loading contacts register records...
                   </td>
                 </tr>
               ) : isError ? (
                 <tr>
-                  <td colSpan={11} className="py-12 text-center text-red-400 font-medium">
+                  <td colSpan={14} className="py-12 text-center text-red-400 font-medium">
                     <AlertCircle className="w-8 h-8 mx-auto mb-2 text-red-400" />
                     {error instanceof Error ? error.message : 'Error loading records'}
                   </td>
                 </tr>
               ) : registrations.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="py-12 text-center text-slate-400 font-medium">
+                  <td colSpan={14} className="py-12 text-center text-slate-400 font-medium">
                     No contacts register submissions found matching the criteria.
                   </td>
                 </tr>
@@ -567,6 +588,11 @@ export default function ContactsRegisterAdminPage() {
                       </td>
                       <td className="py-3.5 px-4 max-w-[180px] truncate text-slate-200 font-medium" title={r.college_name}>
                         {r.college_name}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-950/80 border border-amber-400/50 text-amber-300">
+                          {r.profession || '—'}
+                        </span>
                       </td>
                       <td className="py-3.5 px-4 max-w-[150px] truncate text-slate-200 font-medium" title={r.area_of_stay}>
                         {r.area_of_stay}
@@ -595,6 +621,20 @@ export default function ContactsRegisterAdminPage() {
                       </td>
                       <td className="py-3.5 px-4 max-w-[120px] truncate text-slate-300 font-medium">
                         {r.current_stay === 'In Hostel' ? r.pg_name || '—' : '—'}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-extrabold border ${
+                          r.interested_bhagavad_gita === true
+                            ? 'bg-emerald-950/80 border-emerald-400/50 text-emerald-300'
+                            : r.interested_bhagavad_gita === false
+                              ? 'bg-slate-900 border-slate-700 text-slate-400'
+                              : 'text-slate-500 border-slate-800'
+                        }`}>
+                          {r.interested_bhagavad_gita === true ? 'Yes' : r.interested_bhagavad_gita === false ? 'No' : '—'}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 max-w-[140px] truncate text-slate-300 text-xs" title={r.comments || ''}>
+                        {r.comments || '—'}
                       </td>
                       <td className="py-3.5 px-4 max-w-[200px]">
                         {Array.isArray(r.skills) && r.skills.length > 0 ? (
@@ -729,6 +769,11 @@ export default function ContactsRegisterAdminPage() {
                 </div>
 
                 <div>
+                  <span className="text-slate-400 font-bold block text-[10px] uppercase">Profession</span>
+                  <span className="text-amber-300 font-extrabold">{viewRecord.profession || 'N/A'}</span>
+                </div>
+
+                <div>
                   <span className="text-slate-400 font-bold block text-[10px] uppercase">Area of Stay</span>
                   <span className="text-slate-100 font-extrabold">{viewRecord.area_of_stay}</span>
                 </div>
@@ -749,6 +794,25 @@ export default function ContactsRegisterAdminPage() {
                   <div className="col-span-2">
                     <span className="text-slate-400 font-bold block text-[10px] uppercase">PG Name</span>
                     <span className="text-indigo-300 font-extrabold">{viewRecord.pg_name || 'N/A'}</span>
+                  </div>
+                )}
+
+                <div>
+                  <span className="text-slate-400 font-bold block text-[10px] uppercase">Bhagavad Gita Interest</span>
+                  <span className={`font-extrabold ${viewRecord.interested_bhagavad_gita === true ? 'text-emerald-400' : viewRecord.interested_bhagavad_gita === false ? 'text-slate-400' : 'text-slate-500'}`}>
+                    {viewRecord.interested_bhagavad_gita === true ? 'Yes' : viewRecord.interested_bhagavad_gita === false ? 'No' : 'N/A'}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-slate-400 font-bold block text-[10px] uppercase">Registered At</span>
+                  <span className="text-slate-200 font-medium">{formatDate(viewRecord.created_at)}</span>
+                </div>
+
+                {viewRecord.comments && (
+                  <div className="col-span-2 bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+                    <span className="text-slate-400 font-bold block text-[10px] uppercase mb-1">Comments / Query</span>
+                    <p className="text-slate-200 text-xs whitespace-pre-wrap">{viewRecord.comments}</p>
                   </div>
                 )}
 
@@ -775,11 +839,6 @@ export default function ContactsRegisterAdminPage() {
                     </span>
                   </div>
                 )}
-
-                <div>
-                  <span className="text-slate-400 font-bold block text-[10px] uppercase">Registered At</span>
-                  <span className="text-slate-200 font-medium">{formatDate(viewRecord.created_at)}</span>
-                </div>
               </div>
 
               <div className="pt-4 border-t border-slate-800 flex justify-end">
@@ -916,6 +975,20 @@ export default function ContactsRegisterAdminPage() {
                 )}
 
                 <div>
+                  <label className="text-slate-300 font-bold block mb-1">Profession *</label>
+                  <select
+                    value={editProfession}
+                    onChange={(e) => setEditProfession(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500/50 cursor-pointer"
+                  >
+                    <option value="Student">Student</option>
+                    <option value="Working">Working</option>
+                    <option value="Business">Business</option>
+                    <option value="Others">Others</option>
+                  </select>
+                </div>
+
+                <div>
                   <label className="text-slate-300 font-bold block mb-1">Skills (Comma-separated)</label>
                   <input
                     type="text"
@@ -923,6 +996,31 @@ export default function ContactsRegisterAdminPage() {
                     onChange={(e) => setEditSkillsInput(e.target.value)}
                     placeholder="e.g. Sound & Stage, Pujari / Alankaram, Harinam"
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500/50"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1">Interested in Bhagavad Gita</label>
+                  <select
+                    value={editBhagavadGita}
+                    onChange={(e) => setEditBhagavadGita(e.target.value as 'Yes' | 'No' | 'Unknown')}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500/50 cursor-pointer"
+                  >
+                    <option value="Unknown">Unspecified / Unknown</option>
+                    <option value="Yes">Yes</option>
+                    <option value="No">No</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1">Comments / Query (Optional)</label>
+                  <textarea
+                    value={editComments}
+                    onChange={(e) => setEditComments(e.target.value)}
+                    rows={3}
+                    maxLength={1000}
+                    placeholder="Comments or queries..."
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-indigo-500/50 resize-vertical"
                   />
                 </div>
               </div>

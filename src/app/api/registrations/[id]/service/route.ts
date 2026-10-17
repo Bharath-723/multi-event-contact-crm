@@ -42,11 +42,12 @@ export async function PATCH(
     const regTable = isKrishnashtami ? 'krishnashtami_registrations' : 'registrations';
 
     // ── Fetch Registration ────────────────────────────────────────────────────
-    let { data: registration, error: regError } = await supabaseAdmin
+    const { data: initialReg, error: regError } = await supabaseAdmin
       .from(regTable)
       .select('id, full_name, phone, interested_to_volunteer, service_id')
       .eq('id', registrationId)
       .maybeSingle();
+    let registration = initialReg;
 
     // Fallback: If not found in target table and source wasn't explicitly supplied, check the alternative table
     if (!registration && !sourceParam) {

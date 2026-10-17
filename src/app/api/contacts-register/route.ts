@@ -178,6 +178,9 @@ export async function POST(request: NextRequest) {
       gender,
       currentStay,
       pgName,
+      profession,
+      interestedBhagavadGita,
+      comments,
       skills,
       interestedOnlineWork,
     } = validationResult.data;
@@ -255,6 +258,9 @@ export async function POST(request: NextRequest) {
       gender,
       current_stay: finalCurrentStay,
       pg_name: finalPgName,
+      profession,
+      interested_bhagavad_gita: interestedBhagavadGita === 'Yes' ? true : interestedBhagavadGita === 'No' ? false : null,
+      comments: comments?.trim() || null,
       skills: skills || [],
       interested_online_workshop: interestedOnlineWork === 'Yes',
     };
@@ -309,6 +315,7 @@ export async function POST(request: NextRequest) {
           gender,
           area_of_stay: areaOfStay.trim(),
           company_college: finalCollegeName,
+          occupation: profession || null,
         });
       } catch (masterErr) {
         // Log but do not fail the user-facing response.

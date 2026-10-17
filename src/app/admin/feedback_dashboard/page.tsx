@@ -234,9 +234,10 @@ export default function AdminFeedbackDashboard() {
     if (!assigningModal.contact || !selectedOpId || assigningModal.contact.gender === 'Female') return;
     setAssigningBtn(true);
     try {
+      const auth = await getAuthHeader();
       const res = await fetch('/api/assignments/feedback', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: auth },
         body: JSON.stringify({
           feedbackContactId: assigningModal.contact.id,
           targetOperatorId: selectedOpId,
@@ -259,9 +260,10 @@ export default function AdminFeedbackDashboard() {
   const handleOpenDryRun = async () => {
     setDryRunModal({ open: true, loading: true });
     try {
+      const auth = await getAuthHeader();
       const res = await fetch('/api/assignments/feedback', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: auth },
         body: JSON.stringify({ action: 'dry_run' }),
       });
       const data = await res.json();
@@ -280,9 +282,10 @@ export default function AdminFeedbackDashboard() {
   const handleExecuteAutoAssign = async () => {
     setExecutingAutoAssign(true);
     try {
+      const auth = await getAuthHeader();
       const res = await fetch('/api/assignments/feedback', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: auth },
         body: JSON.stringify({ action: 'auto_assign_all' }),
       });
 

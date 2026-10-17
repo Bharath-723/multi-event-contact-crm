@@ -37,13 +37,14 @@ export async function POST(request: NextRequest) {
       body = {};
     }
 
-    const source = normalizeSource(body.source ?? 'rathayatra');
+    const source = normalizeSource(body.source ?? 'master_dashboard');
     const operatorId = body.operator_id ? String(body.operator_id) : null;
 
     if (source === 'master_dashboard') {
       let countQuery = supabaseAdmin
         .from('master_contact_assignments')
-        .select('id', { count: 'exact', head: true });
+        .select('id', { count: 'exact', head: true })
+        .eq('is_active', true);
 
       if (operatorId) countQuery = countQuery.eq('operator_id', operatorId);
 
@@ -59,17 +60,17 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      let deleteQuery = supabaseAdmin
+      let updateQuery = supabaseAdmin
         .from('master_contact_assignments')
-        .delete();
+        .update({ is_active: false, updated_at: new Date().toISOString() })
+        .eq('is_active', true);
 
-      if (operatorId) deleteQuery = deleteQuery.eq('operator_id', operatorId);
-      else deleteQuery = deleteQuery.neq('id', '00000000-0000-0000-0000-000000000000');
+      if (operatorId) updateQuery = updateQuery.eq('operator_id', operatorId);
 
-      const { error: delErr } = await deleteQuery;
+      const { error: updateErr } = await updateQuery;
 
-      if (delErr) {
-        return NextResponse.json({ error: `Failed to unassign master contacts: ${delErr.message}` }, { status: 500 });
+      if (updateErr) {
+        return NextResponse.json({ error: `Failed to unassign master contacts: ${updateErr.message}` }, { status: 500 });
       }
 
       return NextResponse.json({

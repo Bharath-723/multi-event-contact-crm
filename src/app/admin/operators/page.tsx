@@ -1,17 +1,17 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
   PhoneCall, Plus, Edit2, ToggleLeft, ToggleRight,
   Users, CheckCircle, Clock, TrendingUp, Eye,
   Loader2, AlertCircle, X, Save, Phone, Mail,
   User, Lock, RefreshCw, Headset, LogIn, Trash2,
-  Zap, BarChart3, AlertTriangle, Filter
+  Zap, BarChart3, AlertTriangle, Filter, ArrowUpDown,
+  ChevronDown, Search
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { ContactOperator } from '@/lib/types';
-import { useFestival } from '@/lib/contexts/FestivalContext';
 import { ContactSource } from '@/lib/source-resolver';
 import { formatOperatorDisplayName } from '@/lib/status-normalizer';
 
@@ -450,14 +450,7 @@ function ViewAssignedModal({
     return s.charAt(0).toUpperCase() + s.slice(1);
   };
 
-  const sourceTitle =
-    contactSource === 'master_dashboard'
-      ? 'Master Dashboard'
-      : contactSource === 'krishnashtami'
-      ? 'Krishnashtami 2026'
-      : contactSource === 'feedback_contacts'
-      ? 'Feedback Contacts'
-      : 'Rathayatra 2026';
+  const sourceTitle = 'Master Dashboard';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
@@ -486,14 +479,7 @@ function ViewAssignedModal({
             <p className="text-slate-500 text-sm text-center py-8">No active contacts assigned for {sourceTitle}.</p>
           )}
           {assignments.map((a) => {
-            const fc = (
-              a.master_contacts ||
-              a.master_contact ||
-              a.krishnashtami_registrations ||
-              a.registrations ||
-              a.feedback_contacts ||
-              a.feedback_contact
-            ) as Record<string, unknown> | null;
+            const fc = (a.master_contacts || a.master_contact) as Record<string, unknown> | null;
 
             const fullName = String(fc?.name || fc?.full_name || '—');
             const phone = String(fc?.phone ?? '—');
@@ -548,36 +534,49 @@ function ViewAssignedModal({
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface DryRunSummary {
   source: string;
-  filters: {
-    area_of_stay: string | null;
-    company_college: string | null;
-    occupation: string | null;
-    standard: string | null;
-    service_id: string | null;
-    date: string | null;
-    volunteer: string | null;
+  filters?: {
+    areas?: string[];
+    colleges?: string[];
+    occupations?: string[];
+    standards?: string[];
+    service_ids?: string[];
+    dates?: string[];
+    volunteers?: string[];
+    classes_attended?: string[];
+    level_numbers?: string[];
+    chanting?: string[];
+    area_of_stay?: string | null;
+    company_college?: string | null;
+    occupation?: string | null;
+    standard?: string | null;
+    service_id?: string | null;
+    date?: string | null;
+    volunteer?: string | null;
   };
-  selected_operator_ids: string[];
-  filter_options: {
-    areas: string[];
-    colleges: string[];
-    occupations: string[];
-    standards: string[];
-    services: Array<{ id: string; name: string }>;
-    dates: string[];
-    volunteers: string[];
+  selected_operator_ids?: string[];
+  filter_options?: {
+    areas?: string[];
+    colleges?: string[];
+    occupations?: string[];
+    standards?: string[];
+    services?: Array<{ id: string; name: string }>;
+    dates?: string[];
+    volunteers?: string[];
+    classes_attended_options?: string[];
+    level_number_options?: Array<{ label: string; value: string }>;
+    chanting_options?: Array<{ label: string; value: string }>;
   };
   total_unassigned: number;
   skipped_female: number;
   eligible_male: number;
   active_operators: number;
-  total_capacity: number;
-  currently_assigned: number;
+  total_capacity?: number;
+  currently_assigned?: number;
   available_slots: number;
   will_assign: number;
   will_skip_capacity: number;
-  will_skip: number;
-  capacity_warning: boolean;
+  will_skip?: number;
+  capacity_warning?: boolean;
   operator_breakdown: Array<{
     id: string;
     name: string;
@@ -599,12 +598,181 @@ interface BatchReport {
   distribution: Array<{ operator_id: string; operator_name: string; assigned_in_batch: number }>;
 }
 
+// ─── MultiSelect Dropdown Component ───────────────────────────────────────────
+interface FilterOptionItem {
+  value: string;
+  label: string;
+}
+
+function MultiSelectDropdown({
+  label,
+  placeholder = 'All',
+  options,
+  selected,
+  onChange,
+  labelColor = 'text-slate-500',
+  borderColor = 'border-slate-800',
+}: {
+  label: string;
+  placeholder?: string;
+  options: Array<string | FilterOptionItem>;
+  selected: string[];
+  onChange: (next: string[]) => void;
+  labelColor?: string;
+  borderColor?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
+
+  const normalizedOptions: FilterOptionItem[] = useMemo(() => {
+    return options.map((opt) => (typeof opt === 'string' ? { value: opt, label: opt } : opt));
+  }, [options]);
+
+  const filteredOptions = useMemo(() => {
+    if (!search.trim()) return normalizedOptions;
+    const q = search.toLowerCase();
+    return normalizedOptions.filter((opt) => opt.label.toLowerCase().includes(q) || opt.value.toLowerCase().includes(q));
+  }, [normalizedOptions, search]);
+
+  const toggleOption = (val: string) => {
+    if (selected.includes(val)) {
+      onChange(selected.filter((v) => v !== val));
+    } else {
+      onChange([...selected, val]);
+    }
+  };
+
+  const handleSelectAll = () => {
+    const allVals = normalizedOptions.map((o) => o.value);
+    onChange(allVals);
+  };
+
+  const handleClear = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    onChange([]);
+  };
+
+  const displaySummary = useMemo(() => {
+    if (selected.length === 0) return placeholder;
+    if (selected.length === 1) {
+      const match = normalizedOptions.find((o) => o.value === selected[0]);
+      return match ? match.label : selected[0];
+    }
+    return `${selected.length} selected`;
+  }, [selected, normalizedOptions, placeholder]);
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <label className={`text-[9px] font-bold block mb-1 truncate ${labelColor}`}>{label}</label>
+      <button
+        type="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        className={`w-full px-2 py-1.5 rounded-lg bg-slate-950 border ${
+          selected.length > 0 ? 'border-purple-500/50 bg-purple-950/20' : borderColor
+        } text-xs text-left text-slate-200 focus:outline-none flex items-center justify-between gap-1 transition-all cursor-pointer`}
+      >
+        <span className={`truncate text-xs ${selected.length === 0 ? 'text-slate-400' : 'text-slate-100 font-medium'}`} title={selected.join(', ')}>
+          {displaySummary}
+        </span>
+        <div className="flex items-center gap-1 shrink-0">
+          {selected.length > 0 && (
+            <span
+              onClick={handleClear}
+              className="p-0.5 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
+              title="Clear selection"
+            >
+              <X className="w-3 h-3" />
+            </span>
+          )}
+          <ChevronDown className={`w-3 h-3 text-slate-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        </div>
+      </button>
+
+      {isOpen && (
+        <div className="absolute top-full left-0 mt-1 w-56 sm:w-64 max-w-[90vw] bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl z-50 p-2 flex flex-col gap-1.5 backdrop-blur-md">
+          <div className="flex items-center justify-between pb-1 border-b border-slate-800 text-[10px]">
+            <span className="font-semibold text-slate-400">{selected.length} of {normalizedOptions.length} selected</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleSelectAll}
+                className="text-purple-400 hover:text-purple-300 font-semibold cursor-pointer"
+              >
+                All
+              </button>
+              <span className="text-slate-600">|</span>
+              <button
+                type="button"
+                onClick={() => handleClear()}
+                className="text-slate-400 hover:text-slate-200 cursor-pointer"
+              >
+                None
+              </button>
+            </div>
+          </div>
+
+          {normalizedOptions.length > 5 && (
+            <div className="relative">
+              <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search..."
+                className="w-full pl-6 pr-2 py-1 text-xs rounded-lg bg-slate-950 border border-slate-800 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-purple-500/50"
+              />
+            </div>
+          )}
+
+          <div className="max-h-48 overflow-y-auto space-y-0.5 pr-0.5 custom-scrollbar">
+            {filteredOptions.length === 0 ? (
+              <p className="text-[11px] text-slate-500 text-center py-2">No matching options</p>
+            ) : (
+              filteredOptions.map((opt) => {
+                const isChecked = selected.includes(opt.value);
+                return (
+                  <label
+                    key={opt.value}
+                    onClick={() => toggleOption(opt.value)}
+                    className={`flex items-center gap-2 px-2 py-1 rounded-lg text-xs cursor-pointer transition-colors ${
+                      isChecked ? 'bg-purple-950/40 text-purple-200 font-medium' : 'hover:bg-slate-800/60 text-slate-300'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => {}}
+                      className="w-3.5 h-3.5 rounded border-slate-700 bg-slate-950 text-purple-600 focus:ring-0 cursor-pointer"
+                    />
+                    <span className="truncate flex-1">{opt.label}</span>
+                  </label>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ContactOperatorsPage() {
-  const { selectedEventId } = useFestival();
-  const [contactSource, setContactSourceState] = useState<ContactSource>('rathayatra');
+  const contactSource: ContactSource = 'master_dashboard';
   const [operators, setOperators] = useState<ContactOperator[]>([]);
-  const [filterType, setFilterType] = useState<'all' | 'operator' | 'coordinator'>('all');
+  const [sortOrder, setSortOrder] = useState<'assigned_desc' | 'assigned_asc' | 'alphabetical'>('assigned_desc');
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [editOp, setEditOp] = useState<ContactOperator | null>(null);
@@ -625,53 +793,23 @@ export default function ContactOperatorsPage() {
   const [batchReport, setBatchReport] = useState<BatchReport | null>(null);
   const [autoAssignError, setAutoAssignError] = useState<string | null>(null);
 
-  // 7 Dry run filter states
-  const [selectedArea, setSelectedArea] = useState<string>('');
-  const [selectedCollege, setSelectedCollege] = useState<string>('');
-  const [selectedOccupation, setSelectedOccupation] = useState<string>('');
-  const [selectedStandard, setSelectedStandard] = useState<string>('');
-  const [selectedService, setSelectedService] = useState<string>('');
-  const [selectedDate, setSelectedDate] = useState<string>('');
-  const [selectedVolunteer, setSelectedVolunteer] = useState<string>('');
+  // 10 Dry run multi-select filter states
+  const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
+  const [selectedColleges, setSelectedColleges] = useState<string[]>([]);
+  const [selectedOccupations, setSelectedOccupations] = useState<string[]>([]);
+  const [selectedStandards, setSelectedStandards] = useState<string[]>([]);
+  const [selectedServices, setSelectedServices] = useState<string[]>([]);
+  const [selectedDates, setSelectedDates] = useState<string[]>([]);
+  const [selectedVolunteers, setSelectedVolunteers] = useState<string[]>([]);
+  const [selectedClassesAttended, setSelectedClassesAttended] = useState<string[]>([]);
+  const [selectedLevelNumbers, setSelectedLevelNumbers] = useState<string[]>([]);
+  const [selectedChanting, setSelectedChanting] = useState<string[]>([]);
 
   // Selected operator checkboxes state
   const [selectedOperatorIds, setSelectedOperatorIds] = useState<string[]>([]);
 
   // Request sequencing reference for out-of-order API response protection
   const dryRunSeqRef = React.useRef(0);
-
-  const setContactSource = (newSource: ContactSource) => {
-    // Immediate clean state reset when source changes
-    setOperators([]);
-    setViewOp(null);
-    setEditOp(null);
-    setRemoveOp(null);
-    setUnassignOperatorTarget(null);
-    setShowGlobalUnassignModal(false);
-    setAutoAssignStep('idle');
-    setDryRunSummary(null);
-    setBatchReport(null);
-    setSelectedArea('');
-    setSelectedCollege('');
-    setSelectedOccupation('');
-    setSelectedStandard('');
-    setSelectedService('');
-    setSelectedDate('');
-    setSelectedVolunteer('');
-    setSelectedOperatorIds([]);
-    setContactSourceState(newSource);
-  };
-
-  // Sync initial contactSource with active selectedEventId
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => {
-    if (selectedEventId === '7852cff8-e784-4e91-b990-a9838ea59ff1') {
-      setContactSource('krishnashtami');
-    } else if (selectedEventId === '4ce7287c-4aea-42f8-8d7d-03b698438e4c') {
-      setContactSource('rathayatra');
-    }
-  }, [selectedEventId]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   const toast = (msg: string) => {
     setToastMsg(msg);
@@ -753,26 +891,32 @@ export default function ContactOperatorsPage() {
 
   // ── Auto Assign handlers ────────────────────────────────────────────────────
   const fetchDryRun = useCallback(async (overrideParams?: {
-    area?: string;
-    college?: string;
-    occupation?: string;
-    standard?: string;
-    service?: string;
-    date?: string;
-    volunteer?: string;
+    areas?: string[];
+    colleges?: string[];
+    occupations?: string[];
+    standards?: string[];
+    services?: string[];
+    dates?: string[];
+    volunteers?: string[];
+    classesAttended?: string[];
+    levelNumbers?: string[];
+    chanting?: string[];
     operatorIds?: string[];
   }) => {
     const seq = ++dryRunSeqRef.current;
     setAutoAssignStep('loading-dry-run');
     setAutoAssignError(null);
 
-    const area = overrideParams?.area !== undefined ? overrideParams.area : selectedArea;
-    const college = overrideParams?.college !== undefined ? overrideParams.college : selectedCollege;
-    const occupation = overrideParams?.occupation !== undefined ? overrideParams.occupation : selectedOccupation;
-    const standard = overrideParams?.standard !== undefined ? overrideParams.standard : selectedStandard;
-    const service = overrideParams?.service !== undefined ? overrideParams.service : selectedService;
-    const date = overrideParams?.date !== undefined ? overrideParams.date : selectedDate;
-    const volunteer = overrideParams?.volunteer !== undefined ? overrideParams.volunteer : selectedVolunteer;
+    const areas = overrideParams?.areas !== undefined ? overrideParams.areas : selectedAreas;
+    const colleges = overrideParams?.colleges !== undefined ? overrideParams.colleges : selectedColleges;
+    const occupations = overrideParams?.occupations !== undefined ? overrideParams.occupations : selectedOccupations;
+    const standards = overrideParams?.standards !== undefined ? overrideParams.standards : selectedStandards;
+    const services = overrideParams?.services !== undefined ? overrideParams.services : selectedServices;
+    const dates = overrideParams?.dates !== undefined ? overrideParams.dates : selectedDates;
+    const volunteers = overrideParams?.volunteers !== undefined ? overrideParams.volunteers : selectedVolunteers;
+    const classesAttended = overrideParams?.classesAttended !== undefined ? overrideParams.classesAttended : selectedClassesAttended;
+    const levelNumbers = overrideParams?.levelNumbers !== undefined ? overrideParams.levelNumbers : selectedLevelNumbers;
+    const chanting = overrideParams?.chanting !== undefined ? overrideParams.chanting : selectedChanting;
     const opIds = overrideParams?.operatorIds !== undefined ? overrideParams.operatorIds : selectedOperatorIds;
 
     try {
@@ -783,13 +927,17 @@ export default function ContactOperatorsPage() {
         body: JSON.stringify({
           dry_run: true,
           source: contactSource,
-          area_of_stay: area || undefined,
-          company_college: college || undefined,
-          occupation: occupation || undefined,
-          standard: standard || undefined,
-          service_id: service || undefined,
-          date: date || undefined,
-          volunteer: volunteer || undefined,
+          areas,
+          colleges,
+          occupations,
+          standards,
+          services,
+          service_ids: services,
+          dates,
+          volunteers,
+          classes_attended: classesAttended,
+          level_numbers: levelNumbers,
+          chanting,
           selected_operator_ids: opIds,
         }),
       });
@@ -809,7 +957,7 @@ export default function ContactOperatorsPage() {
       setAutoAssignError('Network error. Please try again.');
       setAutoAssignStep('idle');
     }
-  }, [contactSource, selectedArea, selectedCollege, selectedOccupation, selectedStandard, selectedService, selectedDate, selectedVolunteer, selectedOperatorIds]);
+  }, [contactSource, selectedAreas, selectedColleges, selectedOccupations, selectedStandards, selectedServices, selectedDates, selectedVolunteers, selectedClassesAttended, selectedLevelNumbers, selectedChanting, selectedOperatorIds]);
 
   const handleAutoAssignDryRun = async () => {
     setSelectedOperatorIds([]);
@@ -827,13 +975,17 @@ export default function ContactOperatorsPage() {
         body: JSON.stringify({
           dry_run: false,
           source: contactSource,
-          area_of_stay: selectedArea || undefined,
-          company_college: selectedCollege || undefined,
-          occupation: selectedOccupation || undefined,
-          standard: selectedStandard || undefined,
-          service_id: selectedService || undefined,
-          date: selectedDate || undefined,
-          volunteer: selectedVolunteer || undefined,
+          areas: selectedAreas,
+          colleges: selectedColleges,
+          occupations: selectedOccupations,
+          standards: selectedStandards,
+          services: selectedServices,
+          service_ids: selectedServices,
+          dates: selectedDates,
+          volunteers: selectedVolunteers,
+          classes_attended: selectedClassesAttended,
+          level_numbers: selectedLevelNumbers,
+          chanting: selectedChanting,
           selected_operator_ids: selectedOperatorIds,
         }),
       });
@@ -862,21 +1014,27 @@ export default function ContactOperatorsPage() {
   };
 
   const handleClearFilters = () => {
-    setSelectedArea('');
-    setSelectedCollege('');
-    setSelectedOccupation('');
-    setSelectedStandard('');
-    setSelectedService('');
-    setSelectedDate('');
-    setSelectedVolunteer('');
+    setSelectedAreas([]);
+    setSelectedColleges([]);
+    setSelectedOccupations([]);
+    setSelectedStandards([]);
+    setSelectedServices([]);
+    setSelectedDates([]);
+    setSelectedVolunteers([]);
+    setSelectedClassesAttended([]);
+    setSelectedLevelNumbers([]);
+    setSelectedChanting([]);
     fetchDryRun({
-      area: '',
-      college: '',
-      occupation: '',
-      standard: '',
-      service: '',
-      date: '',
-      volunteer: '',
+      areas: [],
+      colleges: [],
+      occupations: [],
+      standards: [],
+      services: [],
+      dates: [],
+      volunteers: [],
+      classesAttended: [],
+      levelNumbers: [],
+      chanting: [],
     });
   };
 
@@ -888,23 +1046,13 @@ export default function ContactOperatorsPage() {
     fetchDryRun({ operatorIds: nextOpIds });
   };
 
-  // Realtime subscription for contact assignments and operator updates
+  // Realtime subscription for master contact assignments and operator updates
   useEffect(() => {
     const channel = supabase
       .channel('admin_operators_realtime')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'krishnashtami_contact_assignments' },
-        () => { loadOperators(); }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'contact_assignments' },
-        () => { loadOperators(); }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'feedback_contact_assignments' },
+        { event: '*', schema: 'public', table: 'master_contact_assignments' },
         () => { loadOperators(); }
       )
       .on(
@@ -956,19 +1104,37 @@ export default function ContactOperatorsPage() {
     });
   }
 
-  const filteredOperators = operators.filter(op => {
-    if (filterType === 'all') return true;
-    return op.operator_type === filterType;
-  });
+  const displayedOperators = useMemo(() => {
+    const list = [...operators];
+    if (sortOrder === 'assigned_desc') {
+      list.sort((a, b) => {
+        const countA = a.total_assigned ?? 0;
+        const countB = b.total_assigned ?? 0;
+        if (countB !== countA) return countB - countA;
+        const nameComp = (a.name || '').localeCompare(b.name || '');
+        if (nameComp !== 0) return nameComp;
+        return (a.id || '').localeCompare(b.id || '');
+      });
+    } else if (sortOrder === 'assigned_asc') {
+      list.sort((a, b) => {
+        const countA = a.total_assigned ?? 0;
+        const countB = b.total_assigned ?? 0;
+        if (countA !== countB) return countA - countB;
+        const nameComp = (a.name || '').localeCompare(b.name || '');
+        if (nameComp !== 0) return nameComp;
+        return (a.id || '').localeCompare(b.id || '');
+      });
+    } else if (sortOrder === 'alphabetical') {
+      list.sort((a, b) => {
+        const nameComp = (a.name || '').localeCompare(b.name || '');
+        if (nameComp !== 0) return nameComp;
+        return (b.total_assigned ?? 0) - (a.total_assigned ?? 0);
+      });
+    }
+    return list;
+  }, [operators, sortOrder]);
 
-  const sourceTitle =
-    contactSource === 'master_dashboard'
-      ? 'Master Dashboard Contact Assignments'
-      : contactSource === 'krishnashtami'
-      ? 'Krishnashtami 2026 Contact Assignments'
-      : contactSource === 'feedback_contacts'
-      ? 'Feedback Contact Assignments'
-      : 'Rathayatra 2026 Contact Assignments';
+  const sourceTitle = 'Master Dashboard';
 
   return (
     <div className="space-y-6">
@@ -986,38 +1152,44 @@ export default function ContactOperatorsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Contact Source Selector Dropdown */}
-          <div className="flex items-center gap-1.5 bg-slate-900/80 border border-purple-500/30 rounded-xl px-3 py-1.5">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-purple-400">Source:</span>
+          {/* Source Dropdown — Exactly one option: Master Dashboard */}
+          <div className="flex items-center gap-1.5 bg-slate-900/50 border border-purple-500/30 rounded-xl px-3 py-2">
+            <Filter className="w-4 h-4 text-purple-400" />
             <select
+              id="source-dropdown"
+              aria-label="Source"
               value={contactSource}
-              onChange={(e) => setContactSource(e.target.value as ContactSource)}
-              className="bg-transparent text-slate-100 font-bold text-xs focus:outline-none cursor-pointer"
+              onChange={() => {}}
+              className="bg-transparent text-purple-200 font-semibold text-xs focus:outline-none cursor-pointer"
             >
-              <option value="rathayatra" className="bg-slate-900 text-slate-100">Rathayatra 2026</option>
-              <option value="krishnashtami" className="bg-slate-900 text-slate-100">Krishnashtami 2026</option>
-              <option value="feedback_contacts" className="bg-slate-900 text-slate-100">Feedback Contacts</option>
-              <option value="master_dashboard" className="bg-slate-900 text-slate-100">Master Dashboard</option>
+              <option value="master_dashboard" className="bg-slate-900 text-slate-100">
+                Master Dashboard
+              </option>
+            </select>
+          </div>
+
+          {/* Sort Control */}
+          <div className="flex items-center gap-1.5 bg-slate-900/50 border border-slate-700/40 rounded-xl px-3 py-2">
+            <ArrowUpDown className="w-4 h-4 text-purple-400" />
+            <select
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value as 'assigned_desc' | 'assigned_asc' | 'alphabetical')}
+              className="bg-transparent text-slate-200 font-semibold text-xs focus:outline-none cursor-pointer"
+            >
+              <option value="assigned_desc" className="bg-slate-900 text-slate-100">Highest assigned count to lowest</option>
+              <option value="assigned_asc" className="bg-slate-900 text-slate-100">Lowest assigned count to highest</option>
+              <option value="alphabetical" className="bg-slate-900 text-slate-100">Alphabetical by name</option>
             </select>
           </div>
 
           <a
-            href={`/operator/portal?source=${contactSource}`}
+            href="/operator/portal"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900/50 border border-slate-700/40 text-slate-400 text-sm font-semibold hover:text-slate-100 transition-all cursor-pointer"
           >
             <LogIn className="w-4 h-4" /> Operator Portal
           </a>
-          <select
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value as 'all' | 'operator' | 'coordinator')}
-            className="px-4 py-2.5 rounded-xl bg-slate-900/50 border border-slate-700/40 text-slate-400 text-sm font-semibold focus:outline-none cursor-pointer"
-          >
-            <option value="all">All Types</option>
-            <option value="operator">Operators Only</option>
-            <option value="coordinator">Co-ordinators Only</option>
-          </select>
           <button
             onClick={loadOperators}
             className="p-2.5 rounded-xl bg-slate-900/50 border border-slate-700/40 text-slate-400 hover:text-slate-100 transition-all cursor-pointer"
@@ -1042,7 +1214,7 @@ export default function ContactOperatorsPage() {
             ) : autoAssignStep === 'assigning' ? (
               <><Loader2 className="w-4 h-4 animate-spin" /> Assigning Contacts...</>
             ) : (
-              <><Zap className="w-4 h-4" /> Auto Assign ({contactSource})</>
+              <><Zap className="w-4 h-4" /> Auto Assign</>
             )}
           </button>
           <button
@@ -1079,14 +1251,14 @@ export default function ContactOperatorsPage() {
         <div className="flex items-center justify-center py-16">
           <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
         </div>
-      ) : filteredOperators.length === 0 ? (
+      ) : displayedOperators.length === 0 ? (
         <div className="glass-card rounded-2xl p-12 text-center">
           <Headset className="w-12 h-12 text-slate-700 mx-auto mb-4" />
-          <p className="text-slate-400 font-semibold">No operators found for this type.</p>
+          <p className="text-slate-400 font-semibold">No operators found.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filteredOperators.map((op) => (
+          {displayedOperators.map((op) => (
             <OperatorCard
               key={op.id}
               op={op}
@@ -1287,163 +1459,260 @@ export default function ContactOperatorsPage() {
                 </div>
               </div>
 
-              {/* Dynamic 7 Filter Controls (AND semantics) */}
+              {/* Dynamic 10 Filter Controls (Multi-Select with OR semantics within filter, AND across filters) */}
               <div className="p-3 bg-slate-900/50 border border-slate-800 rounded-xl mb-4 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1">
                     <Filter className="w-3 h-3" /> Candidate Filters (AND Semantics)
                   </span>
-                  {(selectedArea || selectedCollege || selectedOccupation || selectedStandard || selectedService || selectedDate || selectedVolunteer) && (
+                  {(selectedAreas.length > 0 || selectedColleges.length > 0 || selectedOccupations.length > 0 || selectedStandards.length > 0 || selectedServices.length > 0 || selectedDates.length > 0 || selectedVolunteers.length > 0 || selectedClassesAttended.length > 0 || selectedLevelNumbers.length > 0 || selectedChanting.length > 0) && (
                     <button
                       onClick={handleClearFilters}
                       className="text-[10px] text-slate-400 hover:text-slate-200 underline cursor-pointer"
                     >
-                      Clear Filters
+                      Clear All Filters
                     </button>
                   )}
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
                   {/* 1. Area of Stay */}
-                  <div>
-                    <label className="text-[9px] text-slate-500 font-bold block mb-1">Area of Stay</label>
-                    <select
-                      value={selectedArea}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setSelectedArea(val);
-                        fetchDryRun({ area: val });
-                      }}
-                      className="w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none cursor-pointer"
-                    >
-                      <option value="">All Areas</option>
-                      {(dryRunSummary.filter_options?.areas || []).map((area) => (
-                        <option key={area} value={area}>{area}</option>
-                      ))}
-                    </select>
-                  </div>
+                  <MultiSelectDropdown
+                    label="Area of Stay"
+                    placeholder="All Areas"
+                    options={dryRunSummary.filter_options?.areas || []}
+                    selected={selectedAreas}
+                    onChange={(next) => {
+                      setSelectedAreas(next);
+                      fetchDryRun({ areas: next });
+                    }}
+                  />
 
                   {/* 2. College / Company */}
-                  <div>
-                    <label className="text-[9px] text-slate-500 font-bold block mb-1">College / Company</label>
-                    <select
-                      value={selectedCollege}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setSelectedCollege(val);
-                        fetchDryRun({ college: val });
-                      }}
-                      className="w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none cursor-pointer"
-                    >
-                      <option value="">All Colleges/Companies</option>
-                      {(dryRunSummary.filter_options?.colleges || []).map((col) => (
-                        <option key={col} value={col}>{col}</option>
-                      ))}
-                    </select>
-                  </div>
+                  <MultiSelectDropdown
+                    label="College / Company"
+                    placeholder="All Colleges/Companies"
+                    options={dryRunSummary.filter_options?.colleges || []}
+                    selected={selectedColleges}
+                    onChange={(next) => {
+                      setSelectedColleges(next);
+                      fetchDryRun({ colleges: next });
+                    }}
+                  />
 
                   {/* 3. Occupation */}
-                  <div>
-                    <label className="text-[9px] text-slate-500 font-bold block mb-1">Occupation</label>
-                    <select
-                      value={selectedOccupation}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setSelectedOccupation(val);
-                        fetchDryRun({ occupation: val });
-                      }}
-                      className="w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none cursor-pointer"
-                    >
-                      <option value="">All Occupations</option>
-                      {(dryRunSummary.filter_options?.occupations || []).map((occ) => (
-                        <option key={occ} value={occ}>{occ}</option>
-                      ))}
-                    </select>
-                  </div>
+                  <MultiSelectDropdown
+                    label="Occupation"
+                    placeholder="All Occupations"
+                    options={dryRunSummary.filter_options?.occupations || ['Student', 'Employee', 'Working', 'Business', 'Others']}
+                    selected={selectedOccupations}
+                    onChange={(next) => {
+                      setSelectedOccupations(next);
+                      fetchDryRun({ occupations: next });
+                    }}
+                  />
 
-                  {/* 4. Standard (Krishnashtami & Master Dashboard) */}
-                  {contactSource === 'krishnashtami' || contactSource === 'master_dashboard' ? (
-                    <div>
-                      <label className="text-[9px] text-amber-400 font-bold block mb-1">Standard</label>
-                      <select
-                        value={selectedStandard}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setSelectedStandard(val);
-                          fetchDryRun({ standard: val });
-                        }}
-                        className="w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-amber-500/30 text-xs text-slate-200 focus:outline-none cursor-pointer"
-                      >
-                        <option value="">All Standards</option>
-                        {(dryRunSummary.filter_options?.standards || ['1st Year', '2nd Year', '3rd Year', '4th Year']).map((std) => (
-                          <option key={std} value={std}>{std}</option>
-                        ))}
-                      </select>
-                    </div>
-                  ) : (
-                    <div>
-                      <label className="text-[9px] text-slate-600 font-bold block mb-1">Standard</label>
-                      <select disabled className="w-full px-2 py-1.5 rounded-lg bg-slate-950/40 border border-slate-900 text-xs text-slate-600 cursor-not-allowed">
-                        <option>N/A ({contactSource})</option>
-                      </select>
-                    </div>
-                  )}
+                  {/* 4. Standard */}
+                  <MultiSelectDropdown
+                    label="Standard"
+                    placeholder="All Standards"
+                    labelColor="text-amber-400"
+                    borderColor="border-amber-500/30"
+                    options={dryRunSummary.filter_options?.standards || ['1st Year', '2nd Year', '3rd Year', '4th Year']}
+                    selected={selectedStandards}
+                    onChange={(next) => {
+                      setSelectedStandards(next);
+                      fetchDryRun({ standards: next });
+                    }}
+                  />
 
                   {/* 5. Service */}
-                  <div>
-                    <label className="text-[9px] text-slate-500 font-bold block mb-1">Service</label>
-                    <select
-                      value={selectedService}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setSelectedService(val);
-                        fetchDryRun({ service: val });
-                      }}
-                      className="w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none cursor-pointer"
-                    >
-                      <option value="">All Services</option>
-                      {(dryRunSummary.filter_options?.services || []).map((svc) => (
-                        <option key={svc.id} value={svc.id}>{svc.name}</option>
-                      ))}
-                    </select>
-                  </div>
+                  <MultiSelectDropdown
+                    label="Service"
+                    placeholder="All Services"
+                    options={(dryRunSummary.filter_options?.services || []).map((svc) => ({ value: svc.id, label: svc.name }))}
+                    selected={selectedServices}
+                    onChange={(next) => {
+                      setSelectedServices(next);
+                      fetchDryRun({ services: next });
+                    }}
+                  />
 
                   {/* 6. Date */}
-                  <div>
-                    <label className="text-[9px] text-slate-500 font-bold block mb-1">Date</label>
-                    <select
-                      value={selectedDate}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setSelectedDate(val);
-                        fetchDryRun({ date: val });
-                      }}
-                      className="w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none cursor-pointer"
-                    >
-                      <option value="">All Dates</option>
-                      {(dryRunSummary.filter_options?.dates || []).map((dStr) => (
-                        <option key={dStr} value={dStr}>{dStr}</option>
-                      ))}
-                    </select>
-                  </div>
+                  <MultiSelectDropdown
+                    label="Date"
+                    placeholder="All Dates"
+                    options={dryRunSummary.filter_options?.dates || []}
+                    selected={selectedDates}
+                    onChange={(next) => {
+                      setSelectedDates(next);
+                      fetchDryRun({ dates: next });
+                    }}
+                  />
 
                   {/* 7. Volunteer */}
-                  <div>
-                    <label className="text-[9px] text-slate-500 font-bold block mb-1">Volunteer</label>
-                    <select
-                      value={selectedVolunteer}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setSelectedVolunteer(val);
-                        fetchDryRun({ volunteer: val });
-                      }}
-                      className="w-full px-2 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none cursor-pointer"
-                    >
-                      <option value="">All</option>
-                      <option value="Volunteer">Volunteer (Yes)</option>
-                      <option value="Non-Volunteer">Non-Volunteer (No)</option>
-                    </select>
-                  </div>
+                  <MultiSelectDropdown
+                    label="Volunteer"
+                    placeholder="All"
+                    options={[
+                      { value: 'Volunteer', label: 'Volunteer (Yes)' },
+                      { value: 'Non-Volunteer', label: 'Non-Volunteer (No)' },
+                    ]}
+                    selected={selectedVolunteers}
+                    onChange={(next) => {
+                      setSelectedVolunteers(next);
+                      fetchDryRun({ volunteers: next });
+                    }}
+                  />
+
+                  {/* 8. No. of Classes Attended */}
+                  <MultiSelectDropdown
+                    label="Classes Attended"
+                    placeholder="All Classes"
+                    labelColor="text-amber-400"
+                    borderColor="border-amber-500/30"
+                    options={[
+                      { value: '0', label: '0 Classes' },
+                      { value: '1-10', label: '1–10 Classes' },
+                      { value: '11-20', label: '11–20 Classes' },
+                      { value: '21+', label: '21+ Classes' },
+                    ]}
+                    selected={selectedClassesAttended}
+                    onChange={(next) => {
+                      setSelectedClassesAttended(next);
+                      fetchDryRun({ classesAttended: next });
+                    }}
+                  />
+
+                  {/* 9. Level Number */}
+                  <MultiSelectDropdown
+                    label="Level Number"
+                    placeholder="All Levels"
+                    labelColor="text-amber-400"
+                    borderColor="border-amber-500/30"
+                    options={[
+                      { value: '0', label: 'Level 0 (No level)' },
+                      { value: '1', label: 'Level 1 (AOMC)' },
+                      { value: '2', label: 'Level 2 (Foundation)' },
+                      { value: '3', label: 'Level 3 (Prilims)' },
+                      { value: '4', label: 'Level 4 (Enhance)' },
+                    ]}
+                    selected={selectedLevelNumbers}
+                    onChange={(next) => {
+                      setSelectedLevelNumbers(next);
+                      fetchDryRun({ levelNumbers: next });
+                    }}
+                  />
+
+                  {/* 10. Chanting Count */}
+                  <MultiSelectDropdown
+                    label="Chanting Count"
+                    placeholder="All Chanting"
+                    labelColor="text-amber-400"
+                    borderColor="border-amber-500/30"
+                    options={[
+                      { value: '0', label: '0 rounds' },
+                      { value: '1+', label: '1+ rounds' },
+                      { value: '4+', label: '4+ rounds' },
+                      { value: '8+', label: '8+ rounds' },
+                      { value: '16+', label: '16+ rounds' },
+                    ]}
+                    selected={selectedChanting}
+                    onChange={(next) => {
+                      setSelectedChanting(next);
+                      fetchDryRun({ chanting: next });
+                    }}
+                  />
                 </div>
+
+                {/* Active filter badges with individual removal */}
+                {(selectedAreas.length > 0 || selectedColleges.length > 0 || selectedOccupations.length > 0 || selectedStandards.length > 0 || selectedServices.length > 0 || selectedDates.length > 0 || selectedVolunteers.length > 0 || selectedClassesAttended.length > 0 || selectedLevelNumbers.length > 0 || selectedChanting.length > 0) && (
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-slate-800/80">
+                    <span className="text-[10px] text-slate-500 mr-0.5">Active:</span>
+                    {selectedAreas.map((val) => (
+                      <span key={`area-${val}`} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-purple-950/50 border border-purple-500/30 text-[10px] text-purple-200">
+                        <span className="text-slate-400">Area:</span> {val}
+                        <button type="button" onClick={() => { const n = selectedAreas.filter((v) => v !== val); setSelectedAreas(n); fetchDryRun({ areas: n }); }} className="text-slate-400 hover:text-slate-100 cursor-pointer">
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      </span>
+                    ))}
+                    {selectedColleges.map((val) => (
+                      <span key={`col-${val}`} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-purple-950/50 border border-purple-500/30 text-[10px] text-purple-200">
+                        <span className="text-slate-400">College:</span> {val}
+                        <button type="button" onClick={() => { const n = selectedColleges.filter((v) => v !== val); setSelectedColleges(n); fetchDryRun({ colleges: n }); }} className="text-slate-400 hover:text-slate-100 cursor-pointer">
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      </span>
+                    ))}
+                    {selectedOccupations.map((val) => (
+                      <span key={`occ-${val}`} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-purple-950/50 border border-purple-500/30 text-[10px] text-purple-200">
+                        <span className="text-slate-400">Occ:</span> {val}
+                        <button type="button" onClick={() => { const n = selectedOccupations.filter((v) => v !== val); setSelectedOccupations(n); fetchDryRun({ occupations: n }); }} className="text-slate-400 hover:text-slate-100 cursor-pointer">
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      </span>
+                    ))}
+                    {selectedStandards.map((val) => (
+                      <span key={`std-${val}`} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-950/50 border border-amber-500/30 text-[10px] text-amber-200">
+                        <span className="text-slate-400">Std:</span> {val}
+                        <button type="button" onClick={() => { const n = selectedStandards.filter((v) => v !== val); setSelectedStandards(n); fetchDryRun({ standards: n }); }} className="text-slate-400 hover:text-slate-100 cursor-pointer">
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      </span>
+                    ))}
+                    {selectedServices.map((val) => {
+                      const svc = (dryRunSummary.filter_options?.services || []).find((s) => s.id === val);
+                      return (
+                        <span key={`svc-${val}`} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-purple-950/50 border border-purple-500/30 text-[10px] text-purple-200">
+                          <span className="text-slate-400">Service:</span> {svc ? svc.name : val}
+                          <button type="button" onClick={() => { const n = selectedServices.filter((v) => v !== val); setSelectedServices(n); fetchDryRun({ services: n }); }} className="text-slate-400 hover:text-slate-100 cursor-pointer">
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </span>
+                      );
+                    })}
+                    {selectedDates.map((val) => (
+                      <span key={`date-${val}`} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-purple-950/50 border border-purple-500/30 text-[10px] text-purple-200">
+                        <span className="text-slate-400">Date:</span> {val}
+                        <button type="button" onClick={() => { const n = selectedDates.filter((v) => v !== val); setSelectedDates(n); fetchDryRun({ dates: n }); }} className="text-slate-400 hover:text-slate-100 cursor-pointer">
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      </span>
+                    ))}
+                    {selectedVolunteers.map((val) => (
+                      <span key={`vol-${val}`} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-purple-950/50 border border-purple-500/30 text-[10px] text-purple-200">
+                        <span className="text-slate-400">Vol:</span> {val}
+                        <button type="button" onClick={() => { const n = selectedVolunteers.filter((v) => v !== val); setSelectedVolunteers(n); fetchDryRun({ volunteers: n }); }} className="text-slate-400 hover:text-slate-100 cursor-pointer">
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      </span>
+                    ))}
+                    {selectedClassesAttended.map((val) => (
+                      <span key={`class-${val}`} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-950/50 border border-amber-500/30 text-[10px] text-amber-200">
+                        <span className="text-slate-400">Classes:</span> {val}
+                        <button type="button" onClick={() => { const n = selectedClassesAttended.filter((v) => v !== val); setSelectedClassesAttended(n); fetchDryRun({ classesAttended: n }); }} className="text-slate-400 hover:text-slate-100 cursor-pointer">
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      </span>
+                    ))}
+                    {selectedLevelNumbers.map((val) => (
+                      <span key={`lvl-${val}`} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-950/50 border border-amber-500/30 text-[10px] text-amber-200">
+                        <span className="text-slate-400">Level:</span> {val}
+                        <button type="button" onClick={() => { const n = selectedLevelNumbers.filter((v) => v !== val); setSelectedLevelNumbers(n); fetchDryRun({ levelNumbers: n }); }} className="text-slate-400 hover:text-slate-100 cursor-pointer">
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      </span>
+                    ))}
+                    {selectedChanting.map((val) => (
+                      <span key={`ch-${val}`} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-950/50 border border-amber-500/30 text-[10px] text-amber-200">
+                        <span className="text-slate-400">Chanting:</span> {val}
+                        <button type="button" onClick={() => { const n = selectedChanting.filter((v) => v !== val); setSelectedChanting(n); fetchDryRun({ chanting: n }); }} className="text-slate-400 hover:text-slate-100 cursor-pointer">
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="overflow-y-auto flex-1 pr-1 space-y-4">

@@ -152,10 +152,19 @@ export async function POST(request: NextRequest) {
       try {
         await supabaseAdmin
           .from('krishnashtami_registrations')
-          .update({ standard: cleanStandard })
+          .update({ standard: cleanStandard, level: 'level-0' })
           .eq('id', registrationId);
       } catch (colErr) {
         console.warn('Post-insert standard update warning:', colErr);
+      }
+    } else if (!error && !isKrishnashtami && registrationId) {
+      try {
+        await supabaseAdmin
+          .from('registrations')
+          .update({ level: 'level-0' })
+          .eq('id', registrationId);
+      } catch (colErr) {
+        console.warn('Post-insert level update warning:', colErr);
       }
     }
 
@@ -292,6 +301,7 @@ export async function PATCH(request: NextRequest) {
       transportation_required,
       standard,
       skill_ids,
+      level,
     } = body;
 
     if (!id || typeof id !== 'string') {
@@ -318,6 +328,7 @@ export async function PATCH(request: NextRequest) {
         occupation: occupation || null,
         transportation_required: transportation_required || 'No',
         standard: occupation === 'Student' ? (standard || null) : null,
+        ...(level !== undefined ? { level: level ? String(level).trim() : 'level-0' } : {}),
         updated_at: new Date().toISOString(),
       };
 
@@ -354,6 +365,7 @@ export async function PATCH(request: NextRequest) {
         donation_status: wants_to_donate ? donation_status : 'Pending',
         occupation: occupation || null,
         transportation_required: transportation_required || 'No',
+        ...(level !== undefined ? { level: level ? String(level).trim() : 'level-0' } : {}),
         updated_at: new Date().toISOString(),
       };
 

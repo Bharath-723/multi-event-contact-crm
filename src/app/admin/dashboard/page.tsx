@@ -45,7 +45,15 @@ interface DashboardVisitorLog {
 
 export default function AdminDashboardPage() {
   const queryClient = useQueryClient();
-  const { selectedEventId, selectedFestival } = useFestival();
+  const {
+    events,
+    selectedEventId,
+    selectedFestival,
+    selectedYear,
+    availableYears,
+    setSelectedEventId,
+    setSelectedYear,
+  } = useFestival();
 
   const [activeModal, setActiveModal] = useState<'total' | 'donors' | 'prasadam' | 'volunteers' | 'todays' | 'occupation' | 'transportation' | null>(null);
   const [realtimeStatus, setRealtimeStatus] = useState<string>('SUBSCRIBED');
@@ -534,7 +542,46 @@ export default function AdminDashboardPage() {
             }
           </p>
         </div>
-        <div className="flex items-center gap-2 self-start sm:self-center">
+        <div className="flex items-center gap-2 flex-wrap self-start sm:self-center">
+          {/* Year selector */}
+          <div className="flex items-center gap-1.5 bg-slate-900/60 border border-slate-800 rounded-xl px-3 py-1.5">
+            <span className="text-[11px] font-bold text-slate-400 uppercase">Year:</span>
+            <select
+              value={selectedYear}
+              onChange={(e) => {
+                const y = Number(e.target.value);
+                setSelectedYear(y);
+                const firstEvent = events.find((ev) => ev.event_year === y);
+                if (firstEvent) setSelectedEventId(firstEvent.id);
+              }}
+              className="bg-transparent text-slate-100 font-bold text-xs focus:outline-none cursor-pointer"
+            >
+              {availableYears.map((yr) => (
+                <option key={yr} value={yr} className="bg-slate-900 text-slate-100">
+                  {yr}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Festival selector */}
+          <div className="flex items-center gap-1.5 bg-slate-900/60 border border-purple-500/30 rounded-xl px-3 py-1.5">
+            <span className="text-[11px] font-bold text-purple-400 uppercase">Festival:</span>
+            <select
+              value={selectedEventId || ''}
+              onChange={(e) => setSelectedEventId(e.target.value)}
+              className="bg-transparent text-slate-100 font-bold text-xs focus:outline-none cursor-pointer"
+            >
+              {events
+                .filter((ev) => ev.event_year === selectedYear)
+                .map((f) => (
+                  <option key={f.id} value={f.id} className="bg-slate-900 text-slate-100">
+                    {f.festival_name}
+                  </option>
+                ))}
+            </select>
+          </div>
+
           <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-900/60 border border-slate-850 text-xs">
             <span className={`w-2 h-2 rounded-full ${
               realtimeStatus === 'SUBSCRIBED' 

@@ -2,7 +2,6 @@
 
 /* eslint-disable react-hooks/set-state-in-effect */
 import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import {
   Phone, Search, Loader2, Clock,
@@ -12,7 +11,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { FeedbackContact } from '@/lib/types';
-import { ContactSource, normalizeSource } from '@/lib/source-resolver';
+import { ContactSource } from '@/lib/source-resolver';
 import { computeOperatorStats, formatOperatorDisplayName } from '@/lib/status-normalizer';
 import Link from 'next/link';
 
@@ -213,6 +212,10 @@ function ContactCard({
           <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 mt-1">
             {gender && <span className="text-[11px] text-slate-400">{gender}</span>}
             {stay && <span className="text-[11px] text-slate-400">· {stay}</span>}
+            {contact.standard ? <span className="text-[11px] text-amber-300 font-semibold">· {String(contact.standard)}</span> : null}
+            {contact.chanting !== undefined && contact.chanting !== null ? (
+              <span className="text-[11px] text-amber-400 font-bold">· Chanting: {String(contact.chanting)} rounds</span>
+            ) : null}
             {feedback && (
               <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-0.5">
                 <Star className="w-3 h-3 text-emerald-400 fill-emerald-400/30" /> {feedback}
@@ -314,8 +317,7 @@ function ContactCard({
 }
 
 function OperatorPortalContent() {
-  const searchParams = useSearchParams();
-  const [contactSource, setContactSourceState] = useState<ContactSource>('rathayatra');
+  const contactSource: ContactSource = 'master_dashboard';
   const [operator, setOperator] = useState<OperatorInfo | null>(null);
   const [loadingOp, setLoadingOp] = useState(true);
   const [assignments, setAssignments] = useState<GenericAssignmentData[]>([]);
@@ -334,14 +336,6 @@ function OperatorPortalContent() {
     setTimeout(() => setToastMsg(null), 3500);
   };
 
-  // Preserve & read initial source from URL params
-  useEffect(() => {
-    const s = searchParams.get('source') || searchParams.get('contact_source');
-    if (s) {
-      setContactSourceState(normalizeSource(s));
-    }
-  }, [searchParams]);
-
   // Filters & Pagination
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -353,21 +347,6 @@ function OperatorPortalContent() {
     assignmentId: '',
     notes: '',
   });
-
-  const setContactSource = (newSource: ContactSource) => {
-    // Immediate clean state reset when source changes
-    setAssignments([]);
-    setStats({
-      total_assigned: 0,
-      total_coming: 0,
-      total_not_coming: 0,
-      total_not_answered: 0,
-      total_next_week: 0,
-    });
-    setSearch('');
-    setPage(1);
-    setContactSourceState(newSource);
-  };
 
   // 1. Fetch Current Operator Profile
   const fetchProfile = useCallback(async () => {
@@ -396,7 +375,7 @@ function OperatorPortalContent() {
     if (!isBackground) setLoadingData(true);
 
     try {
-      const url = `/api/assignments/my?source=${contactSource}`;
+      const url = '/api/assignments/my';
 
       const res = await fetch(url);
       const json = await res.json();
@@ -417,7 +396,7 @@ function OperatorPortalContent() {
     } finally {
       if (!isBackground) setLoadingData(false);
     }
-  }, [operator, contactSource]);
+  }, [operator]);
 
   useEffect(() => {
     if (operator) loadAssignments(false);
@@ -432,23 +411,14 @@ function OperatorPortalContent() {
   useEffect(() => {
     if (!operator) return;
 
-    const assignTable =
-      contactSource === 'master_dashboard'
-        ? 'master_contact_assignments'
-        : contactSource === 'krishnashtami'
-        ? 'krishnashtami_contact_assignments'
-        : contactSource === 'feedback_contacts'
-        ? 'feedback_contact_assignments'
-        : 'contact_assignments';
-
     const channel = supabase
-      .channel(`op-portal-${contactSource}-${operator.id}`)
+      .channel(`op-portal-master_dashboard-${operator.id}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
-          table: assignTable,
+          table: 'master_contact_assignments',
           filter: `operator_id=eq.${operator.id}`,
         },
         () => {
@@ -460,7 +430,7 @@ function OperatorPortalContent() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [operator, contactSource]);
+  }, [operator]);
 
   // 4. Update Status Handler with immediate state & stats update (no full-page spinner/refresh)
   const handleStatusChange = async (assignmentId: string, status: AllowedStatus) => {
@@ -554,14 +524,7 @@ function OperatorPortalContent() {
   const totalPages = Math.ceil(filteredList.length / LIMIT) || 1;
   const paginatedList = filteredList.slice((page - 1) * LIMIT, page * LIMIT);
 
-  const sourceTitle =
-    contactSource === 'master_dashboard'
-      ? 'Master Dashboard'
-      : contactSource === 'krishnashtami'
-      ? 'Krishnashtami 2026'
-      : contactSource === 'feedback_contacts'
-      ? 'Feedback Contacts'
-      : 'Rathayatra 2026';
+  const sourceTitle = 'Master Dashboard';
 
   if (loadingOp) {
     return (
@@ -601,24 +564,15 @@ function OperatorPortalContent() {
               <h1 className="font-bold text-sm text-slate-100 flex items-center gap-1.5 leading-snug">
                 {formatOperatorDisplayName(operator.name)}
               </h1>
-              <p className="text-[11px] text-purple-400 font-semibold">{sourceTitle} Operator Portal</p>
+              <p className="text-[11px] text-purple-400 font-semibold">Master Dashboard Operator Portal</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Source Dropdown Selector */}
+            {/* Active Source Indicator */}
             <div className="flex items-center gap-1.5 bg-slate-900/80 border border-purple-500/30 rounded-xl px-2.5 py-1.5">
               <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400">Source:</span>
-              <select
-                value={contactSource}
-                onChange={(e) => setContactSource(e.target.value as ContactSource)}
-                className="bg-transparent text-slate-100 font-bold text-xs focus:outline-none cursor-pointer"
-              >
-                <option value="rathayatra" className="bg-slate-900 text-slate-100">Rathayatra 2026</option>
-                <option value="krishnashtami" className="bg-slate-900 text-slate-100">Krishnashtami 2026</option>
-                <option value="feedback_contacts" className="bg-slate-900 text-slate-100">Feedback Contacts</option>
-                <option value="master_dashboard" className="bg-slate-900 text-slate-100">Master Dashboard</option>
-              </select>
+              <span className="text-slate-100 font-bold text-xs">Master Dashboard</span>
             </div>
 
             <button

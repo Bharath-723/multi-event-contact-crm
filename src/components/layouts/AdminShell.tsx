@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { 
   ShieldAlert, LayoutDashboard, Users, LogOut, 
-  Loader2, Menu, X, ShieldCheck, PhoneCall, Wrench, ClipboardList, Contact, BookUser
+  Loader2, Menu, X, ShieldCheck, PhoneCall, Wrench, ClipboardList, Contact, BookUser, CalendarCheck
 } from 'lucide-react';
 import Link from 'next/link';
 import NotificationBell from '@/components/notification-bell';
@@ -115,6 +115,7 @@ export default function AdminShell({
   const sidebarLinks = [
     { name: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
     { name: 'Master Dashboard', path: '/admin/master_dashboard', icon: Contact },
+    { name: 'Saturday Meet-up', path: '/admin/saturday-meetup', icon: CalendarCheck },
     { name: 'Registrations', path: '/admin/registrations', icon: Users },
     { name: 'Contacts Register', path: '/admin/contacts-register', icon: BookUser },
     { name: 'Feedback Dashboard', path: '/admin/feedback_dashboard', icon: ClipboardList },

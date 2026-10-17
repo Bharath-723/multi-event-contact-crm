@@ -36,17 +36,76 @@ async function authenticateUser(req: Request): Promise<{
 export async function POST(req: Request) {
   const auth = await authenticateUser(req);
 
-  let body: { registration_id?: string; remarks?: string; festival_event_id?: string } = {};
+  let body: {
+    registration_id?: string;
+    remarks?: string;
+    festival_event_id?: string;
+    contact_id?: string;
+    master_contact_id?: string;
+  } = {};
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
+  // ── Master Contacts Saturday Meet-up Approval Branch ───────────────────────
+  const targetContactId = body.contact_id || body.master_contact_id;
+  if (targetContactId) {
+    if (auth.role !== 'admin') {
+      return NextResponse.json(
+        { error: 'Forbidden: Administrator authorization required to approve visitor check-in.' },
+        { status: 403 }
+      );
+    }
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(targetContactId)) {
+      return NextResponse.json({ error: 'Invalid contact ID format' }, { status: 400 });
+    }
+
+    try {
+      const { data, error: rpcErr } = await supabaseAdmin.rpc(
+        'approve_master_contact_checkin',
+        {
+          p_contact_id: targetContactId,
+          p_admin_id: auth.id,
+          p_admin_email: auth.name || 'Admin',
+        }
+      );
+
+      if (rpcErr) {
+        if (rpcErr.code === 'P0002' || rpcErr.message?.includes('not found')) {
+          return NextResponse.json({ error: 'Master contact not found' }, { status: 404 });
+        }
+        if (rpcErr.code === '22023') {
+          return NextResponse.json({ error: rpcErr.message }, { status: 400 });
+        }
+        if (rpcErr.code === '40001') {
+          return NextResponse.json({ error: 'Concurrent check-in collision detected. Please retry.' }, { status: 409 });
+        }
+        console.error('[approve_master_contact_checkin RPC Error]:', rpcErr);
+        return NextResponse.json(
+          { error: `Database error approving check-in: ${rpcErr.message}` },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json(data);
+    } catch (err: unknown) {
+      console.error('[approve_master_contact_checkin Exception]:', err);
+      return NextResponse.json(
+        { error: 'Server error processing check-in approval' },
+        { status: 500 }
+      );
+    }
+  }
+
+  // ── Legacy Festival Registration Check-In Branch ──────────────────────────
   const { registration_id, remarks = '', festival_event_id } = body;
 
   if (!registration_id) {
-    return NextResponse.json({ error: 'registration_id is required' }, { status: 400 });
+    return NextResponse.json({ error: 'registration_id or contact_id is required' }, { status: 400 });
   }
 
   if (!festival_event_id) {

@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getOperatorSessionFromRequest } from '@/lib/operator-auth';
-import { normalizeSource } from '@/lib/source-resolver';
 import { computeOperatorStats } from '@/lib/status-normalizer';
 
 export async function GET(req: Request) {
@@ -22,8 +21,8 @@ export async function GET(req: Request) {
   }
 
   const url = new URL(req.url);
-  const rawSource = url.searchParams.get('source') ?? url.searchParams.get('contact_source');
-  const source = normalizeSource(rawSource);
+  // Canonical active source enforced on server: Master Dashboard
+  const source = 'master_dashboard';
   const statusFilter = (url.searchParams.get('status') ?? '').trim();
 
   if (source === 'master_dashboard') {

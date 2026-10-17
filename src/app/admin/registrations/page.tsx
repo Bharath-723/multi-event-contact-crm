@@ -306,7 +306,7 @@ function AssignContactModal({
       const res = await fetch('/api/assignments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: auth },
-        body: JSON.stringify({ registration_id: registration.id, operator_id: selectedOp, source }),
+        body: JSON.stringify({ registration_id: registration.id, operator_id: selectedOp, source, reassign: true }),
       });
       const d = await res.json();
       if (!res.ok || !d.success || d.assigned_count === 0) {

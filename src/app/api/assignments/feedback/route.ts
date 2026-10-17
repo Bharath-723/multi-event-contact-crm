@@ -50,11 +50,38 @@ export async function GET(request: NextRequest) {
   }
 }
 
+async function requireAdmin(
+  req: Request
+): Promise<{ error: NextResponse | null; userId?: string }> {
+  const authHeader = req.headers.get('Authorization') || '';
+  const token = authHeader.replace('Bearer ', '');
+  if (!token) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
+
+  const {
+    data: { user },
+    error,
+  } = await supabaseAdmin.auth.getUser(token);
+  if (error || !user) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
+
+  const { data: adminRow } = await supabaseAdmin
+    .from('admins')
+    .select('id')
+    .eq('id', user.id)
+    .single();
+  if (!adminRow) return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
+
+  return { error: null, userId: user.id };
+}
+
 // ─── POST /api/assignments/feedback ─────────────────────────────────────────
 export async function POST(request: NextRequest) {
+  const { error: authError, userId } = await requireAdmin(request);
+  if (authError) return authError;
+
   try {
     const body = await request.json();
-    const { action, feedbackContactId, targetOperatorId, assignedBy } = body;
+    const { action, feedbackContactId, targetOperatorId } = body;
+    const assignedBy = body.assignedBy || userId;
 
     // Action 1: Dry Run Preview for Feedback Auto-Assignment
     if (action === 'dry_run') {

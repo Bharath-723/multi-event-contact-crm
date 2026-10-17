@@ -64,6 +64,7 @@ export interface Registration {
   donation_status: 'Pending' | 'User Opted to Donate' | 'Completed' | 'Failed';
   transportation_required?: string | null;
   registration_no?: string;
+  level?: string;
   service_id?: string | null;
   services?: Service | null;
   festival_event_id?: string;

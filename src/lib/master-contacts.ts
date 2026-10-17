@@ -1,33 +1,16 @@
 import { supabaseAdmin } from './supabase-admin';
+import { normalizePhone } from './phone-utils';
 
-// ─── Phone Normalization Rule ──────────────────────────────────────────────────
-/**
- * Canonical Indian Mobile Phone Normalization Rule.
- */
-export function normalizePhone(phone: string | null | undefined): string {
-  if (!phone) return '';
-  let cleaned = phone.replace(/\D/g, '');
-
-  if (cleaned.length === 12 && cleaned.startsWith('91')) {
-    cleaned = cleaned.slice(2);
-  } else if (cleaned.length === 11 && cleaned.startsWith('0')) {
-    cleaned = cleaned.slice(1);
-  }
-
-  if (cleaned.length === 10 && /^[6-9]\d{9}$/.test(cleaned)) {
-    return cleaned;
-  }
-
-  return cleaned;
-}
+export { normalizePhone };
 
 /**
  * Strict Master Occupation Normalization Rule:
- * Master Dashboard strictly supports ONLY 4 occupation categories:
+ * Master Dashboard strictly supports canonical occupation categories:
  * - Student
  * - Employee
  * - Working
  * - Business
+ * - Others
  * 
  * Academic branches (CSE, Civil, ECE, EEE, Mechanical, etc.) and arbitrary strings MUST NOT be treated as occupations.
  */
@@ -41,6 +24,7 @@ export function normalizeOccupation(val: string | null | undefined): string | nu
   if (trimmed === 'Employee') return 'Employee';
   if (trimmed === 'Working') return 'Working';
   if (trimmed === 'Business') return 'Business';
+  if (trimmed === 'Others' || trimmed === 'Other') return 'Others';
 
   // Semantic keyword mapping
   if (['student', 'studying', 'college', 'school', 'pursuing'].some(k => lower.includes(k))) {
@@ -55,6 +39,9 @@ export function normalizeOccupation(val: string | null | undefined): string | nu
   if (['business', 'self employed', 'self-employed', 'entrepreneur', 'shop', 'owner'].some(k => lower.includes(k))) {
     return 'Business';
   }
+  if (['other', 'others'].some(k => lower === k || lower.startsWith('other'))) {
+    return 'Others';
+  }
 
   // If value is a branch or unclassified string, return null (displays as '—')
   return null;
@@ -68,6 +55,9 @@ export interface MasterContactRecord {
   gender: string | null;
   area_of_stay: string | null;
   company_college: string | null;
+  level?: string | null;
+  classes_attended?: number;
+  chanting?: number;
   latest_registration_at: string;
   latest_registration_source: string | null;
   latest_registration_id: string | null;
@@ -85,6 +75,7 @@ export interface MasterEventRecord {
   event_date: string;
   occupation?: string | null;
   standard?: string | null;
+  level?: string | null;
   service_id?: string | null;
   interested_to_volunteer?: string | null;
   created_at: string;
@@ -109,6 +100,7 @@ export async function syncMasterContact(params: {
   company_college?: string | null;
   occupation?: string | null;
   standard?: string | null;
+  level?: string | null;
   service_id?: string | null;
   interested_to_volunteer?: string | null;
   event_date?: string | null;
@@ -143,6 +135,7 @@ export async function syncMasterContact(params: {
       if (params.gender) updatePayload.gender = params.gender;
       if (params.area_of_stay) updatePayload.area_of_stay = params.area_of_stay;
       if (params.company_college) updatePayload.company_college = params.company_college;
+      if (params.level) updatePayload.level = params.level;
       updatePayload.latest_registration_at = eventDate;
       updatePayload.latest_registration_source = params.source;
       updatePayload.latest_registration_id = params.event_record_id;
@@ -152,6 +145,7 @@ export async function syncMasterContact(params: {
       if (params.gender && !existingMaster.gender) updatePayload.gender = params.gender;
       if (params.area_of_stay && !existingMaster.area_of_stay) updatePayload.area_of_stay = params.area_of_stay;
       if (params.company_college && !existingMaster.company_college) updatePayload.company_college = params.company_college;
+      if (params.level && !existingMaster.level) updatePayload.level = params.level;
     }
 
     if (Object.keys(updatePayload).length > 1) {
@@ -170,6 +164,7 @@ export async function syncMasterContact(params: {
         gender: params.gender || null,
         area_of_stay: params.area_of_stay || null,
         company_college: params.company_college || null,
+        level: params.level || 'level-0',
         latest_registration_at: eventDate,
         latest_registration_source: params.source,
         latest_registration_id: params.event_record_id,
@@ -193,6 +188,21 @@ export async function syncMasterContact(params: {
 
   if (!masterId) return null;
 
+  // Preserve existing non-empty occupation if incoming occupation is null or empty
+  let targetOccupation = cleanOccupation;
+  if (!targetOccupation) {
+    const { data: existingEvent } = await supabaseAdmin
+      .from('master_contact_events')
+      .select('occupation')
+      .eq('source', params.source)
+      .eq('event_record_id', params.event_record_id)
+      .maybeSingle();
+
+    if (existingEvent?.occupation) {
+      targetOccupation = normalizeOccupation(existingEvent.occupation);
+    }
+  }
+
   const eventPayload: Record<string, unknown> = {
     master_contact_id: masterId,
     phone: normPhone,
@@ -200,8 +210,9 @@ export async function syncMasterContact(params: {
     event_display_name: params.event_display_name,
     event_record_id: params.event_record_id,
     event_date: eventDate,
-    occupation: cleanOccupation,
+    occupation: targetOccupation,
     standard: params.standard || null,
+    level: params.level || 'level-0',
     service_id: params.service_id || null,
     interested_to_volunteer: params.interested_to_volunteer || null,
   };
@@ -222,11 +233,11 @@ export async function backfillAllSources(): Promise<{
 }> {
   const { data: ksRegs } = await supabaseAdmin
     .from('krishnashtami_registrations')
-    .select('id, full_name, phone, age, gender, area_of_stay, company_college, occupation, standard, service_id, interested_to_volunteer, created_at');
+    .select('id, full_name, phone, age, gender, area_of_stay, company_college, occupation, standard, level, service_id, interested_to_volunteer, created_at');
 
   const { data: ryRegs } = await supabaseAdmin
     .from('registrations')
-    .select('id, full_name, phone, age, gender, area_of_stay, company_college, occupation, service_id, interested_to_volunteer, created_at');
+    .select('id, full_name, phone, age, gender, area_of_stay, company_college, occupation, level, service_id, interested_to_volunteer, created_at');
 
   const { data: fbRegs } = await supabaseAdmin
     .from('feedback_contacts')
@@ -234,7 +245,7 @@ export async function backfillAllSources(): Promise<{
 
   const { data: crRegs } = await supabaseAdmin
     .from('contacts_register')
-    .select('id, full_name, phone, gender, area_of_stay, college_name, created_at');
+    .select('id, full_name, phone, gender, area_of_stay, college_name, profession, created_at');
 
   const allRecords: Array<{
     source: string;
@@ -248,6 +259,7 @@ export async function backfillAllSources(): Promise<{
     company_college?: string | null;
     occupation?: string | null;
     standard?: string | null;
+    level?: string | null;
     service_id?: string | null;
     interested_to_volunteer?: string | null;
     event_date: string;
@@ -267,6 +279,7 @@ export async function backfillAllSources(): Promise<{
         company_college: r.company_college,
         occupation: r.occupation,
         standard: r.standard,
+        level: (r as { level?: string }).level || 'level-0',
         service_id: r.service_id,
         interested_to_volunteer: r.interested_to_volunteer === true ? 'Yes' : r.interested_to_volunteer === false ? 'No' : null,
         event_date: r.created_at || '1970-01-01T00:00:00Z',
@@ -287,6 +300,7 @@ export async function backfillAllSources(): Promise<{
         area_of_stay: r.area_of_stay,
         company_college: r.company_college,
         occupation: r.occupation,
+        level: (r as { level?: string }).level || 'level-0',
         service_id: r.service_id,
         interested_to_volunteer: r.interested_to_volunteer === true ? 'Yes' : r.interested_to_volunteer === false ? 'No' : null,
         event_date: r.created_at || '1970-01-01T00:00:00Z',
@@ -328,7 +342,7 @@ export async function backfillAllSources(): Promise<{
         gender: r.gender,
         area_of_stay: r.area_of_stay,
         company_college: r.college_name,
-        occupation: null,
+        occupation: r.profession || null,
         event_date: r.created_at || '1970-01-01T00:00:00Z',
       });
     }

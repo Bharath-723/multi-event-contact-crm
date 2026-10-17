@@ -32,17 +32,10 @@ export async function GET(req: NextRequest) {
   const { error: authError } = await requireAdmin(req);
   if (authError) return authError;
 
-  const rawSource = req.nextUrl.searchParams.get('source') ?? req.nextUrl.searchParams.get('contact_source');
-  const source = normalizeSource(rawSource);
-
-  const assignTable =
-    source === 'master_dashboard'
-      ? 'master_contact_assignments'
-      : source === 'krishnashtami'
-      ? 'krishnashtami_contact_assignments'
-      : source === 'feedback_contacts'
-      ? 'feedback_contact_assignments'
-      : 'contact_assignments';
+  // Contact Operators active metrics and assignments are strictly locked to Master Dashboard.
+  // Historical festival records are preserved in their respective tables and never counted here.
+  const source = 'master_dashboard';
+  const assignTable = 'master_contact_assignments';
 
   // 1. Fetch all operators
   const { data: operators, error } = await supabaseAdmin
@@ -90,6 +83,16 @@ export async function GET(req: NextRequest) {
       total_called: stats.coming + stats.notComing + stats.notAnswered + stats.nextWeek,
       call_success_pct: stats.assigned > 0 ? Math.round((stats.coming / stats.assigned) * 100) : 0,
     };
+  });
+
+  // Default ordering: Highest assigned count first, then deterministic secondary sort by name, then ID
+  withStats.sort((a, b) => {
+    if (b.total_assigned !== a.total_assigned) {
+      return b.total_assigned - a.total_assigned;
+    }
+    const nameComp = (a.name || '').localeCompare(b.name || '');
+    if (nameComp !== 0) return nameComp;
+    return (a.id || '').localeCompare(b.id || '');
   });
 
   return NextResponse.json({ operators: withStats, source });

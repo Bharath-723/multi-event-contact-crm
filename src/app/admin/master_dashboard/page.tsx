@@ -1,13 +1,15 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
   Users, Calendar, TrendingUp, CheckCircle, Search, Filter,
   Download, Printer, RefreshCw, X, Eye, Loader2, PhoneCall,
-  ChevronLeft, ChevronRight, Check, Edit2, Trash2, AlertTriangle, Crown
+  ChevronLeft, ChevronRight, Edit2, Trash2, AlertTriangle, Crown, ChevronDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+
+import { formatUnifiedLevel } from '@/lib/level-mapping';
 
 interface EventAttendance {
   id?: string;
@@ -29,11 +31,168 @@ interface MasterContact {
   company_college: string;
   occupation: string;
   standard: string | null;
+  level?: string | null;
+  classes_attended?: number;
   operator_name?: string | null;
   assignment_status?: string | null;
   operator_id?: string | null;
+  chanting?: number;
   created_at: string;
   events: EventAttendance[];
+}
+
+const formatLevel = (lvl?: string | null, classesAttended?: number | null) => {
+  return formatUnifiedLevel(classesAttended, lvl);
+};
+
+function ChantingCounterCell({
+  contactId,
+  initialCount,
+  onCountChange,
+}: {
+  contactId: string;
+  initialCount: number;
+  onCountChange: (newVal: number) => void;
+}) {
+  const [count, setCount] = useState<number>(initialCount);
+  const [syncing, setSyncing] = useState<boolean>(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Serialized queue refs to handle rapid clicking and prevent lost increments
+  const countRef = useRef<number>(initialCount);
+  const serverCountRef = useRef<number>(initialCount);
+  const pendingDeltaRef = useRef<number>(0);
+  const isRequestInFlight = useRef<boolean>(false);
+  const isMountedRef = useRef<boolean>(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    serverCountRef.current = initialCount;
+    if (!isRequestInFlight.current && pendingDeltaRef.current === 0) {
+      countRef.current = initialCount;
+      setCount(initialCount);
+    }
+  }, [initialCount]);
+
+  const processQueue = async () => {
+    if (isRequestInFlight.current) return;
+    if (pendingDeltaRef.current === 0) {
+      if (isMountedRef.current) setSyncing(false);
+      return;
+    }
+
+    const deltaToSend = pendingDeltaRef.current;
+    pendingDeltaRef.current = 0;
+    isRequestInFlight.current = true;
+    if (isMountedRef.current) {
+      setSyncing(true);
+      setErrorMsg(null);
+    }
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const auth = session?.access_token ? `Bearer ${session.access_token}` : '';
+      const res = await fetch(`/api/master/${contactId}/chanting`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: auth,
+        },
+        body: JSON.stringify({ delta: deltaToSend }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        // Rollback only the delta that failed
+        const rolledBack = Math.max(0, countRef.current - deltaToSend);
+        countRef.current = rolledBack;
+        if (isMountedRef.current) {
+          setErrorMsg(data.error || 'Update failed');
+          setCount(rolledBack);
+        }
+        onCountChange(rolledBack);
+      } else if (typeof data.chanting === 'number') {
+        serverCountRef.current = data.chanting;
+        const authoritativeWithPending = Math.max(0, data.chanting + pendingDeltaRef.current);
+        countRef.current = authoritativeWithPending;
+        if (isMountedRef.current) {
+          setCount(authoritativeWithPending);
+        }
+        onCountChange(authoritativeWithPending);
+      }
+    } catch {
+      const rolledBack = Math.max(0, countRef.current - deltaToSend);
+      countRef.current = rolledBack;
+      if (isMountedRef.current) {
+        setErrorMsg('Network error');
+        setCount(rolledBack);
+      }
+      onCountChange(rolledBack);
+    } finally {
+      isRequestInFlight.current = false;
+      if (pendingDeltaRef.current !== 0) {
+        void processQueue();
+      } else if (isMountedRef.current) {
+        setSyncing(false);
+      }
+    }
+  };
+
+  const updateChanting = (delta: number) => {
+    const current = countRef.current;
+    const nextVal = Math.max(0, current + delta);
+    if (nextVal === current && delta < 0) return;
+
+    countRef.current = nextVal;
+    pendingDeltaRef.current += delta;
+    setCount(nextVal);
+    onCountChange(nextVal);
+    setTimeout(() => {
+      void processQueue();
+    }, 0);
+  };
+
+  return (
+    <div className="flex flex-col items-center gap-0.5">
+      <div className={`inline-flex items-center rounded-xl bg-amber-50 border p-0.5 shadow-sm transition-all ${syncing ? 'border-amber-500 ring-1 ring-amber-400/40' : 'border-amber-300'}`}>
+        <button
+          type="button"
+          onClick={() => updateChanting(-1)}
+          disabled={count <= 0}
+          className="w-6 h-6 flex items-center justify-center rounded-lg text-amber-950 hover:bg-amber-200/80 disabled:opacity-30 disabled:hover:bg-transparent transition-all font-bold text-sm cursor-pointer disabled:cursor-not-allowed"
+          title="Decrement (−1)"
+        >
+          −
+        </button>
+        <div className="relative w-8 text-center flex items-center justify-center">
+          <span className="font-extrabold text-xs text-[#0f172a] select-none">
+            {count}
+          </span>
+          {syncing && (
+            <span className="absolute -top-1 -right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => updateChanting(1)}
+          className="w-6 h-6 flex items-center justify-center rounded-lg text-amber-950 hover:bg-amber-200/80 transition-all font-bold text-sm cursor-pointer"
+          title="Increment (+1)"
+        >
+          +
+        </button>
+      </div>
+      {errorMsg && (
+        <span className="text-[9px] text-red-600 font-bold max-w-[100px] text-center leading-tight">
+          {errorMsg}
+        </span>
+      )}
+    </div>
+  );
 }
 
 interface EventBreakdownItem {
@@ -71,11 +230,143 @@ interface OperatorItem {
   total_assigned?: number;
 }
 
+function MultiSelectFilter({
+  label,
+  options,
+  selected,
+  onChange,
+}: {
+  label: string;
+  options: string[];
+  selected: string[];
+  onChange: (vals: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredOptions = useMemo(() => {
+    if (!searchQuery.trim()) return options;
+    const q = searchQuery.toLowerCase();
+    return options.filter((o) => o.toLowerCase().includes(q));
+  }, [options, searchQuery]);
+
+  const toggleOption = (val: string) => {
+    if (selected.includes(val)) {
+      onChange(selected.filter((x) => x !== val));
+    } else {
+      onChange([...selected, val]);
+    }
+  };
+
+  const selectAll = () => {
+    onChange(Array.from(new Set([...selected, ...filteredOptions])));
+  };
+
+  const clearAll = () => {
+    onChange([]);
+  };
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className={`w-full px-3 py-2 rounded-xl bg-white border-2 text-left text-xs font-bold focus:outline-none flex items-center justify-between shadow-sm cursor-pointer transition-all ${
+          selected.length > 0
+            ? 'border-amber-500 bg-amber-50/70 text-[#0f172a]'
+            : 'border-amber-300 text-[#0f172a]'
+        }`}
+      >
+        <span className="truncate mr-1">
+          {selected.length === 0
+            ? `${label} (All)`
+            : selected.length === 1
+            ? selected[0]
+            : `${label} (${selected.length})`}
+        </span>
+        <div className="flex items-center gap-1 shrink-0">
+          {selected.length > 0 && (
+            <span className="bg-amber-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-black">
+              {selected.length}
+            </span>
+          )}
+          <ChevronDown className="w-3.5 h-3.5 text-amber-700" />
+        </div>
+      </button>
+
+      {open && (
+        <div className="absolute top-full left-0 mt-1 w-64 max-w-[90vw] bg-white rounded-xl border-2 border-amber-300 shadow-xl z-50 p-2 text-xs">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={`Search ${label}...`}
+            className="w-full px-2.5 py-1.5 rounded-lg border border-amber-200 text-xs text-[#0f172a] focus:outline-none focus:border-amber-500 mb-2 font-semibold"
+          />
+          <div className="flex items-center justify-between text-[11px] mb-2 px-1 border-b border-amber-100 pb-1.5">
+            <button
+              type="button"
+              onClick={selectAll}
+              className="text-amber-800 hover:text-amber-950 font-extrabold cursor-pointer"
+            >
+              Select All
+            </button>
+            <button
+              type="button"
+              onClick={clearAll}
+              className="text-slate-500 hover:text-slate-800 font-bold cursor-pointer"
+            >
+              Clear
+            </button>
+          </div>
+          <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
+            {filteredOptions.length === 0 ? (
+              <p className="text-slate-400 py-3 text-center text-[11px]">No matching options</p>
+            ) : (
+              filteredOptions.map((opt) => {
+                const isChecked = selected.includes(opt);
+                return (
+                  <div
+                    key={opt}
+                    onClick={() => toggleOption(opt)}
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-amber-50 cursor-pointer select-none"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      readOnly
+                      className="rounded border-amber-400 text-amber-600 focus:ring-amber-500 pointer-events-none"
+                    />
+                    <span className="truncate text-[#0f172a] font-semibold">{opt}</span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function MasterDashboardPage() {
   const [contacts, setContacts] = useState<MasterContact[]>([]);
   const [total, setTotal] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
-  const [exporting, setExporting] = useState<boolean>(false);
+  const [isExportingCsv, setIsExportingCsv] = useState<boolean>(false);
+  const [isPrintingPdf, setIsPrintingPdf] = useState<boolean>(false);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [stats, setStats] = useState<MasterStats>({
     total_contacts: 0,
     total_events: 0,
@@ -87,17 +378,18 @@ export default function MasterDashboardPage() {
   const [filterOptions, setFilterOptions] = useState<FilterOptions>({
     areas: [],
     colleges: [],
-    occupations: ['Student', 'Employee', 'Working', 'Business'],
+    occupations: ['Student', 'Employee', 'Working', 'Business', 'Others'],
     standards: ['1st Year', '2nd Year', '3rd Year', '4th Year'],
     event_sources: [],
   });
 
   // --- SEARCH & FILTER STATES ---
   const [search, setSearch] = useState('');
+  const [activeSearch, setActiveSearch] = useState('');
   const [filterGender, setFilterGender] = useState('');
   const [filterOccupation, setFilterOccupation] = useState('');
-  const [filterArea, setFilterArea] = useState('');
-  const [filterCompany, setFilterCompany] = useState('');
+  const [filterAreas, setFilterAreas] = useState<string[]>([]);
+  const [filterCompanies, setFilterCompanies] = useState<string[]>([]);
   const [filterStandard, setFilterStandard] = useState('');
   const [filterEventSource, setFilterEventSource] = useState('');
   const [filterDate, setFilterDate] = useState('');
@@ -122,6 +414,8 @@ export default function MasterDashboardPage() {
   const [editCompany, setEditCompany] = useState('');
   const [editOccupation, setEditOccupation] = useState('');
   const [editStandard, setEditStandard] = useState('');
+  const [editLevel, setEditLevel] = useState('level-0');
+  const [editChanting, setEditChanting] = useState<number>(0);
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -148,8 +442,8 @@ export default function MasterDashboardPage() {
     s?: string;
     g?: string;
     occ?: string;
-    ar?: string;
-    col?: string;
+    ar?: string[];
+    col?: string[];
     st?: string;
     evt?: string;
     dt?: string;
@@ -160,11 +454,11 @@ export default function MasterDashboardPage() {
       const auth = await getAuthHeader();
       const params = new URLSearchParams();
 
-      const searchVal = overrides?.s !== undefined ? overrides.s : search;
+      const searchVal = overrides?.s !== undefined ? overrides.s : activeSearch;
       const genderVal = overrides?.g !== undefined ? overrides.g : filterGender;
       const occVal = overrides?.occ !== undefined ? overrides.occ : filterOccupation;
-      const areaVal = overrides?.ar !== undefined ? overrides.ar : filterArea;
-      const colVal = overrides?.col !== undefined ? overrides.col : filterCompany;
+      const areasVal = overrides?.ar !== undefined ? overrides.ar : filterAreas;
+      const colsVal = overrides?.col !== undefined ? overrides.col : filterCompanies;
       const stdVal = overrides?.st !== undefined ? overrides.st : filterStandard;
       const evtVal = overrides?.evt !== undefined ? overrides.evt : filterEventSource;
       const dtVal = overrides?.dt !== undefined ? overrides.dt : filterDate;
@@ -173,8 +467,8 @@ export default function MasterDashboardPage() {
       if (searchVal) params.set('search', searchVal);
       if (genderVal) params.set('gender', genderVal);
       if (occVal) params.set('occupation', occVal);
-      if (areaVal) params.set('area', areaVal);
-      if (colVal) params.set('company', colVal);
+      (areasVal || []).forEach((a) => params.append('area', a));
+      (colsVal || []).forEach((c) => params.append('company', c));
       if (stdVal) params.set('standard', stdVal);
       if (evtVal) params.set('event_source', evtVal);
       if (dtVal) params.set('date', dtVal);
@@ -194,7 +488,7 @@ export default function MasterDashboardPage() {
         if (d.filter_options) {
           setFilterOptions({
             ...d.filter_options,
-            occupations: ['Student', 'Employee', 'Working', 'Business'],
+            occupations: ['Student', 'Employee', 'Working', 'Business', 'Others'],
             standards: ['1st Year', '2nd Year', '3rd Year', '4th Year'],
           });
         }
@@ -204,7 +498,7 @@ export default function MasterDashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [search, filterGender, filterOccupation, filterArea, filterCompany, filterStandard, filterEventSource, filterDate, page, limit]);
+  }, [activeSearch, filterGender, filterOccupation, filterAreas, filterCompanies, filterStandard, filterEventSource, filterDate, page, limit]);
 
   useEffect(() => {
     loadData();
@@ -228,18 +522,42 @@ export default function MasterDashboardPage() {
     loadOperators();
   }, [loadOperators]);
 
-  // Realtime Subscription
+  // Realtime Subscription with Targeted Update Protection
   useEffect(() => {
     const channel = supabase
       .channel('master_contacts_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'master_contacts' }, () => {
-        loadData();
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'master_contacts' }, (payload) => {
+        if (payload.eventType === 'UPDATE' && payload.new) {
+          // Targeted in-memory update: avoids full table refetch and flicker
+          const updated = payload.new as { id: string; chanting?: number; level?: string; classes_attended?: number; name?: string };
+          setContacts((prev) =>
+            prev.map((c) => (c.id === updated.id ? { ...c, ...updated } : c))
+          );
+        } else {
+          loadData();
+        }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'master_contact_events' }, () => {
         loadData();
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'master_contact_assignments' }, () => {
-        loadData();
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'master_contact_assignments' }, (payload) => {
+        if (payload.eventType === 'UPDATE' && payload.new) {
+          const updatedAssign = payload.new as { master_contact_id: string; operator_id: string; status: string; is_active: boolean };
+          setContacts((prev) =>
+            prev.map((c) => {
+              if (c.id === updatedAssign.master_contact_id) {
+                return {
+                  ...c,
+                  assignment_status: updatedAssign.is_active ? updatedAssign.status : null,
+                  operator_id: updatedAssign.is_active ? updatedAssign.operator_id : null,
+                };
+              }
+              return c;
+            })
+          );
+        } else {
+          loadData();
+        }
         loadOperators();
       })
       .subscribe();
@@ -249,30 +567,31 @@ export default function MasterDashboardPage() {
     };
   }, [loadData, loadOperators]);
 
-  // Search handler
+  // Debounced Search Handler
   const handleSearchChange = (val: string) => {
     setSearch(val);
-    setPage(1);
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     searchTimeoutRef.current = setTimeout(() => {
-      loadData({ s: val, pageNum: 1 });
-    }, 350);
+      setActiveSearch(val);
+      setPage(1);
+    }, 300);
   };
 
   // Reset all filters
   const handleResetFilters = () => {
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     setSearch('');
+    setActiveSearch('');
     setFilterGender('');
     setFilterOccupation('');
-    setFilterArea('');
-    setFilterCompany('');
+    setFilterAreas([]);
+    setFilterCompanies([]);
     setFilterStandard('');
     setFilterEventSource('');
     setFilterDate('');
     setPage(1);
     loadData({
-      s: '', g: '', occ: '', ar: '', col: '', st: '', evt: '', dt: '', pageNum: 1,
+      s: '', g: '', occ: '', ar: [], col: [], st: '', evt: '', dt: '', pageNum: 1,
     });
   };
 
@@ -284,8 +603,8 @@ export default function MasterDashboardPage() {
     if (search) params.set('search', search);
     if (filterGender) params.set('gender', filterGender);
     if (filterOccupation) params.set('occupation', filterOccupation);
-    if (filterArea) params.set('area', filterArea);
-    if (filterCompany) params.set('company', filterCompany);
+    filterAreas.forEach((a) => params.append('area', a));
+    filterCompanies.forEach((c) => params.append('company', c));
     if (filterStandard) params.set('standard', filterStandard);
     if (filterEventSource) params.set('event_source', filterEventSource);
     if (filterDate) params.set('date', filterDate);
@@ -306,12 +625,12 @@ export default function MasterDashboardPage() {
 
   // --- FULL-RECORD EXPORT CSV ---
   const handleExportCSV = async () => {
-    setExporting(true);
+    setIsExportingCsv(true);
     try {
       const allContacts = await fetchAllMatchingContacts();
       if (allContacts.length === 0) return;
 
-      const headers = ['Name', 'Phone', 'Age', 'Gender', 'Area / Stay', 'Company / College', 'Occupation', 'Standard', 'Event Attended', 'Assigned Operator'];
+      const headers = ['Name', 'Phone', 'Age', 'Gender', 'Area / Stay', 'Company / College', 'Occupation', 'Standard', 'Level', 'Event Attended', 'Chanting', 'Assigned Operator'];
       const rows = allContacts.map(c => {
         const eventsStr = c.events.map(e => e.event_display_name).join(' | ');
         return [
@@ -323,7 +642,9 @@ export default function MasterDashboardPage() {
           `"${c.company_college.replace(/"/g, '""')}"`,
           `"${c.occupation.replace(/"/g, '""')}"`,
           `"${(c.standard || '—').replace(/"/g, '""')}"`,
+          `"${formatLevel(c.level, c.classes_attended)}"`,
           `"${eventsStr.replace(/"/g, '""')}"`,
+          `"${c.chanting ?? 0}"`,
           `"${(c.operator_name || 'Unassigned').replace(/"/g, '""')}"`,
         ];
       });
@@ -339,13 +660,13 @@ export default function MasterDashboardPage() {
     } catch (err) {
       console.error('Export CSV error:', err);
     } finally {
-      setExporting(false);
+      setIsExportingCsv(false);
     }
   };
 
   // --- FULL-RECORD PRINT PDF (USING RATHAYATRA PRINT REPORT ARCHITECTURE) ---
   const handlePrintPDF = async () => {
-    setExporting(true);
+    setIsPrintingPdf(true);
     try {
       const allContacts = await fetchAllMatchingContacts();
       if (allContacts.length === 0) return;
@@ -362,8 +683,8 @@ export default function MasterDashboardPage() {
       if (search) filterSummary.push(`Search: "${search}"`);
       if (filterGender) filterSummary.push(`Gender: ${filterGender}`);
       if (filterOccupation) filterSummary.push(`Occupation: ${filterOccupation}`);
-      if (filterArea) filterSummary.push(`Area: ${filterArea}`);
-      if (filterCompany) filterSummary.push(`Company: ${filterCompany}`);
+      if (filterAreas.length > 0) filterSummary.push(`Areas: ${filterAreas.join(', ')}`);
+      if (filterCompanies.length > 0) filterSummary.push(`Colleges/Companies: ${filterCompanies.join(', ')}`);
       if (filterStandard) filterSummary.push(`Standard: ${filterStandard}`);
       if (filterDate) filterSummary.push(`Date: ${filterDate}`);
 
@@ -381,7 +702,9 @@ export default function MasterDashboardPage() {
             <td>${c.company_college || '—'}</td>
             <td style="font-weight: 600;">${c.occupation || '—'}</td>
             <td>${c.standard || '—'}</td>
+            <td style="text-align: center; font-weight: 700;">${formatLevel(c.level, c.classes_attended)}</td>
             <td style="font-weight: 600; color: #78350f;">${eventsStr}</td>
+            <td style="text-align: center; font-weight: 700;">${c.chanting ?? 0}</td>
             <td>${c.operator_name ? `<span style="color: #047857; font-weight: 600;">${c.operator_name}</span>` : 'Unassigned'}</td>
           </tr>
         `;
@@ -544,7 +867,9 @@ export default function MasterDashboardPage() {
                   <th>Company / College</th>
                   <th>Occupation</th>
                   <th>Standard</th>
+                  <th style="text-align: center;">Level</th>
                   <th>Event Attended</th>
+                  <th style="text-align: center;">Chanting</th>
                   <th>Assign Operator</th>
                 </tr>
               </thead>
@@ -569,7 +894,7 @@ export default function MasterDashboardPage() {
     } catch (err) {
       console.error('Print PDF error:', err);
     } finally {
-      setExporting(false);
+      setIsPrintingPdf(false);
     }
   };
 
@@ -584,6 +909,8 @@ export default function MasterDashboardPage() {
     setEditCompany(c.company_college || '');
     setEditOccupation(c.occupation || '');
     setEditStandard(c.standard || '');
+    setEditLevel(c.level || 'level-0');
+    setEditChanting(c.chanting ?? 0);
     setEditError(null);
   };
 
@@ -611,6 +938,8 @@ export default function MasterDashboardPage() {
           company_college: editCompany,
           occupation: editOccupation,
           standard: editStandard,
+          level: editLevel,
+          chanting: editChanting,
         }),
       });
 
@@ -671,6 +1000,7 @@ export default function MasterDashboardPage() {
           source: 'master_dashboard',
           master_contact_id: assignModalContact.id,
           operator_id: selectedOperatorId,
+          reassign: true,
         }),
       });
 
@@ -695,7 +1025,16 @@ export default function MasterDashboardPage() {
   };
 
   const totalPages = Math.ceil(total / limit) || 1;
-  const isAnyFilterActive = Boolean(search || filterGender || filterOccupation || filterArea || filterCompany || filterStandard || filterEventSource || filterDate);
+  const isAnyFilterActive = Boolean(
+    search ||
+    filterGender ||
+    filterOccupation ||
+    filterAreas.length > 0 ||
+    filterCompanies.length > 0 ||
+    filterStandard ||
+    filterEventSource ||
+    filterDate
+  );
 
   return (
     <div className="space-y-6">
@@ -710,26 +1049,34 @@ export default function MasterDashboardPage() {
         </div>
         <div className="flex items-center gap-2.5 flex-wrap no-print">
           <button
-            onClick={() => loadData()}
-            className="p-2.5 rounded-xl bg-white border-2 border-amber-300 hover:border-amber-500 text-amber-900 hover:bg-amber-50 transition-all cursor-pointer shadow-sm"
+            onClick={async () => {
+              setIsRefreshing(true);
+              try {
+                await loadData();
+              } finally {
+                setIsRefreshing(false);
+              }
+            }}
+            disabled={isRefreshing}
+            className="p-2.5 rounded-xl bg-white border-2 border-amber-300 hover:border-amber-500 text-amber-900 hover:bg-amber-50 transition-all cursor-pointer shadow-sm disabled:opacity-50"
             title="Refresh Data"
           >
-            <RefreshCw className={`w-4.5 h-4.5 ${loading ? 'animate-spin text-amber-600' : 'text-amber-700'}`} />
+            <RefreshCw className={`w-4.5 h-4.5 ${isRefreshing ? 'animate-spin text-amber-600' : 'text-amber-700'}`} />
           </button>
           <button
             onClick={handleExportCSV}
-            disabled={contacts.length === 0 || exporting}
+            disabled={contacts.length === 0 || isExportingCsv}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-extrabold text-sm shadow-md transition-all cursor-pointer disabled:opacity-50"
           >
-            {exporting ? <Loader2 className="w-4.5 h-4.5 animate-spin text-white" /> : <Download className="w-4.5 h-4.5 text-white" />}
+            {isExportingCsv ? <Loader2 className="w-4.5 h-4.5 animate-spin text-white" /> : <Download className="w-4.5 h-4.5 text-white" />}
             Export CSV
           </button>
           <button
             onClick={handlePrintPDF}
-            disabled={contacts.length === 0 || exporting}
+            disabled={contacts.length === 0 || isPrintingPdf}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border-2 border-amber-300 hover:border-amber-500 text-amber-900 hover:bg-amber-50 font-bold text-sm transition-all cursor-pointer disabled:opacity-50 shadow-sm"
           >
-            {exporting ? <Loader2 className="w-4.5 h-4.5 animate-spin text-amber-700" /> : <Printer className="w-4.5 h-4.5 text-amber-700" />}
+            {isPrintingPdf ? <Loader2 className="w-4.5 h-4.5 animate-spin text-amber-700" /> : <Printer className="w-4.5 h-4.5 text-amber-700" />}
             Print PDF
           </button>
         </div>
@@ -816,31 +1163,32 @@ export default function MasterDashboardPage() {
             <option value="Employee" className="bg-white text-[#0f172a] font-semibold">Employee</option>
             <option value="Working" className="bg-white text-[#0f172a] font-semibold">Working</option>
             <option value="Business" className="bg-white text-[#0f172a] font-semibold">Business</option>
+            <option value="Others" className="bg-white text-[#0f172a] font-semibold">Others</option>
           </select>
 
           {/* 3. Area of Stay Filter */}
-          <select
-            value={filterArea}
-            onChange={(e) => { const v = e.target.value; setFilterArea(v); setPage(1); loadData({ ar: v, pageNum: 1 }); }}
-            className="px-3 py-2 rounded-xl bg-white border-2 border-amber-300 text-[#0f172a] text-xs font-bold focus:outline-none focus:border-amber-500 cursor-pointer shadow-sm"
-          >
-            <option value="" className="bg-white text-[#0f172a] font-semibold">Area of Stay (All)</option>
-            {filterOptions.areas.map((ar) => (
-              <option key={ar} value={ar} className="bg-white text-[#0f172a] font-semibold">{ar}</option>
-            ))}
-          </select>
+          <MultiSelectFilter
+            label="Area of Stay"
+            options={filterOptions.areas}
+            selected={filterAreas}
+            onChange={(vals) => {
+              setFilterAreas(vals);
+              setPage(1);
+              loadData({ ar: vals, pageNum: 1 });
+            }}
+          />
 
           {/* 4. Company / College Filter */}
-          <select
-            value={filterCompany}
-            onChange={(e) => { const v = e.target.value; setFilterCompany(v); setPage(1); loadData({ col: v, pageNum: 1 }); }}
-            className="px-3 py-2 rounded-xl bg-white border-2 border-amber-300 text-[#0f172a] text-xs font-bold focus:outline-none focus:border-amber-500 cursor-pointer shadow-sm"
-          >
-            <option value="" className="bg-white text-[#0f172a] font-semibold">Company / College (All)</option>
-            {filterOptions.colleges.map((col) => (
-              <option key={col} value={col} className="bg-white text-[#0f172a] font-semibold">{col}</option>
-            ))}
-          </select>
+          <MultiSelectFilter
+            label="Company / College"
+            options={filterOptions.colleges}
+            selected={filterCompanies}
+            onChange={(vals) => {
+              setFilterCompanies(vals);
+              setPage(1);
+              loadData({ col: vals, pageNum: 1 });
+            }}
+          />
 
           {/* 5. Standard Filter */}
           <select
@@ -897,22 +1245,34 @@ export default function MasterDashboardPage() {
                 <th className="px-5 py-4">Company / College</th>
                 <th className="px-5 py-4">Occupation</th>
                 <th className="px-5 py-4">Standard</th>
+                <th className="px-5 py-4 text-center">Level</th>
                 <th className="px-5 py-4">Event Attended</th>
+                <th className="px-5 py-4 text-center">Chanting</th>
                 <th className="px-5 py-4">Assign</th>
                 <th className="px-5 py-4 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-amber-100 text-sm text-[#0f172a] bg-white">
               {loading ? (
-                <tr>
-                  <td colSpan={10} className="px-5 py-12 text-center text-amber-900 font-bold">
-                    <Loader2 className="w-6 h-6 animate-spin mx-auto text-amber-500 mb-2" />
-                    Loading master contact directory...
-                  </td>
-                </tr>
+                Array.from({ length: 10 }).map((_, i) => (
+                  <tr key={`skeleton-${i}`} className="animate-pulse bg-white border-b border-amber-50">
+                    <td className="px-5 py-4"><div className="h-4 bg-amber-100/70 rounded w-28" /></td>
+                    <td className="px-5 py-4"><div className="h-4 bg-slate-100 rounded w-24" /></td>
+                    <td className="px-5 py-4"><div className="h-4 bg-amber-50 rounded w-16" /></td>
+                    <td className="px-5 py-4"><div className="h-4 bg-slate-100 rounded w-20" /></td>
+                    <td className="px-5 py-4"><div className="h-4 bg-slate-100 rounded w-24" /></td>
+                    <td className="px-5 py-4"><div className="h-4 bg-amber-50 rounded w-16" /></td>
+                    <td className="px-5 py-4"><div className="h-4 bg-slate-100 rounded w-16" /></td>
+                    <td className="px-5 py-4 text-center"><div className="h-5 bg-amber-100/60 rounded-md w-20 mx-auto" /></td>
+                    <td className="px-5 py-4"><div className="h-4 bg-amber-50 rounded w-24" /></td>
+                    <td className="px-5 py-4 text-center"><div className="h-6 bg-amber-100/50 rounded-xl w-16 mx-auto" /></td>
+                    <td className="px-5 py-4"><div className="h-4 bg-slate-100 rounded w-20" /></td>
+                    <td className="px-5 py-4 text-center"><div className="h-7 bg-slate-100 rounded-lg w-16 mx-auto" /></td>
+                  </tr>
+                ))
               ) : contacts.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-5 py-12 text-center text-slate-500 font-semibold">
+                  <td colSpan={12} className="px-5 py-12 text-center text-slate-500 font-semibold">
                     No master contacts match the selected criteria.
                   </td>
                 </tr>
@@ -956,6 +1316,13 @@ export default function MasterDashboardPage() {
                       {/* 7. STANDARD */}
                       <td className="px-5 py-4 text-[#1e293b] font-semibold">{c.standard || '—'}</td>
 
+                      {/* LEVEL */}
+                      <td className="px-5 py-4 text-center">
+                        <span className="px-2.5 py-1 rounded-md text-[11px] font-black bg-amber-100 text-amber-950 border border-amber-300 whitespace-nowrap shadow-sm">
+                          {formatLevel(c.level, c.classes_attended)}
+                        </span>
+                      </td>
+
                       {/* 8. EVENT ATTENDED */}
                       <td className="px-5 py-4">
                         <div className="flex flex-wrap gap-1">
@@ -970,7 +1337,21 @@ export default function MasterDashboardPage() {
                         </div>
                       </td>
 
-                      {/* 9. ASSIGN */}
+                      {/* 9. CHANTING COUNTER */}
+                      <td className="px-5 py-4 text-center">
+                        <ChantingCounterCell
+                          key={c.id}
+                          contactId={c.id}
+                          initialCount={c.chanting ?? 0}
+                          onCountChange={(newVal) => {
+                            setContacts((prev) =>
+                              prev.map((item) => (item.id === c.id ? { ...item, chanting: newVal } : item))
+                            );
+                          }}
+                        />
+                      </td>
+
+                      {/* 10. ASSIGN */}
                       <td className="px-5 py-4">
                         {c.operator_name ? (
                           <div className="flex items-center gap-1">
@@ -1175,6 +1556,10 @@ export default function MasterDashboardPage() {
                     <p className="font-extrabold text-[#0f172a] mt-0.5">{viewContact.standard || '—'}</p>
                   </div>
                   <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-200">
+                    <p className="text-[10px] text-amber-900 font-extrabold uppercase">Chanting</p>
+                    <p className="font-extrabold text-[#0f172a] mt-0.5">{viewContact.chanting ?? 0} rounds</p>
+                  </div>
+                  <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-200 col-span-2">
                     <p className="text-[10px] text-amber-900 font-extrabold uppercase">Assigned Operator</p>
                     <p className="font-extrabold text-emerald-700 mt-0.5">{viewContact.operator_name || 'Unassigned'}</p>
                   </div>
@@ -1301,6 +1686,7 @@ export default function MasterDashboardPage() {
                       <option value="Employee">Employee</option>
                       <option value="Working">Working</option>
                       <option value="Business">Business</option>
+                      <option value="Others">Others</option>
                     </select>
                   </div>
                 </div>
@@ -1326,19 +1712,46 @@ export default function MasterDashboardPage() {
                   </div>
                 </div>
 
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="font-extrabold text-[#0f172a] block mb-1">Standard (Students)</label>
+                    <select
+                      value={editStandard}
+                      onChange={(e) => setEditStandard(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-white border-2 border-amber-300 text-slate-900 text-sm font-semibold focus:outline-none cursor-pointer"
+                    >
+                      <option value="">None / Not Applicable</option>
+                      <option value="1st Year">1st Year</option>
+                      <option value="2nd Year">2nd Year</option>
+                      <option value="3rd Year">3rd Year</option>
+                      <option value="4th Year">4th Year</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="font-extrabold text-[#0f172a] block mb-1">Level</label>
+                    <select
+                      value={editLevel}
+                      onChange={(e) => setEditLevel(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-white border-2 border-amber-300 text-slate-900 text-sm font-semibold focus:outline-none cursor-pointer"
+                    >
+                      <option value="level-0">level-0/No level</option>
+                      <option value="level-1">level-1/AOMC</option>
+                      <option value="level-2">level-2/Foundation</option>
+                      <option value="level-3">level-3/Prilims</option>
+                      <option value="level-4">level-4/Enhance</option>
+                    </select>
+                  </div>
+                </div>
+
                 <div>
-                  <label className="font-extrabold text-[#0f172a] block mb-1">Standard (Students)</label>
-                  <select
-                    value={editStandard}
-                    onChange={(e) => setEditStandard(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-white border-2 border-amber-300 text-slate-900 text-sm font-semibold focus:outline-none cursor-pointer"
-                  >
-                    <option value="">None / Not Applicable</option>
-                    <option value="1st Year">1st Year</option>
-                    <option value="2nd Year">2nd Year</option>
-                    <option value="3rd Year">3rd Year</option>
-                    <option value="4th Year">4th Year</option>
-                  </select>
+                  <label className="font-extrabold text-[#0f172a] block mb-1">Chanting (Rounds)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editChanting}
+                    onChange={(e) => setEditChanting(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                    className="w-full px-3 py-2 rounded-xl bg-white border-2 border-amber-300 text-slate-900 text-sm font-semibold focus:outline-none focus:border-amber-500"
+                  />
                 </div>
               </div>
 
