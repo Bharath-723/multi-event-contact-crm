@@ -257,8 +257,17 @@ function MultiSelectFilter({
 
   const filteredOptions = useMemo(() => {
     if (!searchQuery.trim()) return options;
-    const q = searchQuery.toLowerCase();
-    return options.filter((o) => o.toLowerCase().includes(q));
+    const q = searchQuery.toLowerCase().trim();
+    const cleanQ = q.replace(/[^a-z0-9]/g, '');
+    return options.filter((o) => {
+      const lowerO = o.toLowerCase();
+      if (lowerO.includes(q)) return true;
+      if (cleanQ) {
+        const cleanO = lowerO.replace(/[^a-z0-9]/g, '');
+        return cleanO.includes(cleanQ);
+      }
+      return false;
+    });
   }, [options, searchQuery]);
 
   const toggleOption = (val: string) => {
@@ -486,11 +495,13 @@ export default function MasterDashboardPage() {
         setTotal(d.total ?? 0);
         if (d.stats) setStats(d.stats);
         if (d.filter_options) {
-          setFilterOptions({
-            ...d.filter_options,
+          setFilterOptions((prev) => ({
+            areas: (d.filter_options.areas && d.filter_options.areas.length > 0) ? d.filter_options.areas : prev.areas,
+            colleges: (d.filter_options.colleges && d.filter_options.colleges.length > 0) ? d.filter_options.colleges : prev.colleges,
             occupations: ['Student', 'Employee', 'Working', 'Business', 'Others'],
             standards: ['1st Year', '2nd Year', '3rd Year', '4th Year'],
-          });
+            event_sources: (d.filter_options.event_sources && d.filter_options.event_sources.length > 0) ? d.filter_options.event_sources : prev.event_sources,
+          }));
         }
       }
     } catch (err) {
@@ -1488,6 +1499,25 @@ export default function MasterDashboardPage() {
                   <p className="text-xs text-slate-500 text-center py-4">No event breakdown available.</p>
                 )}
               </div>
+
+              {/* Deduplication & Cross-Event Reconciliation Summary */}
+              {stats.event_breakdown && stats.event_breakdown.length > 0 && (
+                <div className="bg-amber-50/90 rounded-xl p-3 border border-amber-200 text-xs text-[#0f172a] space-y-1.5 shadow-xs">
+                  <div className="flex justify-between font-extrabold text-slate-800">
+                    <span>Total Event Registrations:</span>
+                    <span>
+                      {stats.event_breakdown.reduce((acc, curr) => acc + curr.count, 0).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between font-extrabold text-amber-800">
+                    <span>Unique Master Directory Contacts:</span>
+                    <span>{stats.total_contacts.toLocaleString()}</span>
+                  </div>
+                  <p className="text-[10.5px] text-slate-500 pt-1 border-t border-amber-200 leading-normal">
+                    * Note: Contacts who registered for multiple events are counted once within each respective event. The global Master Directory deduplicates cross-event contacts by normalized phone number.
+                  </p>
+                </div>
+              )}
 
               <div className="pt-2 border-t border-amber-100">
                 <button

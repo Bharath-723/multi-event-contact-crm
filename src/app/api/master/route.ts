@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { backfillAllSources, normalizePhone, normalizeOccupation } from '@/lib/master-contacts';
+import {
+  getMasterMetadata,
+  expandAreaSelections,
+  expandCompanySelections,
+  invalidateMasterMetadataCache,
+} from '@/lib/master-filters';
 
 async function requireAdmin(
   req: Request
@@ -74,7 +80,22 @@ export async function GET(request: NextRequest) {
 
     if (realMasterCount === 0 || realMasterCount === null) {
       await backfillAllSources();
+      invalidateMasterMetadataCache();
     }
+
+    // Fetch registered active event sources
+    const { data: sourceRows } = await supabaseAdmin
+      .from('event_sources')
+      .select('*')
+      .eq('is_active', true);
+
+    const registeredSources = (sourceRows || []).map((s) => ({
+      source_key: s.source_key,
+      display_name: s.display_name,
+    }));
+
+    // Fetch complete cached metadata (all distinct areas, colleges, raw variant mappings, and event breakdown)
+    const metadata = await getMasterMetadata(registeredSources);
 
     // 2. Pre-filter master_contact_ids using event criteria if event filters are active
     const hasEventFilters = Boolean(occupation || standard || eventSource || dateStr);
@@ -111,29 +132,26 @@ export async function GET(request: NextRequest) {
       eventFilteredContactIds = Array.from(idSet);
 
       // If event filters were provided but matched 0 contact IDs, return empty early
+      // Preserve the complete filter_options and event_breakdown so UI dropdowns remain fully functional
       if (eventFilteredContactIds.length === 0) {
-        const { data: sourceRows } = await supabaseAdmin.from('event_sources').select('*').eq('is_active', true);
         return NextResponse.json({
           contacts: [],
           total: 0,
           page,
           limit,
           stats: {
-            total_contacts: realMasterCount ?? 0,
-            total_events: (sourceRows || []).length,
+            total_contacts: realMasterCount ?? metadata.totalContacts,
+            total_events: registeredSources.length,
             this_month: 0,
             assigned_contacts: 0,
-            event_breakdown: [],
+            event_breakdown: metadata.eventBreakdown,
           },
           filter_options: {
-            areas: [],
-            colleges: [],
+            areas: metadata.areas,
+            colleges: metadata.colleges,
             occupations: ['Student', 'Employee', 'Working', 'Business', 'Others'],
             standards: ['1st Year', '2nd Year', '3rd Year', '4th Year'],
-            event_sources: (sourceRows || []).map((s) => ({
-              source_key: s.source_key,
-              display_name: s.display_name,
-            })),
+            event_sources: registeredSources,
           },
         });
       }
@@ -154,14 +172,16 @@ export async function GET(request: NextRequest) {
       query = query.ilike('gender', gender);
     }
 
-    // Direct multi-area filter
-    if (selectedAreas.length > 0) {
-      query = query.in('area_of_stay', selectedAreas);
+    // Direct multi-area filter with case-insensitive / raw variant expansion (boolean OR)
+    const expandedAreas = expandAreaSelections(selectedAreas, metadata);
+    if (expandedAreas.length > 0) {
+      query = query.in('area_of_stay', expandedAreas);
     }
 
-    // Direct multi-company filter
-    if (selectedCompanies.length > 0) {
-      query = query.in('company_college', selectedCompanies);
+    // Direct multi-company filter with case-insensitive / raw variant expansion (boolean OR)
+    const expandedCompanies = expandCompanySelections(selectedCompanies, metadata);
+    if (expandedCompanies.length > 0) {
+      query = query.in('company_college', expandedCompanies);
     }
 
     // Global search filter (Name, Phone, Area, Company)
@@ -188,7 +208,7 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
       .range(startIndex, endIndex);
 
-    // 4. Concurrently execute master contacts query, stats queries, and metadata
+    // 4. Concurrently execute master contacts query and stats queries
     const now = new Date();
     const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01T00:00:00Z`;
 
@@ -196,9 +216,6 @@ export async function GET(request: NextRequest) {
       contactsResult,
       thisMonthCountResult,
       assignedCountResult,
-      sourceRowsResult,
-      areasResult,
-      collegesResult,
     ] = await Promise.all([
       query,
       supabaseAdmin
@@ -209,22 +226,6 @@ export async function GET(request: NextRequest) {
         .from('master_contact_assignments')
         .select('id', { count: 'exact', head: true })
         .eq('is_active', true),
-      supabaseAdmin
-        .from('event_sources')
-        .select('*')
-        .eq('is_active', true),
-      // Fetch available distinct areas
-      supabaseAdmin
-        .from('master_contacts')
-        .select('area_of_stay')
-        .not('area_of_stay', 'is', null)
-        .limit(200),
-      // Fetch available distinct colleges
-      supabaseAdmin
-        .from('master_contacts')
-        .select('company_college')
-        .not('company_college', 'is', null)
-        .limit(200),
     ]);
 
     if (contactsResult.error) {
@@ -348,28 +349,9 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // 7. Distinct filter options
-    const registeredSources = (sourceRowsResult.data || []).map((s) => ({
-      source_key: s.source_key,
-      display_name: s.display_name,
-    }));
-
-    const availableAreas = Array.from(
-      new Set((areasResult.data || []).map((r) => r.area_of_stay ? String(r.area_of_stay).trim() : '').filter(Boolean))
-    ).sort();
-
-    const availableColleges = Array.from(
-      new Set((collegesResult.data || []).map((r) => r.company_college ? String(r.company_college).trim() : '').filter(Boolean))
-    ).sort();
-
+    // 7. Response with complete distinct filter options and calculated event breakdown
     const availableOccupations = ['Student', 'Employee', 'Working', 'Business', 'Others'];
     const availableStandards = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
-
-    const eventBreakdown = registeredSources.map((s) => ({
-      source: s.source_key,
-      event_display_name: s.display_name,
-      count: 0,
-    }));
 
     return NextResponse.json({
       contacts: formattedContacts,
@@ -377,15 +359,15 @@ export async function GET(request: NextRequest) {
       page: isExport ? 1 : page,
       limit: isExport ? totalFilteredCount : limit,
       stats: {
-        total_contacts: realMasterCount ?? totalFilteredCount,
+        total_contacts: realMasterCount ?? metadata.totalContacts,
         total_events: registeredSources.length,
         this_month: thisMonthCountResult.count ?? 0,
         assigned_contacts: assignedCountResult.count ?? 0,
-        event_breakdown: eventBreakdown,
+        event_breakdown: metadata.eventBreakdown,
       },
       filter_options: {
-        areas: availableAreas,
-        colleges: availableColleges,
+        areas: metadata.areas,
+        colleges: metadata.colleges,
         occupations: availableOccupations,
         standards: availableStandards,
         event_sources: registeredSources,
@@ -406,9 +388,11 @@ export async function POST(request: NextRequest) {
 
   try {
     await backfillAllSources();
+    invalidateMasterMetadataCache();
     return NextResponse.json({ success: true, message: 'Backfill completed successfully.' });
   } catch (err) {
     console.error('POST /api/master error:', err);
     return NextResponse.json({ error: 'Failed to run backfill' }, { status: 500 });
   }
 }
+
