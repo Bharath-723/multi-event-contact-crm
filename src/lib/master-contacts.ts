@@ -58,6 +58,9 @@ export interface MasterContactRecord {
   level?: string | null;
   classes_attended?: number;
   chanting?: number;
+  is_not_interested?: boolean;
+  not_interested_at?: string | null;
+  not_interested_by?: string | null;
   latest_registration_at: string;
   latest_registration_source: string | null;
   latest_registration_id: string | null;

@@ -27,7 +27,14 @@ export async function PUT(
 
   const { id } = await params;
 
-  let body: { name?: string; phone?: string; is_active?: boolean; password?: string; operator_type?: string };
+  let body: {
+    name?: string;
+    phone?: string;
+    is_active?: boolean;
+    password?: string;
+    operator_type?: string;
+    capacity?: number;
+  };
   try {
     body = await req.json();
   } catch {
@@ -39,6 +46,13 @@ export async function PUT(
   if (body.phone !== undefined)     updates.phone = body.phone?.trim() || null;
   if (body.is_active !== undefined) updates.is_active = body.is_active;
   if (body.password)                updates.password_hash = await hashPassword(body.password);
+  if (body.capacity !== undefined) {
+    const cap = Number(body.capacity);
+    if (!Number.isInteger(cap) || cap < 1 || cap > 500) {
+      return NextResponse.json({ error: 'Capacity must be an integer between 1 and 500' }, { status: 400 });
+    }
+    updates.capacity = cap;
+  }
   if (body.operator_type !== undefined) {
     if (!['operator', 'coordinator'].includes(body.operator_type)) {
       return NextResponse.json({ error: 'Invalid operator_type' }, { status: 400 });
@@ -50,12 +64,38 @@ export async function PUT(
     return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
   }
 
-  const { data: operator, error } = await supabaseAdmin
+  let { data: operator, error } = await supabaseAdmin
     .from('contact_operators')
     .update(updates)
     .eq('id', id)
-    .select('id, name, email, phone, is_active, operator_type, updated_at')
+    .select('id, name, email, phone, is_active, operator_type, capacity, updated_at')
     .single();
+
+  // Graceful fallback if 'capacity' column does not exist yet (error 42703)
+  if (error && (error.code === '42703' || error.message?.includes('capacity'))) {
+    const safeUpdates = { ...updates };
+    delete safeUpdates.capacity;
+
+    if (Object.keys(safeUpdates).length > 0) {
+      const fallback = await supabaseAdmin
+        .from('contact_operators')
+        .update(safeUpdates)
+        .eq('id', id)
+        .select('id, name, email, phone, is_active, operator_type, updated_at')
+        .single();
+      operator = fallback.data ? { ...fallback.data, capacity: (updates.capacity as number) ?? 40 } as typeof operator : null;
+      error = fallback.error;
+    } else {
+      // Only capacity was attempted, but column doesn't exist yet
+      const fetchCurrent = await supabaseAdmin
+        .from('contact_operators')
+        .select('id, name, email, phone, is_active, operator_type, updated_at')
+        .eq('id', id)
+        .single();
+      operator = fetchCurrent.data ? { ...fetchCurrent.data, capacity: (updates.capacity as number) ?? 40 } as typeof operator : null;
+      error = fetchCurrent.error;
+    }
+  }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!operator) return NextResponse.json({ error: 'Operator not found' }, { status: 404 });

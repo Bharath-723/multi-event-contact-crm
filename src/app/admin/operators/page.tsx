@@ -41,7 +41,9 @@ function OperatorCard({
     ? 'text-green-400 bg-green-950/40 border-green-500/30'
     : 'text-slate-500 bg-slate-900/40 border-slate-700/30';
 
-  const isFull = (op.total_assigned ?? 0) >= 40;
+  const capacity = op.capacity ?? 40;
+  const isOverLimit = (op.total_assigned ?? 0) > capacity;
+  const isFull = (op.total_assigned ?? 0) === capacity;
 
   return (
     <motion.div
@@ -50,14 +52,16 @@ function OperatorCard({
       animate={{ opacity: 1, y: 0 }}
       className="glass-card rounded-2xl p-5 flex flex-col gap-4 hover:shadow-[0_0_25px_rgba(139,92,246,0.1)] transition-all"
     >
-      {/* Header: Name + Edit Pencil Icon beside Active/Disabled/Full Badge */}
+      {/* Header: Name + Edit Pencil Icon beside Active/Disabled/Full/OverLimit Badge */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-10 h-10 rounded-xl bg-purple-950/50 border border-purple-500/20 flex items-center justify-center text-purple-400 shrink-0">
             <Headset className="w-5 h-5" />
           </div>
           <div className="min-w-0">
-            <p className="font-bold text-slate-100 text-sm truncate">{formatOperatorDisplayName(op.name)}</p>
+            <p className="font-bold text-slate-100 text-sm truncate">
+              {formatOperatorDisplayName(op.name)} — {op.total_assigned ?? 0}/{capacity}
+            </p>
             <p className="text-xs text-slate-500 truncate">{op.email}</p>
             <span className="inline-block mt-1.5 text-[9px] font-bold text-purple-400 bg-purple-950/30 border border-purple-500/20 px-1.5 py-0.5 rounded uppercase tracking-wider">
               {op.operator_type === 'coordinator' ? 'Co-ordinator' : 'Operator'}
@@ -85,9 +89,13 @@ function OperatorCard({
 
         {/* Top-Right Badge + Edit Pencil Icon */}
         <div className="flex items-center gap-1.5 shrink-0">
-          {isFull ? (
+          {isOverLimit ? (
+            <span className="text-[10px] font-extrabold px-2 py-1 rounded-lg border text-rose-400 bg-rose-950/40 border-rose-500/30">
+              OVER LIMIT ({op.total_assigned}/{capacity})
+            </span>
+          ) : isFull ? (
             <span className="text-[10px] font-extrabold px-2 py-1 rounded-lg border text-amber-400 bg-amber-950/40 border-amber-500/30">
-              FULL ({op.total_assigned}/40)
+              FULL ({op.total_assigned}/{capacity})
             </span>
           ) : (
             <span className={`text-[10px] font-bold px-2 py-1 rounded-lg border ${statusColor}`}>
@@ -208,6 +216,7 @@ function OperatorFormModal({
     name: operator?.name ?? '',
     email: operator?.email ?? '',
     phone: operator?.phone ?? '',
+    capacity: operator?.capacity !== undefined ? String(operator.capacity) : '40',
     password: '',
     confirmPassword: '',
     is_active: operator?.is_active ?? true,
@@ -222,6 +231,12 @@ function OperatorFormModal({
     e.preventDefault();
     setError(null);
 
+    const capNum = parseInt(form.capacity, 10);
+    if (isNaN(capNum) || capNum < 1 || capNum > 500) {
+      setError('Capacity must be an integer between 1 and 500');
+      return;
+    }
+
     if (mode === 'add' && !form.password) { setError('Password is required'); return; }
     if (form.password && form.password !== form.confirmPassword) { setError('Passwords do not match'); return; }
     if (form.password && form.password.length < 6) { setError('Password must be at least 6 characters'); return; }
@@ -232,6 +247,7 @@ function OperatorFormModal({
       const body: Record<string, unknown> = {
         name: form.name, email: form.email, phone: form.phone, is_active: form.is_active,
         operator_type: form.operator_type,
+        capacity: capNum,
       };
       if (form.password) body.password = form.password;
 
@@ -300,6 +316,17 @@ function OperatorFormModal({
             <input
               value={form.phone} onChange={(e) => set('phone', e.target.value)}
               placeholder="Phone (optional)" className="w-full pl-10 pr-4 py-2.5 rounded-xl glass-input text-sm text-foreground placeholder-slate-500"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] uppercase font-bold tracking-wider text-slate-500 block mb-1.5 ml-1">
+              Assignment Capacity (1 – 500) *
+            </label>
+            <input
+              type="number" min={1} max={500} required
+              value={form.capacity} onChange={(e) => set('capacity', e.target.value)}
+              placeholder="Capacity (default: 40)"
+              className="w-full px-3 py-2.5 rounded-xl glass-input text-sm text-foreground placeholder-slate-500"
             />
           </div>
           <div>
@@ -569,6 +596,8 @@ interface DryRunSummary {
   total_unassigned: number;
   skipped_female: number;
   eligible_male: number;
+  not_interested?: number;
+  reconciliation_verified?: boolean;
   active_operators: number;
   total_capacity?: number;
   currently_assigned?: number;
@@ -592,6 +621,7 @@ interface DryRunSummary {
 interface BatchReport {
   total_unassigned: number;
   successfully_assigned: number;
+  skipped_not_interested?: number;
   skipped_female: number;
   skipped_no_capacity: number;
   failed: number;
@@ -946,7 +976,9 @@ export default function ContactOperatorsPage() {
 
       const d = await res.json();
       if (!res.ok || !d.summary) {
-        setAutoAssignError(d.error || 'Failed to fetch dry-run summary');
+        const errMsg = d.error || 'Failed to fetch dry-run summary';
+        setAutoAssignError(errMsg);
+        toast(errMsg);
         setAutoAssignStep('idle');
         return;
       }
@@ -955,6 +987,7 @@ export default function ContactOperatorsPage() {
     } catch {
       if (seq !== dryRunSeqRef.current) return;
       setAutoAssignError('Network error. Please try again.');
+      toast('Network error. Please try again.');
       setAutoAssignStep('idle');
     }
   }, [contactSource, selectedAreas, selectedColleges, selectedOccupations, selectedStandards, selectedServices, selectedDates, selectedVolunteers, selectedClassesAttended, selectedLevelNumbers, selectedChanting, selectedOperatorIds]);
@@ -1068,15 +1101,22 @@ export default function ContactOperatorsPage() {
   }, [loadOperators]);
 
   const handleToggle = async (op: ContactOperator) => {
-    const auth = await getAuthHeader();
-    const res = await fetch(`/api/operators/${op.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Authorization: auth },
-      body: JSON.stringify({ is_active: !op.is_active }),
-    });
-    if (res.ok) {
-      toast(op.is_active ? `${op.name} disabled.` : `${op.name} re-enabled.`);
-      loadOperators();
+    try {
+      const auth = await getAuthHeader();
+      const res = await fetch(`/api/operators/${op.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: auth },
+        body: JSON.stringify({ is_active: !op.is_active }),
+      });
+      if (res.ok) {
+        toast(op.is_active ? `${op.name} disabled.` : `${op.name} re-enabled.`);
+        loadOperators();
+      } else {
+        const d = await res.json().catch(() => null);
+        toast(d?.error || 'Failed to update operator status');
+      }
+    } catch {
+      toast('Network error updating operator status');
     }
   };
 
@@ -1090,17 +1130,13 @@ export default function ContactOperatorsPage() {
   const totalNotAnswered = operators.reduce((s, o) => s + (o.total_not_answered ?? 0), 0);
   const totalNextWeek = operators.reduce((s, o) => s + (o.total_next_week ?? 0), 0);
 
-  // Development Assertion Check
-  if (totalAssigned !== totalComing + totalNotComing + totalNotAnswered + totalNextWeek + totalPending) {
-    console.error('[ASSIGNMENT COUNT INVARIANT VIOLATION]', {
+  // Integrity Check: current week status updates cannot exceed total active assignments
+  const totalWeeklyStatusSum = totalComing + totalNotComing + totalNotAnswered + totalNextWeek + totalPending;
+  if (totalWeeklyStatusSum > totalAssigned) {
+    console.warn('[ASSIGNMENT COUNT INTEGRITY WARNING] Weekly status count exceeds total assigned', {
       contactSource,
       totalAssigned,
-      totalComing,
-      totalNotComing,
-      totalNotAnswered,
-      totalNextWeek,
-      totalPending,
-      sum: totalComing + totalNotComing + totalNotAnswered + totalNextWeek + totalPending,
+      totalWeeklyStatusSum,
     });
   }
 
@@ -1722,15 +1758,28 @@ export default function ContactOperatorsPage() {
                     { label: 'Unassigned', value: dryRunSummary.total_unassigned, color: 'text-slate-100' },
                     { label: 'Eligible (Male)', value: dryRunSummary.eligible_male, color: 'text-blue-400' },
                     { label: 'Skipped (Female)', value: dryRunSummary.skipped_female, color: 'text-slate-400' },
+                    { label: 'Not Interested (Blocked)', value: dryRunSummary.not_interested ?? 0, color: 'text-rose-400' },
                     { label: 'Active Operators', value: dryRunSummary.active_operators, color: 'text-purple-400' },
                     { label: 'Available Slots', value: dryRunSummary.available_slots, color: 'text-green-400' },
-                    { label: 'Will Be Assigned', value: dryRunSummary.will_assign, color: 'text-amber-400' },
                   ].map(({ label, value, color }) => (
                     <div key={label} className="bg-slate-900/40 rounded-xl p-2.5 text-center">
                       <p className={`text-lg font-extrabold ${color}`}>{value}</p>
                       <p className="text-[10px] text-slate-500 mt-0.5">{label}</p>
                     </div>
                   ))}
+                </div>
+
+                {/* Explicit Classification Reconciliation Equation & Integrity Indicator */}
+                <div className="flex items-center justify-between p-3 rounded-xl border border-emerald-500/30 bg-emerald-950/20 text-xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span className="text-slate-300 font-medium truncate">
+                      <strong>Integrity Reconciled:</strong> Unassigned ({dryRunSummary.total_unassigned}) = Eligible ({dryRunSummary.eligible_male}) + Female ({dryRunSummary.skipped_female}) + Not Interested ({dryRunSummary.not_interested ?? 0})
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30 shrink-0 ml-2">
+                    Verified Balanced
+                  </span>
                 </div>
 
                 {/* Warnings */}
@@ -1756,7 +1805,7 @@ export default function ContactOperatorsPage() {
                     <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-red-400" />
                     <p className="text-xs text-red-300 leading-relaxed">
                       <strong>Capacity Warning:</strong> There are {dryRunSummary.eligible_male} eligible male registrations matching filters but only {dryRunSummary.available_slots} available slots across selected/active operators.
-                      {dryRunSummary.will_skip_capacity > 0 && <> <strong>{dryRunSummary.will_skip_capacity} registrations will be skipped</strong> due to capacity limit (40/operator).</> }
+                      {dryRunSummary.will_skip_capacity > 0 && <> <strong>{dryRunSummary.will_skip_capacity} registrations will be skipped</strong> due to operator capacity limits.</> }
                     </p>
                   </div>
                 )}

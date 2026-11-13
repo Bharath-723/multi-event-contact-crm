@@ -36,8 +36,8 @@ export async function PATCH(
     if (notes !== undefined) updatePayload.notes = notes;
     if (status !== undefined) updatePayload.status = status;
 
-    // Handle "Not Coming" / Deactivation workflow
-    if (status === 'Not Coming' || is_active === false) {
+    // Handle "Not Coming" / "Not Interested" / Deactivation workflow
+    if (status === 'Not Coming' || status === 'Not Interested' || is_active === false) {
       updatePayload.is_active = false;
     } else if (is_active !== undefined) {
       updatePayload.is_active = is_active;
@@ -58,6 +58,35 @@ export async function PATCH(
     if (updateErr) {
       console.error('[PATCH /api/assignments/feedback/[id]] Update error:', updateErr);
       return NextResponse.json({ error: updateErr.message }, { status: 500 });
+    }
+
+    // If marked Not Interested, persist authoritative flag to master_contacts
+    if (status === 'Not Interested') {
+      const phone = (updated?.feedback_contact as { phone?: string })?.phone;
+      if (phone) {
+        try {
+          const { normalizePhone } = await import('@/lib/master-contacts');
+          const cleanPhone = normalizePhone(phone);
+          if (cleanPhone) {
+            const { error: rpcErr } = await supabaseAdmin.rpc('mark_contact_not_interested_atomic', {
+              p_phone: cleanPhone,
+              p_operator_id: currentAssignment.operator_id || null,
+            });
+            if (rpcErr) {
+              await supabaseAdmin
+                .from('master_contacts')
+                .update({
+                  is_not_interested: true,
+                  not_interested_at: new Date().toISOString(),
+                  not_interested_by: currentAssignment.operator_id || null,
+                })
+                .eq('phone', cleanPhone);
+            }
+          }
+        } catch (err) {
+          console.warn('[feedback] Failed to sync is_not_interested to master_contacts:', err);
+        }
+      }
     }
 
     // 3. Log audit action

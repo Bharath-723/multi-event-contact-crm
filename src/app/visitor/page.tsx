@@ -79,9 +79,12 @@ export default function VisitorCheckInPage() {
       const headers = await getAuthHeaders();
       const res = await fetch('/api/visitor/checkins?limit=50', { headers });
       if (res.ok) {
-        const data = await res.json();
-        setLogs(data.logs || []);
-        setWeeklyPeriodLabel(data.weekly_period_label || '');
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await res.json();
+          setLogs(data.logs || []);
+          setWeeklyPeriodLabel(data.weekly_period_label || '');
+        }
       }
     } catch (err) {
       console.error('[Visitor Check-In] Fetch logs error:', err);
@@ -125,13 +128,19 @@ export default function VisitorCheckInPage() {
       try {
         const headers = await getAuthHeaders();
         const res = await fetch(`/api/visitor/lookup?phone=${encodeURIComponent(digits)}`, { headers });
-        const data = await res.json();
+        const contentType = res.headers.get('content-type') || '';
+        const data = contentType.includes('application/json') ? await res.json() : null;
 
         if (!res.ok) {
-          setLookupError(data.error || 'Failed to search mobile number');
+          setLookupError(data?.error || `Failed to search mobile number (HTTP ${res.status})`);
           setContactResult(null);
           setPartialResults([]);
           setNotFoundState(null);
+          return;
+        }
+
+        if (!data) {
+          setLookupError('Server returned invalid response');
           return;
         }
 
@@ -214,10 +223,15 @@ export default function VisitorCheckInPage() {
         }),
       });
 
-      const data = await res.json();
+      const contentType = res.headers.get('content-type') || '';
+      const data = contentType.includes('application/json') ? await res.json() : null;
 
       if (!res.ok) {
-        setApprovalError(data.error || 'Failed to approve check-in');
+        setApprovalError(data?.error || `Failed to approve check-in (HTTP ${res.status})`);
+        return;
+      }
+      if (!data) {
+        setApprovalError('Server returned invalid response');
         return;
       }
 

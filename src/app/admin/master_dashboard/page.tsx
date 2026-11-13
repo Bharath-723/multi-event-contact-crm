@@ -33,6 +33,9 @@ interface MasterContact {
   standard: string | null;
   level?: string | null;
   classes_attended?: number;
+  is_not_interested?: boolean;
+  not_interested_at?: string | null;
+  not_interested_by?: string | null;
   operator_name?: string | null;
   assignment_status?: string | null;
   operator_id?: string | null;
@@ -402,6 +405,7 @@ export default function MasterDashboardPage() {
   const [filterStandard, setFilterStandard] = useState('');
   const [filterEventSource, setFilterEventSource] = useState('');
   const [filterDate, setFilterDate] = useState('');
+  const [filterBlocked, setFilterBlocked] = useState('');
 
   // --- PAGINATION STATE ---
   const [page, setPage] = useState(1);
@@ -456,6 +460,7 @@ export default function MasterDashboardPage() {
     st?: string;
     evt?: string;
     dt?: string;
+    blk?: string;
     pageNum?: number;
   }) => {
     setLoading(true);
@@ -471,6 +476,7 @@ export default function MasterDashboardPage() {
       const stdVal = overrides?.st !== undefined ? overrides.st : filterStandard;
       const evtVal = overrides?.evt !== undefined ? overrides.evt : filterEventSource;
       const dtVal = overrides?.dt !== undefined ? overrides.dt : filterDate;
+      const blkVal = overrides?.blk !== undefined ? overrides.blk : filterBlocked;
       const pNum = overrides?.pageNum !== undefined ? overrides.pageNum : page;
 
       if (searchVal) params.set('search', searchVal);
@@ -481,6 +487,7 @@ export default function MasterDashboardPage() {
       if (stdVal) params.set('standard', stdVal);
       if (evtVal) params.set('event_source', evtVal);
       if (dtVal) params.set('date', dtVal);
+      if (blkVal) params.set('blocked', blkVal);
 
       params.set('page', String(pNum));
       params.set('limit', String(limit));
@@ -509,7 +516,7 @@ export default function MasterDashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [activeSearch, filterGender, filterOccupation, filterAreas, filterCompanies, filterStandard, filterEventSource, filterDate, page, limit]);
+  }, [activeSearch, filterGender, filterOccupation, filterAreas, filterCompanies, filterStandard, filterEventSource, filterDate, filterBlocked, page, limit]);
 
   useEffect(() => {
     loadData();
@@ -600,9 +607,10 @@ export default function MasterDashboardPage() {
     setFilterStandard('');
     setFilterEventSource('');
     setFilterDate('');
+    setFilterBlocked('');
     setPage(1);
     loadData({
-      s: '', g: '', occ: '', ar: [], col: [], st: '', evt: '', dt: '', pageNum: 1,
+      s: '', g: '', occ: '', ar: [], col: [], st: '', evt: '', dt: '', blk: '', pageNum: 1,
     });
   };
 
@@ -619,6 +627,7 @@ export default function MasterDashboardPage() {
     if (filterStandard) params.set('standard', filterStandard);
     if (filterEventSource) params.set('event_source', filterEventSource);
     if (filterDate) params.set('date', filterDate);
+    if (filterBlocked) params.set('blocked', filterBlocked);
 
     params.set('export', 'true');
     params.set('limit', 'all');
@@ -716,7 +725,7 @@ export default function MasterDashboardPage() {
             <td style="text-align: center; font-weight: 700;">${formatLevel(c.level, c.classes_attended)}</td>
             <td style="font-weight: 600; color: #78350f;">${eventsStr}</td>
             <td style="text-align: center; font-weight: 700;">${c.chanting ?? 0}</td>
-            <td>${c.operator_name ? `<span style="color: #047857; font-weight: 600;">${c.operator_name}</span>` : 'Unassigned'}</td>
+            <td>${c.is_not_interested ? `<span style="color: #b91c1c; font-weight: 700;">Blocked (Not Interested)</span>` : (c.operator_name ? `<span style="color: #047857; font-weight: 600;">${c.operator_name}</span>` : 'Unassigned')}</td>
           </tr>
         `;
       }).join('');
@@ -998,6 +1007,10 @@ export default function MasterDashboardPage() {
   // Execute Operator Assignment / Reassignment
   const handleAssignOperator = async () => {
     if (!assignModalContact || !selectedOperatorId) return;
+    if (assignModalContact.is_not_interested) {
+      setAssignError('Contact has been marked as Not Interested and cannot be assigned.');
+      return;
+    }
     setAssigning(true);
     setAssignError(null);
     setAssignSuccess(null);
@@ -1044,7 +1057,8 @@ export default function MasterDashboardPage() {
     filterCompanies.length > 0 ||
     filterStandard ||
     filterEventSource ||
-    filterDate
+    filterDate ||
+    filterBlocked
   );
 
   return (
@@ -1151,8 +1165,19 @@ export default function MasterDashboardPage() {
           />
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
-          {/* 1. Gender Filter */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 gap-2.5">
+          {/* 1. Status / Blocked Filter */}
+          <select
+            value={filterBlocked}
+            onChange={(e) => { const v = e.target.value; setFilterBlocked(v); setPage(1); loadData({ blk: v, pageNum: 1 }); }}
+            className="px-3 py-2 rounded-xl bg-white border-2 border-amber-300 text-[#0f172a] text-xs font-bold focus:outline-none focus:border-amber-500 cursor-pointer shadow-sm"
+          >
+            <option value="" className="bg-white text-[#0f172a] font-semibold">Status (All)</option>
+            <option value="false" className="bg-white text-[#0f172a] font-semibold">Eligible Only</option>
+            <option value="true" className="bg-white text-[#0f172a] font-semibold">Not Interested (Blocked)</option>
+          </select>
+
+          {/* 2. Gender Filter */}
           <select
             value={filterGender}
             onChange={(e) => { const v = e.target.value; setFilterGender(v); setPage(1); loadData({ g: v, pageNum: 1 }); }}
@@ -1364,7 +1389,12 @@ export default function MasterDashboardPage() {
 
                       {/* 10. ASSIGN */}
                       <td className="px-5 py-4">
-                        {c.operator_name ? (
+                        {c.is_not_interested ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-extrabold bg-rose-100 text-rose-800 border border-rose-300 whitespace-nowrap shadow-sm">
+                            <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                            Not Interested / Blocked
+                          </span>
+                        ) : c.operator_name ? (
                           <div className="flex items-center gap-1">
                             <span className="text-emerald-700 font-extrabold flex items-center gap-1 text-xs">
                               <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
@@ -1911,6 +1941,13 @@ export default function MasterDashboardPage() {
                 </div>
               )}
 
+              {assignModalContact.is_not_interested && (
+                <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl text-xs text-rose-900 font-extrabold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>This contact is marked as Not Interested (Blocked) and cannot be assigned.</span>
+                </div>
+              )}
+
               {assignError && (
                 <div className="p-3 bg-red-100 border border-red-300 rounded-xl text-red-900 text-xs font-bold">
                   {assignError}
@@ -1967,7 +2004,7 @@ export default function MasterDashboardPage() {
               <div className="flex gap-2 pt-3 border-t border-amber-100">
                 <button
                   onClick={handleAssignOperator}
-                  disabled={assigning || !selectedOperatorId}
+                  disabled={assigning || !selectedOperatorId || assignModalContact.is_not_interested}
                   className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-white text-xs font-extrabold transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-md"
                 >
                   {assigning ? <Loader2 className="w-4 h-4 animate-spin text-white" /> : <PhoneCall className="w-4 h-4 text-white" />}

@@ -15,7 +15,7 @@ import {
   matchesClassesAttended,
   matchesChanting,
   matchesLevelNumber,
-} from '../src/app/api/assignments/auto/route';
+} from '../src/lib/auto-assign-filter-helpers.ts';
 
 async function runTestSuite() {
   console.log('================================================================================');

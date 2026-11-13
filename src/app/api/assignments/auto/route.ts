@@ -41,190 +41,27 @@ async function requireAdmin(
 }
 
 // ─── Helper Utilities for Filter Evaluation ──────────────────────────────────
-export function isFilterActive(val?: string | null): boolean {
-  if (!val) return false;
-  const s = String(val).trim().toLowerCase();
-  if (!s || s === 'all' || s.startsWith('all ') || s === 'n/a' || s === 'none') return false;
-  return true;
-}
+import {
+  isFilterActive,
+  parseFilterValues,
+  mapLevelCodeToNumber,
+  matchesClassesAttended,
+  matchesLevelNumber,
+  matchesChanting,
+  isFemale,
+  isGenderEligible,
+  normalizeOccupationCategory,
+  parseToYMD,
+} from '@/lib/auto-assign-filter-helpers';
 
-export function parseFilterValues(rawVal: unknown): string[] {
-  if (rawVal === null || rawVal === undefined) return [];
-  if (Array.isArray(rawVal)) {
-    return Array.from(
-      new Set(
-        rawVal
-          .flatMap((item) => (typeof item === 'string' ? item.split(',') : [String(item)]))
-          .map((v) => String(v).trim())
-          .filter((s) => s && s.toLowerCase() !== 'all' && !s.toLowerCase().startsWith('all ') && s.toLowerCase() !== 'none')
-      )
-    );
-  }
-  if (typeof rawVal === 'string') {
-    const trimmed = rawVal.trim();
-    if (!trimmed || trimmed.toLowerCase() === 'all' || trimmed.toLowerCase().startsWith('all ') || trimmed.toLowerCase() === 'none') {
-      return [];
-    }
-    if (trimmed.includes(',')) {
-      return Array.from(
-        new Set(
-          trimmed
-            .split(',')
-            .map((s) => s.trim())
-            .filter((s) => s && s.toLowerCase() !== 'all' && !s.toLowerCase().startsWith('all ') && s.toLowerCase() !== 'none')
-        )
-      );
-    }
-    return [trimmed];
-  }
-  if (typeof rawVal === 'number' || typeof rawVal === 'boolean') {
-    return [String(rawVal)];
-  }
-  return [];
-}
-
-/**
- * Normalize gender to a canonical comparable string.
- * Returns 'female', 'male', or '' (unknown).
- * Gender is NEVER inferred from any other attribute.
- */
-function normalizeGender(raw: unknown): string {
-  if (raw === null || raw === undefined) return '';
-  return String(raw).trim().toLowerCase();
-}
-
-/**
- * Returns true if the contact's gender is Female (any casing/whitespace variation).
- * Missing or unresolvable gender is NOT treated as male — returns false here so
- * callers can independently decide to fail-closed on unknown gender.
- */
-function isFemale(raw: unknown): boolean {
-  return normalizeGender(raw) === 'female';
-}
-
-/**
- * Returns true if gender is known and NOT female (i.e. contact is eligible).
- * Contacts with missing/unknown gender are NOT eligible for assignment.
- */
-function isGenderEligible(raw: unknown): boolean {
-  const g = normalizeGender(raw);
-  if (!g) return false; // missing gender → fail-closed, not eligible
-  return g !== 'female';
-}
-
-function normalizeOccupationCategory(raw: unknown): string | null {
-  if (!raw) return null;
-  const s = String(raw).trim().toLowerCase();
-  if (['student', 'studying', 'college', 'school'].some((k) => s.includes(k))) return 'Student';
-  if (['employee', 'employed', 'private', 'govt', 'government'].some((k) => s.includes(k))) return 'Employee';
-  if (['working', 'job', 'software', 'it', 'engineer', 'developer'].some((k) => s.includes(k))) return 'Working';
-  if (['business', 'shop', 'owner', 'self'].some((k) => s.includes(k))) return 'Business';
-  if (['other', 'others'].some((k) => s === k || s.startsWith('other'))) return 'Others';
-  return null;
-}
-
-export function mapLevelCodeToNumber(rawLevel: unknown): number {
-  if (!rawLevel) return 0;
-  const s = String(rawLevel).trim().toLowerCase();
-  const match = s.match(/\blevel-(\d+)\b/);
-  if (match) {
-    const num = parseInt(match[1], 10);
-    if (!isNaN(num)) return num;
-  }
-  if (s.includes('aomc')) return 1;
-  if (s.includes('foundation')) return 2;
-  if (s.includes('prilims')) return 3;
-  if (s.includes('enhance')) return 4;
-  if (s.includes('no level')) return 0;
-  const parsed = parseInt(s, 10);
-  if (!isNaN(parsed)) return parsed;
-  return 0;
-}
-
-export function matchesClassesAttended(classesAttended: unknown, filterVal: string | null): boolean {
-  if (!filterVal || filterVal.toLowerCase() === 'all' || filterVal === '') return true;
-  const count = typeof classesAttended === 'number' && !isNaN(classesAttended) ? classesAttended : 0;
-  const trimmed = filterVal.trim();
-
-  if (trimmed === '0') return count === 0;
-  if (trimmed === '1-10') return count >= 1 && count <= 10;
-  if (trimmed === '11-20') return count >= 11 && count <= 20;
-  if (trimmed === '21+' || trimmed === '>=21') return count >= 21;
-  if (trimmed.startsWith('>=')) {
-    const min = parseInt(trimmed.slice(2), 10);
-    return !isNaN(min) && count >= min;
-  }
-  if (trimmed.startsWith('<=')) {
-    const max = parseInt(trimmed.slice(2), 10);
-    return !isNaN(max) && count <= max;
-  }
-  if (trimmed.endsWith('+')) {
-    const min = parseInt(trimmed.slice(0, -1), 10);
-    return !isNaN(min) && count >= min;
-  }
-  const exact = parseInt(trimmed, 10);
-  if (!isNaN(exact)) return count === exact;
-  return true;
-}
-
-export function matchesLevelNumber(rawLevel: unknown, filterVal: string | null): boolean {
-  if (!filterVal || filterVal.toLowerCase() === 'all' || filterVal === '') return true;
-  const contactLvl = mapLevelCodeToNumber(rawLevel);
-  const trimmed = filterVal.trim();
-
-  if (trimmed.startsWith('>=')) {
-    const min = parseInt(trimmed.slice(2), 10);
-    return !isNaN(min) && contactLvl >= min;
-  }
-  if (trimmed.startsWith('<=')) {
-    const max = parseInt(trimmed.slice(2), 10);
-    return !isNaN(max) && contactLvl <= max;
-  }
-  if (trimmed.endsWith('+')) {
-    const min = parseInt(trimmed.slice(0, -1), 10);
-    return !isNaN(min) && contactLvl >= min;
-  }
-  const targetLvl = mapLevelCodeToNumber(trimmed);
-  return contactLvl === targetLvl;
-}
-
-export function matchesChanting(chantingCount: unknown, filterVal: string | null): boolean {
-  if (!filterVal || filterVal.toLowerCase() === 'all' || filterVal === '') return true;
-  const count = typeof chantingCount === 'number' && !isNaN(chantingCount) ? chantingCount : 0;
-  const trimmed = filterVal.trim();
-
-  if (trimmed === '0') return count === 0;
-  if (trimmed.startsWith('>=')) {
-    const min = parseInt(trimmed.slice(2), 10);
-    return !isNaN(min) && count >= min;
-  }
-  if (trimmed.startsWith('<=')) {
-    const max = parseInt(trimmed.slice(2), 10);
-    return !isNaN(max) && count <= max;
-  }
-  if (trimmed.endsWith('+')) {
-    const min = parseInt(trimmed.slice(0, -1), 10);
-    return !isNaN(min) && count >= min;
-  }
-  const exact = parseInt(trimmed, 10);
-  if (!isNaN(exact)) return count === exact;
-  return true;
-}
-
-function parseToYMD(dateStr: unknown): string | null {
-  if (!dateStr) return null;
-  const str = String(dateStr).trim();
-  if (!str) return null;
-
-  // Handle YYYY-MM-DD directly
-  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
-    return str.slice(0, 10);
-  }
-
-  const d = new Date(str);
-  if (isNaN(d.getTime())) return null;
-  return d.toISOString().slice(0, 10);
-}
+export {
+  isFilterActive,
+  parseFilterValues,
+  mapLevelCodeToNumber,
+  matchesClassesAttended,
+  matchesLevelNumber,
+  matchesChanting,
+};
 
 // Helper: Fetch all rows for any table using 1000-row pagination loop
 async function fetchAllRowsFromTable(tableName: string): Promise<Array<Record<string, unknown>>> {
@@ -320,12 +157,27 @@ export async function POST(req: Request) {
   const fkCol = 'master_contact_id';
 
   // ── 1. Fetch active operators ────────────────────────────────────────────────
-  const { data: operators, error: opsError } = await supabaseAdmin
+  let { data: operators, error: opsError } = await supabaseAdmin
     .from('contact_operators')
-    .select('id, name, is_active, operator_type')
+    .select('id, name, is_active, operator_type, capacity')
     .eq('is_active', true)
     .eq('operator_type', 'operator')
     .order('created_at', { ascending: true });
+
+  // Graceful fallback if 'capacity' column does not exist yet (error 42703)
+  if (opsError && (opsError.code === '42703' || opsError.message?.includes('capacity'))) {
+    const fallback = await supabaseAdmin
+      .from('contact_operators')
+      .select('id, name, is_active, operator_type')
+      .eq('is_active', true)
+      .eq('operator_type', 'operator')
+      .order('created_at', { ascending: true });
+    operators = (fallback.data ?? []).map((op) => ({
+      ...op,
+      capacity: MAX_CONTACTS_PER_OPERATOR,
+    })) as typeof operators;
+    opsError = fallback.error;
+  }
 
   if (opsError) {
     return NextResponse.json({ error: 'Failed to fetch operators: ' + opsError.message }, { status: 500 });
@@ -383,6 +235,71 @@ export async function POST(req: Request) {
     .eq('is_active', true);
 
   const assignedSet = new Set(((assignedRows ?? []) as Array<Record<string, unknown>>).map((r) => String(r[fkCol])));
+
+  // ── Fetch all permanently excluded Not Interested contacts from ALL sources ──
+  const notInterestedSet = new Set<string>();
+
+  // 1. From master_contacts column flag
+  for (const reg of allRegs) {
+    if (reg.is_not_interested === true) {
+      notInterestedSet.add(String(reg.id));
+    }
+  }
+
+  // 2. From master_contact_assignments (canonical status)
+  const { data: mcNiRows } = await supabaseAdmin
+    .from('master_contact_assignments')
+    .select('master_contact_id, status');
+  for (const row of (mcNiRows ?? []) as Array<Record<string, unknown>>) {
+    const s = String(row.status || '').toLowerCase().trim();
+    if (s === 'not interested' || s === 'not_interested') {
+      if (row.master_contact_id) notInterestedSet.add(String(row.master_contact_id));
+    }
+  }
+
+  // 3. From other source assignment tables linked via master_contact_events (canonical status)
+  const [caRes, kcaRes, fcaRes] = await Promise.allSettled([
+    supabaseAdmin.from('contact_assignments').select('registration_id, status'),
+    supabaseAdmin.from('krishnashtami_contact_assignments').select('registration_id, status'),
+    supabaseAdmin.from('feedback_contact_assignments').select('feedback_contact_id, status'),
+  ]);
+
+  const niEventRecordIds = new Set<string>();
+
+  if (caRes.status === 'fulfilled' && caRes.value.data) {
+    for (const row of caRes.value.data) {
+      const s = String(row.status || '').toLowerCase().trim();
+      if (s === 'not interested' || s === 'not_interested') {
+        if (row.registration_id) niEventRecordIds.add(String(row.registration_id));
+      }
+    }
+  }
+
+  if (kcaRes.status === 'fulfilled' && kcaRes.value.data) {
+    for (const row of kcaRes.value.data) {
+      const s = String(row.status || '').toLowerCase().trim();
+      if (s === 'not interested' || s === 'not_interested') {
+        if (row.registration_id) niEventRecordIds.add(String(row.registration_id));
+      }
+    }
+  }
+
+  if (fcaRes.status === 'fulfilled' && fcaRes.value.data) {
+    for (const row of fcaRes.value.data) {
+      const s = String(row.status || '').toLowerCase().trim();
+      if (s === 'not interested' || s === 'not_interested') {
+        if (row.feedback_contact_id) niEventRecordIds.add(String(row.feedback_contact_id));
+      }
+    }
+  }
+
+  if (niEventRecordIds.size > 0) {
+    masterEventsMap.forEach((events, masterContactId) => {
+      if (events.some((e) => niEventRecordIds.has(String(e.event_record_id)))) {
+        notInterestedSet.add(masterContactId);
+      }
+    });
+  }
 
   // ── 4. Filter unassigned registrations using 7-Filter AND-Semantics Pipeline ──
   const unassignedBeforeFilter = allRegs.filter((r) => !assignedSet.has(String(r.id)));
@@ -589,18 +506,22 @@ export async function POST(req: Request) {
 
   const operatorSummaries = activeOperators.map((op) => {
     const current = countMap[op.id] ?? 0;
-    const available = Math.max(0, MAX_CONTACTS_PER_OPERATOR - current);
+    const rawCapacity = (op as { capacity?: number }).capacity ?? MAX_CONTACTS_PER_OPERATOR;
+    const isValidCap = typeof rawCapacity === 'number' && Number.isInteger(rawCapacity) && rawCapacity >= 1 && rawCapacity <= 500;
+    const opCapacity = isValidCap ? rawCapacity : 0;
+    const available = isValidCap ? Math.max(0, opCapacity - current) : 0;
     const isSelected = hasSelectedOps ? selectedSet.has(op.id) : false;
-    const isFull = current >= MAX_CONTACTS_PER_OPERATOR;
+    const isFull = !isValidCap || current >= opCapacity;
     return {
       id: op.id,
       name: formatOperatorDisplayName(op.name),
       current,
-      capacity: MAX_CONTACTS_PER_OPERATOR,
+      capacity: opCapacity,
       available,
       is_selected: isSelected,
       is_full: isFull,
-      can_receive: !isFull && (hasSelectedOps ? isSelected : true),
+      can_receive: isValidCap && !isFull && (hasSelectedOps ? isSelected : true),
+      is_invalid_capacity: !isValidCap,
     };
   });
 
@@ -610,30 +531,47 @@ export async function POST(req: Request) {
 
   const availableSlots = targetOperators.reduce((acc, op) => acc + op.available, 0);
 
-  // ── Female Restriction: applies to ALL sources universally ────────────────
-  // Contacts with missing/unknown gender are also excluded (fail-closed policy).
-  const skippedFemaleCount = unassigned.filter((r) => isFemale(r.gender)).length;
-  const skippedUnknownGenderCount = unassigned.filter((r) => {
-    const g = normalizeGender(r.gender);
-    return !g; // empty/null/undefined gender
-  }).length;
-  const eligibleCount = unassigned.filter((r) => isGenderEligible(r.gender)).length;
+  // ── Mutually Exclusive Classification ────────────────────────────────────
+  // Equation: Unassigned = Eligible (Male) + Skipped (Female) + Not Interested
+  // Mutually exclusive: Not Interested female contacts counted ONLY under Not Interested, not Skipped Female.
+  // Not Interested contacts are NEVER counted in Eligible Male or Available Slots.
+  let notInterestedCount = 0;
+  let skippedFemaleCount = 0;
+  let skippedUnknownGenderCount = 0;
+  let eligibleCount = 0;
+
+  for (const r of unassigned) {
+    if (notInterestedSet.has(String(r.id))) {
+      notInterestedCount++;
+    } else if (isFemale(r.gender)) {
+      skippedFemaleCount++;
+    } else if (!isGenderEligible(r.gender)) {
+      skippedUnknownGenderCount++;
+      // Counted with skipped female / ineligible so partition reconciles exactly
+      skippedFemaleCount++;
+    } else {
+      eligibleCount++;
+    }
+  }
 
   const willAssign = Math.min(eligibleCount, Math.max(0, availableSlots));
   const willSkipCapacity = Math.max(0, eligibleCount - availableSlots);
 
   const dryRunSummary = {
     source,
-    total_unassigned: unassignedBeforeFilter.length,
+    total_unassigned: unassigned.length,
+    unfiltered_unassigned: unassignedBeforeFilter.length,
     filtered_candidates: unassigned.length,
-    skipped_female: skippedFemaleCount,
-    skipped_unknown_gender: skippedUnknownGenderCount,
     eligible_male: eligibleCount,
     eligible_candidates: eligibleCount,
+    skipped_female: skippedFemaleCount,
+    not_interested: notInterestedCount,
+    skipped_unknown_gender: skippedUnknownGenderCount,
     active_operators: targetOperators.length,
     available_slots: availableSlots,
     will_assign: willAssign,
     will_skip_capacity: willSkipCapacity,
+    reconciliation_verified: unassigned.length === (eligibleCount + skippedFemaleCount + notInterestedCount),
     operator_breakdown: operatorSummaries,
     filter_options: filterOptions,
     filters: {
@@ -663,6 +601,7 @@ export async function POST(req: Request) {
   const allowReassign = body.reassign === true || body.rebalance === true;
 
   let assigned = 0;
+  let skippedNotInterested = 0;
   let skippedFemale = 0;
   let skippedUnknownGender = 0;
   let skippedCapacity = 0;
@@ -677,6 +616,12 @@ export async function POST(req: Request) {
 
   try {
     for (const reg of unassigned) {
+      // ── Not Interested contacts are permanently excluded from auto-assign ──
+      if (notInterestedSet.has(String(reg.id))) {
+        skippedNotInterested++;
+        continue;
+      }
+
       // ── Universal female restriction — applies to every source ────────────
       if (isFemale(reg.gender)) {
         skippedFemale++;
@@ -690,7 +635,9 @@ export async function POST(req: Request) {
 
       const eligibleOps = activeOperators.filter((op) => {
         if (hasSelectedOps && !selectedSet.has(op.id)) return false;
-        return (liveCountMap[op.id] ?? 0) < MAX_CONTACTS_PER_OPERATOR;
+        const opCap = (op as { capacity?: number }).capacity ?? MAX_CONTACTS_PER_OPERATOR;
+        if (!opCap || !Number.isInteger(opCap) || opCap < 1 || opCap > 500) return false;
+        return (liveCountMap[op.id] ?? 0) < opCap;
       });
 
       if (eligibleOps.length === 0) {
@@ -700,6 +647,7 @@ export async function POST(req: Request) {
 
       eligibleOps.sort((a, b) => (liveCountMap[a.id] ?? 0) - (liveCountMap[b.id] ?? 0));
       const chosenOp = eligibleOps[0];
+      const chosenOpCapacity = (chosenOp as { capacity?: number }).capacity ?? MAX_CONTACTS_PER_OPERATOR;
 
       try {
         if (isMaster) {
@@ -707,7 +655,7 @@ export async function POST(req: Request) {
             p_master_contact_id: String(reg.id),
             p_operator_id: chosenOp.id,
             p_assigned_by: userId ?? null,
-            p_max_capacity: MAX_CONTACTS_PER_OPERATOR,
+            p_max_capacity: chosenOpCapacity,
             p_allow_reassign: allowReassign,
           });
 
@@ -727,7 +675,7 @@ export async function POST(req: Request) {
             p_operator_id: chosenOp.id,
             p_source: source,
             p_assigned_by: userId ?? null,
-            p_max_capacity: MAX_CONTACTS_PER_OPERATOR,
+            p_max_capacity: chosenOpCapacity,
             p_allow_reassign: allowReassign,
           });
 
@@ -765,9 +713,11 @@ export async function POST(req: Request) {
     dry_run: false,
     report: {
       source,
-      total_unassigned: unassignedBeforeFilter.length,
+      total_unassigned: unassigned.length,
+      unfiltered_unassigned: unassignedBeforeFilter.length,
       filtered_candidates: unassigned.length,
       successfully_assigned: assigned,
+      skipped_not_interested: skippedNotInterested,
       skipped_already_assigned: skippedAlreadyAssigned,
       skipped_female: skippedFemale,
       skipped_unknown_gender: skippedUnknownGender,

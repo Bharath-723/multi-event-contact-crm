@@ -85,9 +85,25 @@ export function getCurrentWeeklyPeriod(date: Date = new Date()): string {
 
 /**
  * Returns the start Date object (Friday 00:00:00 Asia/Kolkata) of the given weekly period or current period.
+ * Supports both standard 'YYYY-MM-DD' (start Friday) and ISO 'YYYY-Www'.
  */
 export function getWeeklyPeriodStartDate(periodId?: string): Date {
   const period = periodId || getCurrentWeeklyPeriod();
+
+  // Support ISO week strings like '2026-W44' or '2026-W45'
+  if (period.includes('W') || period.includes('w')) {
+    const match = period.match(/^(\d{4})-?[Ww](\d{1,2})$/);
+    if (match) {
+      const year = parseInt(match[1], 10);
+      const week = parseInt(match[2], 10);
+      const jan4 = new Date(Date.UTC(year, 0, 4));
+      const dayOfWeek = jan4.getUTCDay() || 7;
+      // Friday of that week: Monday is 1, Friday is 5
+      jan4.setUTCDate(jan4.getUTCDate() + (week - 1) * 7 - dayOfWeek + 5);
+      return new Date(Date.UTC(jan4.getUTCFullYear(), jan4.getUTCMonth(), jan4.getUTCDate(), 0, 0, 0) - (5.5 * 60 * 60 * 1000));
+    }
+  }
+
   const [year, month, day] = period.split('-').map(Number);
   // Friday 00:00:00 Asia/Kolkata = Thursday 18:30:00 UTC
   // Math: Date.UTC(year, month - 1, day) - 5h30m
@@ -118,4 +134,36 @@ export function formatWeeklyPeriodLabel(periodId?: string): string {
   const endStr = end.toLocaleDateString('en-IN', { ...opts, year: 'numeric' });
 
   return `${startStr} – ${endStr}`;
+}
+
+/**
+ * Returns the Saturday Meetup date for the given weekly period.
+ * (The Saturday immediately following the period's start Friday).
+ * e.g., For period '2026-10-16', Saturday is '2026-10-17' ("Saturday, 17 Oct 2026").
+ */
+export function getSaturdayMeetupDate(periodId?: string): { dateStr: string; label: string; date: Date } {
+  const period = periodId || getCurrentWeeklyPeriod();
+  const startFriday = getWeeklyPeriodStartDate(period);
+  // Saturday is exactly 1 day (24 hours) after start Friday
+  const saturday = new Date(startFriday.getTime() + 24 * 60 * 60 * 1000);
+
+  // Format YYYY-MM-DD in Asia/Kolkata
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: APPLICATION_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const dateStr = formatter.format(saturday);
+
+  const opts: Intl.DateTimeFormatOptions = {
+    timeZone: APPLICATION_TIMEZONE,
+    weekday: 'long',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  };
+  const label = saturday.toLocaleDateString('en-IN', opts);
+
+  return { dateStr, label, date: saturday };
 }

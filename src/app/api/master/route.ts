@@ -67,6 +67,8 @@ export async function GET(request: NextRequest) {
   const standard = url.searchParams.get('standard')?.trim() || '';
   const eventSource = url.searchParams.get('event_source')?.trim() || '';
   const dateStr = url.searchParams.get('date')?.trim() || '';
+  const blockedParam = url.searchParams.get('blocked')?.trim().toLowerCase() || '';
+  const statusParam = url.searchParams.get('status')?.trim().toLowerCase() || '';
   const isExport = url.searchParams.get('export') === 'true' || url.searchParams.get('limit') === 'all';
   const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
   const limitParam = url.searchParams.get('limit');
@@ -160,7 +162,14 @@ export async function GET(request: NextRequest) {
     // 3. Build database query on master_contacts with pagination and database-side filters
     let query = supabaseAdmin
       .from('master_contacts')
-      .select('id, phone, name, age, gender, area_of_stay, company_college, chanting, classes_attended, level, created_at', { count: 'exact' });
+      .select('id, phone, name, age, gender, area_of_stay, company_college, chanting, classes_attended, level, created_at, is_not_interested, not_interested_at, not_interested_by', { count: 'exact' });
+
+    // Blocked / Not Interested exclusion filter
+    if (blockedParam === 'true' || statusParam === 'blocked' || statusParam === 'not_interested') {
+      query = query.eq('is_not_interested', true);
+    } else if (blockedParam === 'false' || statusParam === 'eligible' || statusParam === 'active') {
+      query = query.eq('is_not_interested', false);
+    }
 
     // ID filter if pre-filtered by events
     if (eventFilteredContactIds !== null) {
@@ -212,7 +221,7 @@ export async function GET(request: NextRequest) {
     const now = new Date();
     const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01T00:00:00Z`;
 
-    const [
+    let [
       contactsResult,
       thisMonthCountResult,
       assignedCountResult,
@@ -227,6 +236,45 @@ export async function GET(request: NextRequest) {
         .select('id', { count: 'exact', head: true })
         .eq('is_active', true),
     ]);
+
+    if (contactsResult.error && (contactsResult.error.code === '42703' || contactsResult.error.message?.includes('is_not_interested'))) {
+      // Graceful fallback for pre-migration databases where 'is_not_interested' does not exist yet (error 42703)
+      let fallbackQuery = supabaseAdmin
+        .from('master_contacts')
+        .select('id, phone, name, age, gender, area_of_stay, company_college, chanting, classes_attended, level, created_at', { count: 'exact' });
+
+      if (eventFilteredContactIds !== null) {
+        fallbackQuery = fallbackQuery.in('id', eventFilteredContactIds);
+      }
+      if (gender) {
+        fallbackQuery = fallbackQuery.ilike('gender', gender);
+      }
+      if (expandedAreas.length > 0) {
+        fallbackQuery = fallbackQuery.in('area_of_stay', expandedAreas);
+      }
+      if (expandedCompanies.length > 0) {
+        fallbackQuery = fallbackQuery.in('company_college', expandedCompanies);
+      }
+      if (search) {
+        const q = search.trim();
+        const normSearch = normalizePhone(q);
+        const orClauses = [
+          `name.ilike.%${q}%`,
+          `area_of_stay.ilike.%${q}%`,
+          `company_college.ilike.%${q}%`,
+          `phone.ilike.%${q}%`,
+        ];
+        if (normSearch && normSearch !== q) {
+          orClauses.push(`phone.ilike.%${normSearch}%`);
+        }
+        fallbackQuery = fallbackQuery.or(orClauses.join(','));
+      }
+      fallbackQuery = fallbackQuery
+        .order('created_at', { ascending: false })
+        .range(startIndex, endIndex);
+
+      contactsResult = (await fallbackQuery) as unknown as typeof contactsResult;
+    }
 
     if (contactsResult.error) {
       console.error('[master-api] Query error:', contactsResult.error);
@@ -339,6 +387,9 @@ export async function GET(request: NextRequest) {
         occupation: mOccupation || '—',
         standard: mStandard || null,
         level: mLevel,
+        is_not_interested: Boolean(m.is_not_interested),
+        not_interested_at: m.not_interested_at ? String(m.not_interested_at) : null,
+        not_interested_by: m.not_interested_by ? String(m.not_interested_by) : null,
         operator_name: masterAssign?.operator_name || null,
         assignment_status: masterAssign?.status || null,
         operator_id: masterAssign?.operator_id || null,

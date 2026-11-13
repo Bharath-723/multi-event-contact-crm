@@ -209,6 +209,7 @@ export default function AdminDashboardPage() {
   });
 
   const loadVisitorStats = useCallback(async () => {
+    if (!selectedEventId) return;
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const headers = {

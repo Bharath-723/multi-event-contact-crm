@@ -175,8 +175,10 @@ export type AssignmentStatus =
   | 'Not Answered'
   | 'Next Week'
   | 'Not Interested'
+  | 'Not in Hyderabad'
   | 'Not Connected'
-  | 'Callback Required';
+  | 'Callback Required'
+  | 'Visited';
 
 /** @deprecated Legacy statuses — kept only for migration reference. Do not use in new code. */
 export type LegacyAssignmentStatus =
@@ -195,6 +197,7 @@ export interface ContactOperator {
   phone?: string | null;
   is_active: boolean;
   operator_type: 'operator' | 'coordinator';
+  capacity?: number;
   last_login_at?: string | null;
   created_at: string;
   updated_at: string;

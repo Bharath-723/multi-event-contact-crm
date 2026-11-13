@@ -48,88 +48,134 @@ export async function getVisitorStats(festivalEventId?: string | null): Promise<
   if (err1) throw new Error('Failed to fetch registered count: ' + err1.message);
 
   // ── 2. Total Visited Count ─────────────────────────────────────────────────
-  let query2 = supabaseAdmin
-    .from(visitsTable)
-    .select('*', { count: 'exact', head: true });
-
-  if (registrationIds !== null) {
-    query2 = query2.in('registration_id', registrationIds);
+  let visited = 0;
+  try {
+    if (sourceConfig.isKrishnashtami || !registrationIds) {
+      const { count: vCount, error: err2 } = await supabaseAdmin
+        .from(visitsTable)
+        .select('*', { count: 'exact', head: true });
+      if (!err2 && vCount !== null) visited = vCount;
+      else if (err2) console.warn('[visitor-stats] Warning fetching visited count:', err2.message);
+    } else {
+      // Chunked count to prevent PostgREST URL query length limit (400 Bad Request)
+      const CHUNK_SIZE = 100;
+      let total = 0;
+      for (let i = 0; i < registrationIds.length; i += CHUNK_SIZE) {
+        const chunk = registrationIds.slice(i, i + CHUNK_SIZE);
+        const { count: c, error: cErr } = await supabaseAdmin
+          .from(visitsTable)
+          .select('*', { count: 'exact', head: true })
+          .in('registration_id', chunk);
+        if (!cErr && c !== null) total += c;
+        else if (cErr) {
+          console.warn('[visitor-stats] Warning fetching visited chunk:', cErr.message);
+        }
+      }
+      visited = total;
+    }
+  } catch (err) {
+    console.warn('[visitor-stats] Error in visited count query:', err);
   }
-  const { count: visited, error: err2 } = await query2;
-  if (err2) throw new Error('Failed to fetch visited count: ' + err2.message);
 
   // ── 3. Volunteer Visited Count ────────────────────────────────────────────
   let volunteerVisited = 0;
   if (registrationIds !== null) {
-    let volQuery = supabaseAdmin
-      .from(regTable)
-      .select('id')
-      .eq('interested_to_volunteer', true);
+    try {
+      let volQuery = supabaseAdmin
+        .from(regTable)
+        .select('id')
+        .eq('interested_to_volunteer', true);
 
-    if (!sourceConfig.isKrishnashtami && festivalEventId) {
-      volQuery = volQuery.eq('festival_event_id', festivalEventId);
-    }
+      if (!sourceConfig.isKrishnashtami && festivalEventId) {
+        volQuery = volQuery.eq('festival_event_id', festivalEventId);
+      }
 
-    const { data: volRows, error: volErr } = await volQuery;
-    if (volErr) throw new Error('Failed to fetch volunteer IDs: ' + volErr.message);
-    const volunteerIds = (volRows ?? []).map((r) => r.id);
-    if (volunteerIds.length > 0) {
-      const { count: vc, error: err3 } = await supabaseAdmin
-        .from(visitsTable)
-        .select('*', { count: 'exact', head: true })
-        .in('registration_id', volunteerIds);
-      if (err3) throw new Error('Failed to fetch volunteer visited count: ' + err3.message);
-      volunteerVisited = vc ?? 0;
+      const { data: volRows, error: volErr } = await volQuery;
+      const volunteerIds = (volRows ?? []).map((r) => r.id);
+      if (!volErr && volunteerIds.length > 0) {
+        const CHUNK_SIZE = 100;
+        let totalVol = 0;
+        for (let i = 0; i < volunteerIds.length; i += CHUNK_SIZE) {
+          const chunk = volunteerIds.slice(i, i + CHUNK_SIZE);
+          const { count: vc, error: err3 } = await supabaseAdmin
+            .from(visitsTable)
+            .select('*', { count: 'exact', head: true })
+            .in('registration_id', chunk);
+          if (!err3 && vc !== null) totalVol += vc;
+          else if (err3) console.warn('[visitor-stats] Warning fetching volunteer visits:', err3.message);
+        }
+        volunteerVisited = totalVol;
+      }
+    } catch (err) {
+      console.warn('[visitor-stats] Error in volunteer visited query:', err);
     }
   }
 
   // ── 4. Prasadam / Dinner Count ─────────────────────────────────────────────
   let dinnerCount = 0;
   if (festivalEventId) {
-    let pQuery = supabaseAdmin
-      .from(prasadamTable)
-      .select('*', { count: 'exact', head: true });
-
-    if (!sourceConfig.isKrishnashtami) {
-      pQuery = pQuery.eq('festival_event_id', festivalEventId);
-    }
-
-    const { count: pc, error: pErr } = await pQuery;
-
-    if (!pErr && pc !== null && pc > 0) {
-      dinnerCount = pc;
-    } else {
-      let query4 = supabaseAdmin
-        .from(regTable)
-        .select('*', { count: 'exact', head: true })
-        .eq('interested_to_dinner', true);
+    try {
+      let pQuery = supabaseAdmin
+        .from(prasadamTable)
+        .select('*', { count: 'exact', head: true });
 
       if (!sourceConfig.isKrishnashtami) {
-        query4 = query4.eq('festival_event_id', festivalEventId);
+        pQuery = pQuery.eq('festival_event_id', festivalEventId);
       }
-      const { count: dc, error: err4 } = await query4;
-      if (err4) throw new Error('Failed to fetch dinner count: ' + err4.message);
-      dinnerCount = dc ?? 0;
+
+      const { count: pc, error: pErr } = await pQuery;
+
+      if (!pErr && pc !== null && pc > 0) {
+        dinnerCount = pc;
+      } else {
+        let query4 = supabaseAdmin
+          .from(regTable)
+          .select('*', { count: 'exact', head: true })
+          .eq('interested_to_dinner', true);
+
+        if (!sourceConfig.isKrishnashtami) {
+          query4 = query4.eq('festival_event_id', festivalEventId);
+        }
+        const { count: dc, error: err4 } = await query4;
+        if (!err4 && dc !== null) dinnerCount = dc;
+      }
+    } catch (err) {
+      console.warn('[visitor-stats] Error in dinner count query:', err);
     }
   }
 
   // ── 5. Today's Visits ─────────────────────────────────────────────────────
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
+  let todaysVisits = 0;
+  try {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
 
-  let query5 = supabaseAdmin
-    .from(visitsTable)
-    .select('*', { count: 'exact', head: true })
-    .gte('visited_at', startOfToday.toISOString());
-
-  if (registrationIds !== null) {
-    query5 = query5.in('registration_id', registrationIds);
+    if (sourceConfig.isKrishnashtami || !registrationIds) {
+      const { count: tvCount, error: err5 } = await supabaseAdmin
+        .from(visitsTable)
+        .select('*', { count: 'exact', head: true })
+        .gte('visited_at', startOfToday.toISOString());
+      if (!err5 && tvCount !== null) todaysVisits = tvCount;
+    } else {
+      const CHUNK_SIZE = 100;
+      let totalToday = 0;
+      for (let i = 0; i < registrationIds.length; i += CHUNK_SIZE) {
+        const chunk = registrationIds.slice(i, i + CHUNK_SIZE);
+        const { count: tvCount, error: err5 } = await supabaseAdmin
+          .from(visitsTable)
+          .select('*', { count: 'exact', head: true })
+          .gte('visited_at', startOfToday.toISOString())
+          .in('registration_id', chunk);
+        if (!err5 && tvCount !== null) totalToday += tvCount;
+      }
+      todaysVisits = totalToday;
+    }
+  } catch (err) {
+    console.warn('[visitor-stats] Error in todays visits query:', err);
   }
-  const { count: todaysVisits, error: err5 } = await query5;
-  if (err5) throw new Error("Failed to fetch today's visits: " + err5.message);
 
   const totalReg = registered ?? 0;
-  const totalVis = visited ?? 0;
+  const totalVis = visited;
   const remaining = Math.max(0, totalReg - totalVis);
 
   return {
@@ -137,7 +183,7 @@ export async function getVisitorStats(festivalEventId?: string | null): Promise<
     visited: totalVis,
     remaining,
     volunteer_visited: volunteerVisited,
-    dinner_count: dinnerCount ?? 0,
-    todays_visits: todaysVisits ?? 0,
+    dinner_count: dinnerCount,
+    todays_visits: todaysVisits,
   };
 }

@@ -4,6 +4,7 @@ import { normalizePhone } from '@/lib/master-contacts';
 import { normalizeAssignmentStatus } from '@/lib/status-normalizer';
 import { getCurrentWeeklyPeriod, getNextResetTimestamp, formatWeeklyPeriodLabel } from '@/lib/weekly-period';
 import { getLevelFromClassesAttended } from '@/lib/level-mapping';
+import { archiveAndGetVisitorHistory, SaturdayVisitorHistoryItem } from '@/lib/visitor-history';
 
 // Require Admin Helper
 async function requireAdmin(req: Request): Promise<{ error: NextResponse | null }> {
@@ -51,17 +52,27 @@ export async function GET(req: NextRequest) {
   const periodLabel = formatWeeklyPeriodLabel(currentPeriod);
 
   try {
-    // 1 & 2. Concurrently fetch active assignments and approved check-ins
-    const [assignResult, checkinResult] = await Promise.all([
+    // 1, 2 & 3. Concurrently fetch active assignments, approved check-ins, and archive/fetch visitor history
+    let [assignResult, checkinResult, visitorHistory] = await Promise.all([
       supabaseAdmin
         .from('master_contact_assignments')
-        .select('id, master_contact_id, status, operator_id, is_active, contact_operators(id, name)')
+        .select('id, master_contact_id, status, operator_id, is_active, status_weekly_period, updated_at, contact_operators(id, name)')
         .eq('is_active', true),
       supabaseAdmin
         .from('master_contact_checkins')
         .select('id, master_contact_id, phone, weekly_period, checked_in_at, approved_by, admin_email')
         .eq('weekly_period', currentPeriod),
+      archiveAndGetVisitorHistory(currentPeriod),
     ]);
+
+    // Backward compatibility fallback if status_weekly_period does not exist yet (error 42703)
+    if (assignResult.error && (assignResult.error.code === '42703' || assignResult.error.message?.includes('status_weekly_period'))) {
+      const fallback = await supabaseAdmin
+        .from('master_contact_assignments')
+        .select('id, master_contact_id, status, operator_id, is_active, updated_at, contact_operators(id, name)')
+        .eq('is_active', true);
+      assignResult = fallback as any;
+    }
 
     if (assignResult.error) {
       console.error('[GET /api/saturday-meetup] Error fetching assignments:', assignResult.error);
@@ -137,6 +148,7 @@ export async function GET(req: NextRequest) {
       operator_name: string | null;
       operator_status: string | null;
       operator_bucket: string | null;
+      status_period: string | null;
       is_admin_approved: boolean;
       checked_in_at: string | null;
       approved_by_email: string | null;
@@ -154,6 +166,9 @@ export async function GET(req: NextRequest) {
 
       const opName = (a.contact_operators as unknown as { name: string } | null)?.name || null;
       const opBucket = normalizeAssignmentStatus(a.status);
+      const statusPeriod =
+        ((a as unknown as Record<string, unknown>).status_weekly_period as string | undefined) ||
+        (a.updated_at ? getCurrentWeeklyPeriod(new Date(a.updated_at as string)) : null);
 
       personByNormPhone.set(normPhone, {
         id: contact.id,
@@ -167,6 +182,7 @@ export async function GET(req: NextRequest) {
         operator_name: opName,
         operator_status: a.status || 'assigned',
         operator_bucket: opBucket,
+        status_period: statusPeriod,
         is_admin_approved: false,
         checked_in_at: null,
         approved_by_email: null,
@@ -199,6 +215,7 @@ export async function GET(req: NextRequest) {
           operator_name: null,
           operator_status: null,
           operator_bucket: null,
+          status_period: null,
           is_admin_approved: true,
           checked_in_at: c.checked_in_at,
           approved_by_email: c.admin_email,
@@ -207,10 +224,10 @@ export async function GET(req: NextRequest) {
     });
 
     // 5. Compute Mutually Exclusive Categories:
-    // - Assigned Calls: number of unique contacts currently assigned to operators
-    // - Coming: assigned contacts marked coming by operator, plus explicitly admin-approved contacts
-    // - Pending Calls: assigned contacts that are neither coming nor otherwise completed
-    // - Visitors: approved check-ins whose normalized phone does not match any contact already counted in Assigned Calls, Coming, or Pending Calls
+    // - Assigned Calls: number of unique contacts currently assigned to operators (PERMANENTLY RETAINED)
+    // - Coming: assigned contacts marked coming in current week, plus explicitly admin-approved contacts (RESETS ON FRIDAY)
+    // - Pending Calls: assigned contacts explicitly pending response in current week (RESETS ON FRIDAY)
+    // - Visitors: approved walk-in check-ins in current week (RESETS ON FRIDAY, PREVIOUS WEEK ARCHIVED)
     let assignedCallsCount = 0;
     let comingCount = 0;
     let pendingCallsCount = 0;
@@ -222,9 +239,11 @@ export async function GET(req: NextRequest) {
       const levelInfo = getLevelFromClassesAttended(person.classes_attended);
 
       if (person.is_assigned) {
+        // Assigned Calls is permanently preserved across weekly rollovers
         assignedCallsCount++;
 
-        const isOperatorComing = person.operator_bucket === 'coming';
+        const isCurrentWeekStatus = person.status_period === currentPeriod;
+        const isOperatorComing = person.operator_bucket === 'coming' && isCurrentWeekStatus;
         const isApproved = person.is_admin_approved;
 
         if (isOperatorComing || isApproved) {
@@ -253,12 +272,12 @@ export async function GET(req: NextRequest) {
             checked_in_at: person.checked_in_at,
             approved_by_email: person.approved_by_email,
           });
-        } else if (person.operator_bucket === 'pending') {
+        } else if (person.operator_bucket === 'pending' && isCurrentWeekStatus) {
           pendingCallsCount++;
         }
         // Completed calls (notComing, nextWeek, notAnswered) that are not approved are accounted for in Assigned Calls
       } else if (person.is_admin_approved) {
-        // Walk-in / unassigned approved visitor
+        // Walk-in / unassigned approved visitor in current week
         visitorsCount++;
 
         attendanceList.push({
@@ -293,12 +312,13 @@ export async function GET(req: NextRequest) {
         coming: comingCount,
         pending_calls: pendingCallsCount,
         visitors: visitorsCount,
-        total_attendance: attendanceList.length,
+        total_attendance: comingCount + visitorsCount,
       },
       weekly_period: currentPeriod,
       weekly_period_label: periodLabel,
       next_reset: nextReset.toISOString(),
       attendance: attendanceList,
+      visitor_history: visitorHistory,
     });
   } catch (err: unknown) {
     console.error('[GET /api/saturday-meetup] Server exception:', err);

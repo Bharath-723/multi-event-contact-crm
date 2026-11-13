@@ -1,12 +1,32 @@
 import React from 'react';
-import KrishnashtamiCompletePage from '@/app/krishnashtami-complete/page';
+import type { Metadata } from 'next';
+import MecmLandingPage from '@/components/landing/MecmLandingPage';
 
-export const metadata = {
-  title: 'Krishnashtami 2026 | Festival Completed | Hare Krishna Movement',
+export const metadata: Metadata = {
+  title: 'MECM — Multi-Event CRM Platform | For Temples, Communities & Organizations',
   description:
-    'Krishnashtami 2026 has been completed successfully. Thank you for your support and participation.',
+    'A unified, scalable platform to plan, run and manage multiple events, volunteers and visitors with ease. Purpose-built for temples, communities, and high-touch cultural organizations.',
+  keywords: [
+    'MECM',
+    'Multi-Event CRM',
+    'Temple Management System',
+    'Volunteer Management',
+    'Event CRM',
+    'QR Gate Check-in',
+    'Devotee Management',
+    'Festival Management Platform',
+  ],
+  openGraph: {
+    title: 'MECM — Multi-Event CRM Platform',
+    description:
+      'A unified, scalable platform to plan, run and manage multiple events, volunteers and visitors with ease.',
+    url: 'https://mecm.vercel.app',
+    siteName: 'MECM Platform',
+    locale: 'en_US',
+    type: 'website',
+  },
 };
 
 export default function HomePage() {
-  return <KrishnashtamiCompletePage />;
+  return <MecmLandingPage />;
 }

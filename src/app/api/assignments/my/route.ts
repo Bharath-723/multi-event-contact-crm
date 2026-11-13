@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getOperatorSessionFromRequest } from '@/lib/operator-auth';
 import { computeOperatorStats } from '@/lib/status-normalizer';
+import { getCurrentWeeklyPeriod } from '@/lib/weekly-period';
 
 export async function GET(req: Request) {
   const session = getOperatorSessionFromRequest(req);
@@ -68,13 +69,14 @@ export async function GET(req: Request) {
       };
     });
 
+    const currentWeeklyPeriod = getCurrentWeeklyPeriod();
     const { data: activeAssignments } = await supabaseAdmin
       .from('master_contact_assignments')
-      .select('id, status, is_active')
+      .select('id, status, is_active, status_weekly_period, updated_at')
       .eq('operator_id', session.operatorId)
       .eq('is_active', true);
 
-    const statsObj = computeOperatorStats(activeAssignments ?? []);
+    const statsObj = computeOperatorStats(activeAssignments ?? [], { currentWeeklyPeriod });
 
     return NextResponse.json({
       assignments: normalizedAssignments,
@@ -84,6 +86,7 @@ export async function GET(req: Request) {
         total_not_coming: statsObj.notComing,
         total_not_answered: statsObj.notAnswered,
         total_next_week: statsObj.nextWeek,
+        total_not_in_hyderabad: statsObj.notInHyderabad,
         total_not_connected: statsObj.notAnswered,
       },
       source,
@@ -158,6 +161,7 @@ export async function GET(req: Request) {
     total_not_coming: statsObj.notComing,
     total_not_answered: statsObj.notAnswered,
     total_next_week: statsObj.nextWeek,
+    total_not_in_hyderabad: statsObj.notInHyderabad,
     total_not_connected: statsObj.notAnswered,
   };
 

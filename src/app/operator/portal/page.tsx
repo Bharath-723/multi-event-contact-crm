@@ -7,7 +7,7 @@ import {
   Phone, Search, Loader2, Clock,
   Users, MessageSquare, Save, X, RefreshCw,
   ChevronLeft, ChevronRight, MessageCircle,
-  CheckCircle2, XCircle, Sparkles, GraduationCap, GitBranch, Laptop, Star
+  CheckCircle2, XCircle, Sparkles, GraduationCap, GitBranch, Laptop, Star, MapPin
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { FeedbackContact } from '@/lib/types';
@@ -15,24 +15,25 @@ import { ContactSource } from '@/lib/source-resolver';
 import { computeOperatorStats, formatOperatorDisplayName } from '@/lib/status-normalizer';
 import Link from 'next/link';
 
-export type AllowedStatus = 'Coming' | 'Not Coming' | 'Not Answered' | 'Next Week' | 'Not Interested';
+export type AllowedStatus = 'Coming' | 'Not Coming' | 'Not Answered' | 'Next Week' | 'Not Interested' | 'Not in Hyderabad';
 
 const STATUS_OPTIONS: AllowedStatus[] = [
-  'Coming', 'Not Coming', 'Not Answered', 'Next Week', 'Not Interested',
+  'Coming', 'Not Coming', 'Not Answered', 'Next Week', 'Not Interested', 'Not in Hyderabad',
 ];
 
 const STATUS_META: Record<string, { label: string; color: string; bg: string; border: string; icon: React.ReactNode }> = {
-  'Assigned':       { label: 'Assigned',       color: 'text-blue-400',    bg: 'bg-blue-950/30',    border: 'border-blue-500/30',   icon: <Clock className="w-3 h-3" /> },
-  'Pending':        { label: 'Assigned',       color: 'text-blue-400',    bg: 'bg-blue-950/30',    border: 'border-blue-500/30',   icon: <Clock className="w-3 h-3" /> },
-  'Coming':         { label: 'Coming',         color: 'text-emerald-400', bg: 'bg-emerald-950/30', border: 'border-emerald-500/30', icon: <CheckCircle2 className="w-3 h-3" /> },
-  'Not Coming':     { label: 'Not Coming',     color: 'text-red-400',     bg: 'bg-red-950/30',     border: 'border-red-500/30',    icon: <XCircle className="w-3 h-3" /> },
-  'Not Answered':   { label: 'Not Answered',   color: 'text-amber-400',   bg: 'bg-amber-950/30',   border: 'border-amber-500/30',  icon: <Clock className="w-3 h-3" /> },
-  'Next Week':      { label: 'Next Week',      color: 'text-purple-400',  bg: 'bg-purple-950/30', border: 'border-purple-500/30', icon: <Clock className="w-3 h-3" /> },
-  'Not Interested': { label: 'Not Interested', color: 'text-rose-400',    bg: 'bg-rose-950/30',    border: 'border-rose-500/30',   icon: <XCircle className="w-3 h-3" /> },
-  'Not Connected':  { label: 'Not Answered',   color: 'text-amber-400',   bg: 'bg-amber-950/30',   border: 'border-amber-500/30',  icon: <Clock className="w-3 h-3" /> },
-  'Contacted':      { label: 'Next Week',      color: 'text-purple-400',  bg: 'bg-purple-950/30', border: 'border-purple-500/30', icon: <Clock className="w-3 h-3" /> },
-  'Interested':     { label: 'Coming',         color: 'text-emerald-400', bg: 'bg-emerald-950/30', border: 'border-emerald-500/30', icon: <CheckCircle2 className="w-3 h-3" /> },
-  'Completed':      { label: 'Coming',         color: 'text-emerald-400', bg: 'bg-emerald-950/30', border: 'border-emerald-500/30', icon: <CheckCircle2 className="w-3 h-3" /> },
+  'Assigned':          { label: 'Assigned',          color: 'text-blue-400',    bg: 'bg-blue-950/30',    border: 'border-blue-500/30',   icon: <Clock className="w-3 h-3" /> },
+  'Pending':           { label: 'Assigned',          color: 'text-blue-400',    bg: 'bg-blue-950/30',    border: 'border-blue-500/30',   icon: <Clock className="w-3 h-3" /> },
+  'Coming':            { label: 'Coming',            color: 'text-emerald-400', bg: 'bg-emerald-950/30', border: 'border-emerald-500/30', icon: <CheckCircle2 className="w-3 h-3" /> },
+  'Not Coming':        { label: 'Not Coming',        color: 'text-red-400',     bg: 'bg-red-950/30',     border: 'border-red-500/30',    icon: <XCircle className="w-3 h-3" /> },
+  'Not Answered':      { label: 'Not Answered',      color: 'text-amber-400',   bg: 'bg-amber-950/30',   border: 'border-amber-500/30',  icon: <Clock className="w-3 h-3" /> },
+  'Next Week':         { label: 'Next Week',         color: 'text-purple-400',  bg: 'bg-purple-950/30', border: 'border-purple-500/30', icon: <Clock className="w-3 h-3" /> },
+  'Not Interested':    { label: 'Not Interested',    color: 'text-rose-400',    bg: 'bg-rose-950/30',    border: 'border-rose-500/30',   icon: <XCircle className="w-3 h-3" /> },
+  'Not in Hyderabad':  { label: 'Not in Hyderabad',  color: 'text-cyan-400',    bg: 'bg-cyan-950/30',    border: 'border-cyan-500/30',   icon: <MapPin className="w-3 h-3" /> },
+  'Not Connected':     { label: 'Not Answered',      color: 'text-amber-400',   bg: 'bg-amber-950/30',   border: 'border-amber-500/30',  icon: <Clock className="w-3 h-3" /> },
+  'Contacted':         { label: 'Next Week',         color: 'text-purple-400',  bg: 'bg-purple-950/30', border: 'border-purple-500/30', icon: <Clock className="w-3 h-3" /> },
+  'Interested':        { label: 'Coming',            color: 'text-emerald-400', bg: 'bg-emerald-950/30', border: 'border-emerald-500/30', icon: <CheckCircle2 className="w-3 h-3" /> },
+  'Completed':         { label: 'Coming',            color: 'text-emerald-400', bg: 'bg-emerald-950/30', border: 'border-emerald-500/30', icon: <CheckCircle2 className="w-3 h-3" /> },
 };
 
 interface OperatorInfo {
@@ -66,6 +67,7 @@ interface Stats {
   total_not_coming: number;
   total_not_answered: number;
   total_next_week: number;
+  total_not_in_hyderabad?: number;
 }
 
 function sanitizePhone(phone: string): string {
@@ -435,21 +437,42 @@ function OperatorPortalContent() {
   // 4. Update Status Handler with immediate state & stats update (no full-page spinner/refresh)
   const handleStatusChange = async (assignmentId: string, status: AllowedStatus) => {
     // 1. Optimistic instant state & stats update
-    setAssignments((prev) => {
-      const updated = prev.map((item) => (item.id === assignmentId ? { ...item, status } : item));
-      const statsObj = computeOperatorStats(updated);
+    if (status === 'Not Interested') {
+      // Not Interested unassigns contact atomically
+      setAssignments((prev) => {
+        const updated = prev.filter((item) => item.id !== assignmentId);
+        const statsObj = computeOperatorStats(updated);
 
-      setStats({
-        total_assigned: statsObj.assigned,
-        total_coming: statsObj.coming,
-        total_not_coming: statsObj.notComing,
-        total_not_answered: statsObj.notAnswered,
-        total_next_week: statsObj.nextWeek,
+        setStats({
+          total_assigned: statsObj.assigned,
+          total_coming: statsObj.coming,
+          total_not_coming: statsObj.notComing,
+          total_not_answered: statsObj.notAnswered,
+          total_next_week: statsObj.nextWeek,
+          total_not_in_hyderabad: statsObj.notInHyderabad,
+        });
+
+        return updated;
       });
+      toast('Contact marked Not Interested and unassigned.');
+    } else {
+      setAssignments((prev) => {
+        const updated = prev.map((item) => (item.id === assignmentId ? { ...item, status } : item));
+        const statsObj = computeOperatorStats(updated);
 
-      return updated;
-    });
-    toast(`Status updated to ${status}`);
+        setStats({
+          total_assigned: statsObj.assigned,
+          total_coming: statsObj.coming,
+          total_not_coming: statsObj.notComing,
+          total_not_answered: statsObj.notAnswered,
+          total_next_week: statsObj.nextWeek,
+          total_not_in_hyderabad: statsObj.notInHyderabad,
+        });
+
+        return updated;
+      });
+      toast(`Status updated to ${status}`);
+    }
 
     try {
       const res = await fetch(`/api/assignments/${assignmentId}?source=${contactSource}`, {

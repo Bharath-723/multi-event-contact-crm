@@ -176,6 +176,8 @@ export async function POST(req: Request) {
     master_contact_ids?: string[];
     operator_id?: string;
     reassign?: boolean;
+    allow_not_interested_override?: boolean;
+    override_reason?: string;
   };
   try {
     body = await req.json();
@@ -201,22 +203,31 @@ export async function POST(req: Request) {
 
   const { data: operator } = await supabaseAdmin
     .from('contact_operators')
-    .select('id, name, is_active')
+    .select('id, name, is_active, capacity')
     .eq('id', operator_id)
     .single();
   if (!operator) return NextResponse.json({ error: 'Operator not found' }, { status: 404 });
   if (!operator.is_active) return NextResponse.json({ error: 'Operator is currently disabled' }, { status: 400 });
 
+  const rawCapacity = (operator as { capacity?: number }).capacity;
+  if (rawCapacity === null || rawCapacity === undefined || !Number.isInteger(rawCapacity) || rawCapacity < 1 || rawCapacity > 500) {
+    return NextResponse.json({
+      error: `Operator configured capacity (${rawCapacity}) is invalid. Must be an integer between 1 and 500.`,
+      code: 'INVALID_OPERATOR_CAPACITY',
+    }, { status: 400 });
+  }
+  const effectiveCapacity = rawCapacity;
+
   // Handle Master Dashboard assignment via Atomic Database RPC assign_master_contact_atomic
   if (source === 'master_dashboard') {
     const allowReassign = body.reassign !== undefined ? Boolean(body.reassign) : true;
-    const results: Array<{ master_contact_id: string; status: string; message: string }> = [];
+    const results: Array<{ master_contact_id: string; status: string; message: string; code?: string }> = [];
 
     for (const mId of regIds) {
-      // ── Gender pre-validation: resolve authoritative gender from master_contacts ──
+      // ── Gender and Not-Interested pre-validation: resolve authoritative record from master_contacts ──
       const { data: masterContact, error: mcFetchErr } = await supabaseAdmin
         .from('master_contacts')
-        .select('id, gender')
+        .select('id, gender, is_not_interested')
         .eq('id', mId)
         .maybeSingle();
 
@@ -227,6 +238,53 @@ export async function POST(req: Request) {
           message: 'Master contact not found or could not be resolved.',
         });
         continue;
+      }
+
+      // Check Not Interested persistent status or historical Not Interested status
+      let isNotInterested = Boolean((masterContact as { is_not_interested?: boolean }).is_not_interested);
+      if (!isNotInterested) {
+        const { data: histNI } = await supabaseAdmin
+          .from('master_contact_assignments')
+          .select('id')
+          .eq('master_contact_id', mId)
+          .ilike('status', 'not interested')
+          .limit(1);
+        if (histNI && histNI.length > 0) {
+          isNotInterested = true;
+        }
+      }
+
+      if (isNotInterested) {
+        if (!body.allow_not_interested_override) {
+          results.push({
+            master_contact_id: mId,
+            status: 'error',
+            code: 'CONTACT_NOT_INTERESTED',
+            message: 'Contact has been marked as Not Interested. Manual assignment requires explicit administrative override.',
+          });
+          continue;
+        }
+
+        // Explicit, authorized, and audited administrative override
+        await supabaseAdmin
+          .from('master_contacts')
+          .update({
+            is_not_interested: false,
+            not_interested_at: null,
+            not_interested_by: null,
+          })
+          .eq('id', mId);
+
+        await supabaseAdmin.from('audit_logs').insert({
+          action: 'ADMIN_OVERRIDE_NOT_INTERESTED',
+          details: {
+            contact_id: mId,
+            admin_id: userId,
+            operator_id: operator.id,
+            reason: body.override_reason || 'Explicit administrative override for manual assignment',
+            timestamp: new Date().toISOString(),
+          },
+        });
       }
 
       if (!isGenderEligible(masterContact.gender)) {
@@ -246,7 +304,7 @@ export async function POST(req: Request) {
         p_master_contact_id: mId,
         p_operator_id: operator.id,
         p_assigned_by: userId ?? null,
-        p_max_capacity: 40,
+        p_max_capacity: effectiveCapacity,
         p_allow_reassign: allowReassign,
       });
 
@@ -268,7 +326,13 @@ export async function POST(req: Request) {
 
     const assignedCount = results.filter((r) => r.status === 'assigned' || r.status === 'reassigned' || r.status === 'already_assigned').length;
     if (assignedCount === 0 && results.length > 0) {
-      return NextResponse.json({ error: results[0].message, results, source }, { status: 400 });
+      const errRes = results.find((r) => r.status === 'error') || results[0];
+      return NextResponse.json({
+        error: errRes.message,
+        code: (errRes as { code?: string }).code || 'ASSIGNMENT_FAILED',
+        results,
+        source,
+      }, { status: 400 });
     }
 
     return NextResponse.json({
@@ -310,15 +374,72 @@ export async function POST(req: Request) {
   }
 
   const allowReassign = body.reassign !== undefined ? Boolean(body.reassign) : true;
-  const results: Array<{ registration_id: string; status: string; message: string; assignment?: unknown }> = [];
+  const results: Array<{ registration_id: string; status: string; message: string; code?: string; assignment?: unknown }> = [];
 
   for (const regId of regIds) {
+    // ── Check if contact's phone is marked Not Interested on master_contacts ──
+    try {
+      const { data: regRow } = await supabaseAdmin
+        .from(targetRegTable)
+        .select('phone')
+        .eq('id', regId)
+        .single();
+      if (regRow?.phone) {
+        const { normalizePhone } = await import('@/lib/master-contacts');
+        const cleanPhone = normalizePhone(regRow.phone);
+        if (cleanPhone) {
+          const { data: mc } = await supabaseAdmin
+            .from('master_contacts')
+            .select('id, is_not_interested')
+            .eq('phone', cleanPhone)
+            .maybeSingle();
+
+          if (mc?.is_not_interested) {
+            if (!body.allow_not_interested_override) {
+              results.push({
+                registration_id: regId,
+                status: 'error',
+                code: 'CONTACT_NOT_INTERESTED',
+                message: 'Contact has been marked as Not Interested. Manual assignment requires explicit administrative override.',
+              });
+              continue;
+            }
+
+            // Explicit, authorized, and audited administrative override
+            await supabaseAdmin
+              .from('master_contacts')
+              .update({
+                is_not_interested: false,
+                not_interested_at: null,
+                not_interested_by: null,
+              })
+              .eq('id', mc.id);
+
+            await supabaseAdmin.from('audit_logs').insert({
+              action: 'ADMIN_OVERRIDE_NOT_INTERESTED',
+              details: {
+                contact_id: mc.id,
+                registration_id: regId,
+                source,
+                admin_id: userId,
+                operator_id: operator.id,
+                reason: body.override_reason || 'Explicit administrative override for manual assignment',
+                timestamp: new Date().toISOString(),
+              },
+            });
+          }
+        }
+      }
+    } catch (checkErr) {
+      console.warn('[assign] Check master contact Not Interested warning:', checkErr);
+    }
+
     const { data: rpcRes, error: rpcErr } = await supabaseAdmin.rpc('assign_contact_atomic', {
       p_contact_id: regId,
       p_operator_id: operator.id,
       p_source: source,
       p_assigned_by: userId ?? null,
-      p_max_capacity: 40,
+      p_max_capacity: effectiveCapacity,
       p_allow_reassign: allowReassign,
     });
 
@@ -352,7 +473,7 @@ export async function POST(req: Request) {
               p_master_contact_id: mc.id,
               p_operator_id: operator.id,
               p_assigned_by: userId ?? null,
-              p_max_capacity: 40,
+              p_max_capacity: effectiveCapacity,
               p_allow_reassign: allowReassign,
             });
           }
@@ -379,6 +500,7 @@ export async function POST(req: Request) {
       {
         success: false,
         error: errRes?.message || 'Assignment or reassignment failed',
+        code: (errRes as { code?: string })?.code || 'ASSIGNMENT_FAILED',
         assigned_count: 0,
         results,
         source,
