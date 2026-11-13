@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { formatDate } from '@/lib/utils';
 import { 
-  Search, Download, Edit2, Trash2, ChevronLeft, ChevronRight, X, Eye, 
+  Search, Download, Printer, Edit2, Trash2, ChevronLeft, ChevronRight, X, Eye, 
   Loader2, BookUser, Users, User, Home, Filter, 
   RotateCcw, CheckCircle2, AlertCircle, QrCode
 } from 'lucide-react';
@@ -190,30 +190,36 @@ export default function ContactsRegisterAdminPage() {
   const totalRecords = data?.total || 0;
   const totalPages = Math.ceil(totalRecords / itemsPerPage) || 1;
 
-  // --- CSV EXPORT ---
+  // --- CSV EXPORT & PRINT (UNLIMITED DATASET) ---
   const [isExporting, setIsExporting] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
+
+  const fetchExportRows = async (): Promise<ContactsRegisterRecord[]> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const auth = session?.access_token ? `Bearer ${session.access_token}` : '';
+
+    const params = new URLSearchParams();
+    if (searchQuery) params.set('search', searchQuery);
+    if (filterGender) params.set('gender', filterGender);
+    if (filterCurrentStay) params.set('current_stay', filterCurrentStay);
+    if (filterDate) params.set('date', filterDate);
+    params.set('export', 'true');
+    params.set('limit', 'all');
+
+    const res = await fetch(`/api/contacts-register?${params.toString()}`, {
+      headers: { Authorization: auth },
+    });
+
+    if (!res.ok) throw new Error('Export failed');
+    const result = await res.json();
+    return result.registrations || [];
+  };
 
   const handleExportCSV = async () => {
     setIsExporting(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const auth = session?.access_token ? `Bearer ${session.access_token}` : '';
-
-      const params = new URLSearchParams();
-      if (searchQuery) params.set('search', searchQuery);
-      if (filterGender) params.set('gender', filterGender);
-      if (filterCurrentStay) params.set('current_stay', filterCurrentStay);
-      if (filterDate) params.set('date', filterDate);
-      params.set('export', 'true');
-
-      const res = await fetch(`/api/contacts-register?${params.toString()}`, {
-        headers: { Authorization: auth },
-      });
-
-      if (!res.ok) throw new Error('Export failed');
-
-      const result = await res.json();
-      const exportRows: ContactsRegisterRecord[] = result.registrations || [];
+      const exportRows = await fetchExportRows();
+      if (exportRows.length === 0) return;
 
       const headers = [
         'S.No.',
@@ -247,8 +253,8 @@ export default function ContactsRegisterAdminPage() {
         `"${formatDate(r.created_at)}"`,
       ]);
 
-      const csvContent = [headers.join(','), ...csvRows.map((row) => row.join(','))].join('\n');
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const csvLines = [headers.join(','), ...csvRows.map((row) => row.join(','))].join('\n');
+      const blob = new Blob(['\uFEFF' + csvLines], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -256,11 +262,95 @@ export default function ContactsRegisterAdminPage() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Export error:', err);
       alert('Failed to export CSV. Please try again.');
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handlePrintTable = async () => {
+    setIsPrinting(true);
+    try {
+      const exportRows = await fetchExportRows();
+      if (exportRows.length === 0) return;
+
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) return;
+
+      const tableRows = exportRows.map((r, i) => `
+        <tr>
+          <td style="text-align: center; font-weight: 600;">${i + 1}</td>
+          <td style="font-weight: 700; color: #1e1b4b;">${r.full_name || ''}</td>
+          <td style="font-family: monospace;">${r.phone}</td>
+          <td>${r.college_name || '—'}</td>
+          <td>${r.profession || '—'}</td>
+          <td>${r.area_of_stay || '—'}</td>
+          <td>${r.gender}</td>
+          <td>${r.current_stay || '—'}</td>
+          <td>${r.pg_name || '—'}</td>
+          <td style="text-align: center;">${r.interested_bhagavad_gita === true ? 'Yes' : r.interested_bhagavad_gita === false ? 'No' : '—'}</td>
+          <td>${formatDate(r.created_at)}</td>
+        </tr>
+      `).join('');
+
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Contacts Register Submissions Report</title>
+            <style>
+              @page { size: A4 landscape; margin: 10mm; }
+              @media print {
+                thead { display: table-header-group; }
+                tr { page-break-inside: avoid; }
+              }
+              body { font-family: system-ui, -apple-system, sans-serif; color: #0f172a; margin: 0; padding: 16px; background: #fff; }
+              h2 { color: #6b21a8; margin: 0 0 4px 0; font-size: 18px; }
+              p.meta { color: #64748b; font-size: 11px; margin: 0 0 14px 0; }
+              table { width: 100%; border-collapse: collapse; font-size: 10px; }
+              th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; word-break: break-word; }
+              th { background-color: #f3e8ff; color: #581c87; font-weight: 700; }
+              tr:nth-child(even) { background-color: #faf5ff; }
+            </style>
+          </head>
+          <body>
+            <h2>Contacts Register Submissions Report</h2>
+            <p class="meta">Total Matching Records: ${exportRows.length} • Generated on ${new Date().toLocaleString('en-IN')}</p>
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Full Name</th>
+                  <th>Mobile Number</th>
+                  <th>College / Company</th>
+                  <th>Profession</th>
+                  <th>Area of Stay</th>
+                  <th>Gender</th>
+                  <th>Current Stay</th>
+                  <th>PG Name</th>
+                  <th>Gita Interest</th>
+                  <th>Registered At</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${tableRows}
+              </tbody>
+            </table>
+            <script>
+              window.onload = function() { window.print(); };
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    } catch (err) {
+      console.error('Print error:', err);
+      alert('Failed to generate print report. Please try again.');
+    } finally {
+      setIsPrinting(false);
     }
   };
 
@@ -395,11 +485,19 @@ export default function ContactsRegisterAdminPage() {
           </button>
           <button
             onClick={handleExportCSV}
-            disabled={isExporting || registrations.length === 0}
+            disabled={isExporting || isPrinting || registrations.length === 0}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-200 hover:text-white text-xs sm:text-sm font-bold transition-all shadow-md active:scale-95 disabled:opacity-50 cursor-pointer"
           >
             {isExporting ? <Loader2 className="w-4 h-4 animate-spin text-purple-400" /> : <Download className="w-4 h-4 text-purple-400" />}
             Export CSV
+          </button>
+          <button
+            onClick={handlePrintTable}
+            disabled={isExporting || isPrinting || registrations.length === 0}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-200 hover:text-white text-xs sm:text-sm font-bold transition-all shadow-md active:scale-95 disabled:opacity-50 cursor-pointer"
+          >
+            {isPrinting ? <Loader2 className="w-4 h-4 animate-spin text-purple-400" /> : <Printer className="w-4 h-4 text-purple-400" />}
+            Print PDF Table
           </button>
         </div>
       </div>

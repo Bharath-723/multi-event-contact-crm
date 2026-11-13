@@ -52,48 +52,77 @@ export async function GET(req: NextRequest) {
   const periodLabel = formatWeeklyPeriodLabel(currentPeriod);
 
   try {
+    // Helper to fetch all active assignments across all 1000-record batches without truncation
+    const fetchAllActiveAssignments = async (): Promise<any[]> => {
+      const pageSize = 1000;
+      let fromIdx = 0;
+      const allRows: any[] = [];
+      let isFallback = false;
+
+      while (true) {
+        const q = (supabaseAdmin.from('master_contact_assignments') as any)
+          .select(
+            isFallback
+              ? 'id, master_contact_id, status, operator_id, is_active, updated_at, contact_operators(id, name)'
+              : 'id, master_contact_id, status, operator_id, is_active, status_weekly_period, updated_at, contact_operators(id, name)'
+          )
+          .eq('is_active', true)
+          .range(fromIdx, fromIdx + pageSize - 1);
+
+        const res = await q;
+        if (res.error) {
+          if (!isFallback && (res.error.code === '42703' || res.error.message?.includes('status_weekly_period'))) {
+            isFallback = true;
+            fromIdx = 0;
+            allRows.length = 0;
+            continue;
+          }
+          throw res.error;
+        }
+
+        if (!res.data || res.data.length === 0) break;
+        allRows.push(...res.data);
+        if (res.data.length < pageSize) break;
+        fromIdx += pageSize;
+      }
+      return allRows;
+    };
+
+    // Helper to fetch all weekly checkins across all 1000-record batches without truncation
+    const fetchAllWeeklyCheckins = async (): Promise<any[]> => {
+      const pageSize = 1000;
+      let fromIdx = 0;
+      const allRows: any[] = [];
+
+      while (true) {
+        const res = await (supabaseAdmin.from('master_contact_checkins') as any)
+          .select('id, master_contact_id, phone, weekly_period, checked_in_at, approved_by, admin_email')
+          .eq('weekly_period', currentPeriod)
+          .range(fromIdx, fromIdx + pageSize - 1);
+
+        if (res.error) throw res.error;
+        if (!res.data || res.data.length === 0) break;
+        allRows.push(...res.data);
+        if (res.data.length < pageSize) break;
+        fromIdx += pageSize;
+      }
+      return allRows;
+    };
+
     // 1, 2 & 3. Concurrently fetch active assignments, approved check-ins, and archive/fetch visitor history
-    let [assignResult, checkinResult, visitorHistory] = await Promise.all([
-      supabaseAdmin
-        .from('master_contact_assignments')
-        .select('id, master_contact_id, status, operator_id, is_active, status_weekly_period, updated_at, contact_operators(id, name)')
-        .eq('is_active', true),
-      supabaseAdmin
-        .from('master_contact_checkins')
-        .select('id, master_contact_id, phone, weekly_period, checked_in_at, approved_by, admin_email')
-        .eq('weekly_period', currentPeriod),
+    const [activeAssignments, approvedCheckins, visitorHistory]: [any[], any[], any] = await Promise.all([
+      fetchAllActiveAssignments(),
+      fetchAllWeeklyCheckins(),
       archiveAndGetVisitorHistory(currentPeriod),
     ]);
-
-    // Backward compatibility fallback if status_weekly_period does not exist yet (error 42703)
-    if (assignResult.error && (assignResult.error.code === '42703' || assignResult.error.message?.includes('status_weekly_period'))) {
-      const fallback = await supabaseAdmin
-        .from('master_contact_assignments')
-        .select('id, master_contact_id, status, operator_id, is_active, updated_at, contact_operators(id, name)')
-        .eq('is_active', true);
-      assignResult = fallback as any;
-    }
-
-    if (assignResult.error) {
-      console.error('[GET /api/saturday-meetup] Error fetching assignments:', assignResult.error);
-      return NextResponse.json({ error: 'Failed to fetch assignments' }, { status: 500 });
-    }
-
-    if (checkinResult.error) {
-      console.error('[GET /api/saturday-meetup] Error fetching check-ins:', checkinResult.error);
-      return NextResponse.json({ error: 'Failed to fetch weekly check-ins' }, { status: 500 });
-    }
-
-    const activeAssignments = assignResult.data || [];
-    const approvedCheckins = checkinResult.data || [];
 
     // 3. Collect all master contact IDs that need details
     const targetContactIds = new Set<string>();
     activeAssignments.forEach((a) => {
-      if (a.master_contact_id) targetContactIds.add(a.master_contact_id);
+      if (a.master_contact_id) targetContactIds.add(String(a.master_contact_id));
     });
     approvedCheckins.forEach((c) => {
-      if (c.master_contact_id) targetContactIds.add(c.master_contact_id);
+      if (c.master_contact_id) targetContactIds.add(String(c.master_contact_id));
     });
 
     const contactIdsArray = Array.from(targetContactIds);
@@ -107,10 +136,11 @@ export async function GET(req: NextRequest) {
       level: string | null;
     }>();
 
-    // Concurrently fetch master contact details in chunks
+    // Concurrently fetch master contact details in safe chunks of 200
     const chunkPromises = [];
-    for (let i = 0; i < contactIdsArray.length; i += 500) {
-      const chunk = contactIdsArray.slice(i, i + 500);
+    const CHUNK_SIZE = 200;
+    for (let i = 0; i < contactIdsArray.length; i += CHUNK_SIZE) {
+      const chunk = contactIdsArray.slice(i, i + CHUNK_SIZE);
       chunkPromises.push(
         supabaseAdmin
           .from('master_contacts')

@@ -279,38 +279,51 @@ export async function GET(request: NextRequest) {
   const to = from + limit - 1;
 
   try {
-    // 1. Fetch Global Summary Stats across ALL feedback_contacts
-    let { data: allRows, error: statsError } = await supabaseAdmin
-      .from('feedback_contacts')
-      .select('*');
+    // 1. Fetch Global Summary Stats across ALL feedback_contacts in batches to avoid 1,000-record truncation
+    interface RawFeedbackRow {
+      gender?: string;
+      current_stay?: string;
+      feedback?: string;
+      interested_online_workshop?: boolean;
+      interested_online_work?: boolean;
+      [key: string]: unknown;
+    }
 
-    if (statsError) {
-      try {
-        await supabaseAdmin.rpc('exec_sql', { sql: CREATE_FEEDBACK_TABLE_SQL });
-        const retryStats = await supabaseAdmin
-          .from('feedback_contacts')
-          .select('*');
-        allRows = retryStats.data;
-        statsError = retryStats.error;
-      } catch (e) {
-        console.error('[GET /api/feedback] Auto-migration error:', e);
+    const statsPageSize = 1000;
+    let statsFrom = 0;
+    const allRows: RawFeedbackRow[] = [];
+
+    while (true) {
+      let { data: batchData, error: statsError } = await supabaseAdmin
+        .from('feedback_contacts')
+        .select('gender, current_stay, feedback, interested_online_workshop, interested_online_work')
+        .range(statsFrom, statsFrom + statsPageSize - 1);
+
+      if (statsError) {
+        try {
+          await supabaseAdmin.rpc('exec_sql', { sql: CREATE_FEEDBACK_TABLE_SQL });
+          const retryStats = await supabaseAdmin
+            .from('feedback_contacts')
+            .select('gender, current_stay, feedback, interested_online_workshop, interested_online_work')
+            .range(statsFrom, statsFrom + statsPageSize - 1);
+          batchData = retryStats.data;
+          statsError = retryStats.error;
+        } catch (e) {
+          console.error('[GET /api/feedback] Auto-migration error:', e);
+        }
       }
+
+      if (statsError) {
+        return NextResponse.json({ error: statsError.message }, { status: 500 });
+      }
+
+      if (!batchData || batchData.length === 0) break;
+      allRows.push(...(batchData as RawFeedbackRow[]));
+      if (batchData.length < statsPageSize) break;
+      statsFrom += statsPageSize;
     }
 
-    if (statsError) {
-      return NextResponse.json({ error: statsError.message }, { status: 500 });
-    }
-
-interface RawFeedbackRow {
-  gender?: string;
-  current_stay?: string;
-  feedback?: string;
-  interested_online_workshop?: boolean;
-  interested_online_work?: boolean;
-  [key: string]: unknown;
-}
-
-    const rows = (allRows || []) as RawFeedbackRow[];
+    const rows = allRows;
 
     const stats = {
       total_responses: rows.length,
@@ -324,54 +337,95 @@ interface RawFeedbackRow {
       total_in_hostel: rows.filter((r) => r.current_stay === 'In Hostel').length,
     };
 
-    // 2. Build filtered Query
-    let query = supabaseAdmin
-      .from('feedback_contacts')
-      .select('*', { count: 'exact' });
+    // 2. Build filtered Query helper
+    const buildFilteredQuery = () => {
+      let q = supabaseAdmin
+        .from('feedback_contacts')
+        .select('*', { count: 'exact' });
 
-    if (gender) query = query.eq('gender', gender);
-    if (currentStay) query = query.eq('current_stay', currentStay);
-    if (feedback) query = query.eq('feedback', feedback);
-    if (college) query = query.ilike('college_name', `%${college}%`);
-    if (branch) query = query.ilike('branch', `%${branch}%`);
+      if (gender) q = q.eq('gender', gender);
+      if (currentStay) q = q.eq('current_stay', currentStay);
+      if (feedback) q = q.eq('feedback', feedback);
+      if (college) q = q.ilike('college_name', `%${college}%`);
+      if (branch) q = q.ilike('branch', `%${branch}%`);
 
-    if (interestedOnlineWork === 'Yes') {
-      query = query.or('interested_online_workshop.eq.true,interested_online_work.eq.true');
-    } else if (interestedOnlineWork === 'No') {
-      query = query.or('interested_online_workshop.eq.false,interested_online_work.eq.false');
-    }
+      if (interestedOnlineWork === 'Yes') {
+        q = q.or('interested_online_workshop.eq.true,interested_online_work.eq.true');
+      } else if (interestedOnlineWork === 'No') {
+        q = q.or('interested_online_workshop.eq.false,interested_online_work.eq.false');
+      }
 
-    if (search.trim()) {
-      const s = `%${search.trim()}%`;
-      query = query.or(`full_name.ilike.${s},phone.ilike.${s},college_name.ilike.${s},branch.ilike.${s}`);
-    }
+      if (search.trim()) {
+        const s = `%${search.trim()}%`;
+        q = q.or(`full_name.ilike.${s},phone.ilike.${s},college_name.ilike.${s},branch.ilike.${s}`);
+      }
 
-    query = query.order('created_at', { ascending: false }).range(from, to);
+      return q;
+    };
 
-    const { data: contacts, count, error: fetchError } = await query;
+    // Fetch contacts (batched loop for isAll to bypass 1000-record Supabase limit; single range for normal pages)
+    let contacts: Array<Record<string, unknown>> = [];
+    let totalCount = 0;
 
-    if (fetchError) {
-      return NextResponse.json({ error: fetchError.message }, { status: 500 });
+    if (isAll) {
+      const pageSize = 1000;
+      let fromIdx = 0;
+      while (true) {
+        const { data: bData, count: bCount, error: bErr } = await buildFilteredQuery()
+          .order('created_at', { ascending: false })
+          .range(fromIdx, fromIdx + pageSize - 1);
+
+        if (bErr) {
+          return NextResponse.json({ error: bErr.message }, { status: 500 });
+        }
+
+        if (bCount !== null && bCount !== undefined && totalCount === 0) {
+          totalCount = bCount;
+        }
+
+        if (!bData || bData.length === 0) break;
+        contacts.push(...(bData as Array<Record<string, unknown>>));
+        if (bData.length < pageSize) break;
+        fromIdx += pageSize;
+      }
+      if (totalCount === 0) totalCount = contacts.length;
+    } else {
+      const from = (page - 1) * limit;
+      const to = from + limit - 1;
+      const { data: pData, count: pCount, error: pErr } = await buildFilteredQuery()
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      if (pErr) {
+        return NextResponse.json({ error: pErr.message }, { status: 500 });
+      }
+
+      contacts = (pData || []) as Array<Record<string, unknown>>;
+      totalCount = pCount ?? contacts.length;
     }
 
     // Process contacts to attach active assignment and authoritative derived status
-    const rawContacts = (contacts || []) as Array<Record<string, unknown>>;
+    const rawContacts = contacts;
     const contactIds = rawContacts.map((c) => String(c.id)).filter(Boolean);
 
     const assignMap = new Map<string, Record<string, unknown>>();
     if (contactIds.length > 0) {
-      const { data: activeAssignments } = await supabaseAdmin
-        .from('feedback_contact_assignments')
-        .select(`
-          id, feedback_contact_id, operator_id, status, is_active,
-          contact_operators!operator_id (id, name, email, phone)
-        `)
-        .in('feedback_contact_id', contactIds)
-        .eq('is_active', true);
+      const CHUNK_SIZE = 200;
+      for (let i = 0; i < contactIds.length; i += CHUNK_SIZE) {
+        const chunk = contactIds.slice(i, i + CHUNK_SIZE);
+        const { data: activeAssignments } = await supabaseAdmin
+          .from('feedback_contact_assignments')
+          .select(`
+            id, feedback_contact_id, operator_id, status, is_active,
+            contact_operators!operator_id (id, name, email, phone)
+          `)
+          .in('feedback_contact_id', chunk)
+          .eq('is_active', true);
 
-      (activeAssignments || []).forEach((a) => {
-        assignMap.set(String(a.feedback_contact_id), a as Record<string, unknown>);
-      });
+        (activeAssignments || []).forEach((a) => {
+          assignMap.set(String(a.feedback_contact_id), a as Record<string, unknown>);
+        });
+      }
     }
 
     const normalizedContacts = rawContacts.map((c) => {
@@ -407,7 +461,7 @@ interface RawFeedbackRow {
     return NextResponse.json({
       success: true,
       contacts: normalizedContacts,
-      total: count ?? 0,
+      total: totalCount ?? 0,
       stats,
       page,
       limit,

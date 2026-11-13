@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
   CalendarCheck, PhoneCall, UserCheck, Users,
-  Search, Download, RefreshCw, Loader2,
+  Search, Download, Printer, RefreshCw, Loader2,
   AlertCircle, Clock, CheckCircle2, History, X,
   ChevronRight, Calendar
 } from 'lucide-react';
@@ -128,7 +128,7 @@ export default function SaturdayMeetupPage() {
     });
   }, [attendance, searchQuery, selectedGender, selectedLevel, selectedType]);
 
-  // 3. Export CSV handler
+  // 3. Export CSV handler (All matching records)
   const handleExportCSV = () => {
     if (filteredAttendance.length === 0) return;
 
@@ -147,7 +147,7 @@ export default function SaturdayMeetupPage() {
     ]);
 
     const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -155,6 +155,82 @@ export default function SaturdayMeetupPage() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // 4. Print Table handler (All matching records)
+  const handlePrintTable = () => {
+    if (filteredAttendance.length === 0) return;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const tableRows = filteredAttendance.map((item, idx) => `
+      <tr>
+        <td style="text-align: center; font-weight: 600;">${idx + 1}</td>
+        <td style="font-weight: 700; color: #1e1b4b;">${item.name}</td>
+        <td style="font-family: monospace;">${item.phone}</td>
+        <td>${item.gender}</td>
+        <td style="text-align: center; font-weight: 600;">${item.level}</td>
+        <td style="text-align: center;">${item.classes_attended}</td>
+        <td style="text-align: center;">${item.chanting}</td>
+        <td>${item.attendance_type}</td>
+        <td>${item.operator_name || '—'}</td>
+        <td style="text-align: center;">${item.admin_approved ? 'Yes' : 'No'}</td>
+        <td>${item.checked_in_at ? new Date(item.checked_in_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : '—'}</td>
+      </tr>
+    `).join('');
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Saturday Meet-up Attendance Report</title>
+          <style>
+            @page { size: A4 landscape; margin: 10mm; }
+            @media print {
+              thead { display: table-header-group; }
+              tr { page-break-inside: avoid; }
+            }
+            body { font-family: system-ui, -apple-system, sans-serif; color: #0f172a; margin: 0; padding: 16px; background: #fff; }
+            h2 { color: #4f46e5; margin: 0 0 4px 0; font-size: 18px; }
+            p.meta { color: #64748b; font-size: 11px; margin: 0 0 14px 0; }
+            table { width: 100%; border-collapse: collapse; font-size: 10px; }
+            th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; word-break: break-word; }
+            th { background-color: #e0e7ff; color: #3730a3; font-weight: 700; }
+            tr:nth-child(even) { background-color: #f8fafc; }
+          </style>
+        </head>
+        <body>
+          <h2>Saturday Meet-up Attendance Report (${weeklyPeriodLabel || 'Current Week'})</h2>
+          <p class="meta">Total Attendance Records: ${filteredAttendance.length} • Generated on ${new Date().toLocaleString('en-IN')}</p>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th>Phone Number</th>
+                <th>Gender</th>
+                <th>Level</th>
+                <th>Classes</th>
+                <th>Chanting</th>
+                <th>Attendance Type</th>
+                <th>Operator</th>
+                <th>Approved</th>
+                <th>Checked In At</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRows}
+            </tbody>
+          </table>
+          <script>
+            window.onload = function() { window.print(); };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   return (
@@ -195,6 +271,14 @@ export default function SaturdayMeetupPage() {
           >
             <Download className="w-3.5 h-3.5" />
             Export CSV ({filteredAttendance.length})
+          </button>
+          <button
+            onClick={handlePrintTable}
+            disabled={filteredAttendance.length === 0}
+            className="px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-purple-500/30 text-slate-300 hover:text-white transition-all text-xs font-semibold flex items-center gap-2 cursor-pointer shadow-sm active:scale-95 disabled:opacity-50"
+          >
+            <Printer className="w-3.5 h-3.5 text-purple-400" />
+            Print Table
           </button>
         </div>
       </div>

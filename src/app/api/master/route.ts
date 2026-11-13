@@ -189,44 +189,130 @@ export async function GET(request: NextRequest) {
 
     // Direct multi-company filter with case-insensitive / raw variant expansion (boolean OR)
     const expandedCompanies = expandCompanySelections(selectedCompanies, metadata);
-    if (expandedCompanies.length > 0) {
-      query = query.in('company_college', expandedCompanies);
-    }
 
-    // Global search filter (Name, Phone, Area, Company)
-    if (search) {
-      const q = search.trim();
-      const normSearch = normalizePhone(q);
-      const orClauses = [
-        `name.ilike.%${q}%`,
-        `area_of_stay.ilike.%${q}%`,
-        `company_college.ilike.%${q}%`,
-        `phone.ilike.%${q}%`,
-      ];
-      if (normSearch && normSearch !== q) {
-        orClauses.push(`phone.ilike.%${normSearch}%`);
+    // Helper to build master contacts query
+    const buildMasterContactsQuery = (includeIsNotInterested: boolean = true) => {
+      const fields = includeIsNotInterested
+        ? 'id, phone, name, age, gender, area_of_stay, company_college, chanting, classes_attended, level, created_at, is_not_interested, not_interested_at, not_interested_by'
+        : 'id, phone, name, age, gender, area_of_stay, company_college, chanting, classes_attended, level, created_at';
+
+      let q = (supabaseAdmin.from('master_contacts') as any).select(fields, { count: 'exact' });
+
+      if (includeIsNotInterested) {
+        if (blockedParam === 'true' || statusParam === 'blocked' || statusParam === 'not_interested') {
+          q = q.eq('is_not_interested', true);
+        } else if (blockedParam === 'false' || statusParam === 'eligible' || statusParam === 'active') {
+          q = q.eq('is_not_interested', false);
+        }
       }
-      query = query.or(orClauses.join(','));
+
+      if (eventFilteredContactIds !== null) {
+        q = q.in('id', eventFilteredContactIds);
+      }
+      if (gender) {
+        q = q.ilike('gender', gender);
+      }
+      if (expandedAreas.length > 0) {
+        q = q.in('area_of_stay', expandedAreas);
+      }
+      if (expandedCompanies.length > 0) {
+        q = q.in('company_college', expandedCompanies);
+      }
+      if (search) {
+        const term = search.trim();
+        const norm = normalizePhone(term);
+        const orClauses = [
+          `name.ilike.%${term}%`,
+          `area_of_stay.ilike.%${term}%`,
+          `company_college.ilike.%${term}%`,
+          `phone.ilike.%${term}%`,
+        ];
+        if (norm && norm !== term) {
+          orClauses.push(`phone.ilike.%${norm}%`);
+        }
+        q = q.or(orClauses.join(','));
+      }
+
+      return q;
+    };
+
+    // 4. Fetch contacts (batched loop for isExport to bypass 1000-record Supabase limit; single range for normal pages)
+    let pageContacts: Array<Record<string, unknown>> = [];
+    let totalFilteredCount = 0;
+    let hasNotInterestedCol = true;
+
+    if (isExport) {
+      const pageSize = 1000;
+      let fromIdx = 0;
+      while (true) {
+        let bQuery = buildMasterContactsQuery(hasNotInterestedCol)
+          .order('created_at', { ascending: false })
+          .range(fromIdx, fromIdx + pageSize - 1);
+
+        let { data: bData, count: bCount, error: bErr } = await bQuery;
+
+        if (bErr && (bErr.code === '42703' || bErr.message?.includes('is_not_interested'))) {
+          hasNotInterestedCol = false;
+          bQuery = buildMasterContactsQuery(false)
+            .order('created_at', { ascending: false })
+            .range(fromIdx, fromIdx + pageSize - 1);
+          const retry = await bQuery;
+          bData = retry.data;
+          bCount = retry.count;
+          bErr = retry.error;
+        }
+
+        if (bErr) {
+          console.error('[master-api] Export batch query error:', bErr);
+          return NextResponse.json({ error: bErr.message }, { status: 500 });
+        }
+
+        if (bCount !== null && bCount !== undefined && totalFilteredCount === 0) {
+          totalFilteredCount = bCount;
+        }
+
+        if (!bData || bData.length === 0) break;
+        pageContacts.push(...((bData || []) as unknown as Array<Record<string, unknown>>));
+        if (bData.length < pageSize) break;
+        fromIdx += pageSize;
+      }
+      if (totalFilteredCount === 0) {
+        totalFilteredCount = pageContacts.length;
+      }
+    } else {
+      const startIndex = (page - 1) * limit;
+      const endIndex = startIndex + limit - 1;
+
+      let singleQuery = buildMasterContactsQuery(hasNotInterestedCol)
+        .order('created_at', { ascending: false })
+        .range(startIndex, endIndex);
+
+      let { data: sData, count: sCount, error: sErr } = await singleQuery;
+      if (sErr && (sErr.code === '42703' || sErr.message?.includes('is_not_interested'))) {
+        hasNotInterestedCol = false;
+        singleQuery = buildMasterContactsQuery(false)
+          .order('created_at', { ascending: false })
+          .range(startIndex, endIndex);
+        const retry = await singleQuery;
+        sData = retry.data;
+        sCount = retry.count;
+        sErr = retry.error;
+      }
+
+      if (sErr) {
+        console.error('[master-api] Query error:', sErr);
+        return NextResponse.json({ error: sErr.message }, { status: 500 });
+      }
+
+      pageContacts = ((sData || []) as unknown as Array<Record<string, unknown>>);
+      totalFilteredCount = sCount ?? pageContacts.length;
     }
 
-    // Pagination
-    const startIndex = isExport ? 0 : (page - 1) * limit;
-    const endIndex = isExport ? limit - 1 : startIndex + limit - 1;
-
-    query = query
-      .order('created_at', { ascending: false })
-      .range(startIndex, endIndex);
-
-    // 4. Concurrently execute master contacts query and stats queries
+    // Concurrently execute stats queries
     const now = new Date();
     const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01T00:00:00Z`;
 
-    let [
-      contactsResult,
-      thisMonthCountResult,
-      assignedCountResult,
-    ] = await Promise.all([
-      query,
+    const [thisMonthCountResult, assignedCountResult] = await Promise.all([
       supabaseAdmin
         .from('master_contacts')
         .select('id', { count: 'exact', head: true })
@@ -237,55 +323,9 @@ export async function GET(request: NextRequest) {
         .eq('is_active', true),
     ]);
 
-    if (contactsResult.error && (contactsResult.error.code === '42703' || contactsResult.error.message?.includes('is_not_interested'))) {
-      // Graceful fallback for pre-migration databases where 'is_not_interested' does not exist yet (error 42703)
-      let fallbackQuery = supabaseAdmin
-        .from('master_contacts')
-        .select('id, phone, name, age, gender, area_of_stay, company_college, chanting, classes_attended, level, created_at', { count: 'exact' });
+    const pageContactIds = pageContacts.map((c) => String(c.id));
 
-      if (eventFilteredContactIds !== null) {
-        fallbackQuery = fallbackQuery.in('id', eventFilteredContactIds);
-      }
-      if (gender) {
-        fallbackQuery = fallbackQuery.ilike('gender', gender);
-      }
-      if (expandedAreas.length > 0) {
-        fallbackQuery = fallbackQuery.in('area_of_stay', expandedAreas);
-      }
-      if (expandedCompanies.length > 0) {
-        fallbackQuery = fallbackQuery.in('company_college', expandedCompanies);
-      }
-      if (search) {
-        const q = search.trim();
-        const normSearch = normalizePhone(q);
-        const orClauses = [
-          `name.ilike.%${q}%`,
-          `area_of_stay.ilike.%${q}%`,
-          `company_college.ilike.%${q}%`,
-          `phone.ilike.%${q}%`,
-        ];
-        if (normSearch && normSearch !== q) {
-          orClauses.push(`phone.ilike.%${normSearch}%`);
-        }
-        fallbackQuery = fallbackQuery.or(orClauses.join(','));
-      }
-      fallbackQuery = fallbackQuery
-        .order('created_at', { ascending: false })
-        .range(startIndex, endIndex);
-
-      contactsResult = (await fallbackQuery) as unknown as typeof contactsResult;
-    }
-
-    if (contactsResult.error) {
-      console.error('[master-api] Query error:', contactsResult.error);
-      return NextResponse.json({ error: contactsResult.error.message }, { status: 500 });
-    }
-
-    const pageContacts = contactsResult.data || [];
-    const totalFilteredCount = contactsResult.count ?? pageContacts.length;
-    const pageContactIds = pageContacts.map((c) => c.id);
-
-    // 5. Fetch events and active assignments ONLY for the contacts on this page
+    // 5. Fetch events and active assignments in safe 200-id chunks to prevent query length overflow
     let pageEvents: Array<{
       id: string;
       master_contact_id: string;
@@ -306,21 +346,25 @@ export async function GET(request: NextRequest) {
     }> = [];
 
     if (pageContactIds.length > 0) {
-      const [eventsRes, assignRes] = await Promise.all([
-        supabaseAdmin
-          .from('master_contact_events')
-          .select('id, master_contact_id, source, event_display_name, event_record_id, event_date, standard, occupation')
-          .in('master_contact_id', pageContactIds)
-          .order('event_date', { ascending: false }),
-        supabaseAdmin
-          .from('master_contact_assignments')
-          .select('id, master_contact_id, status, operator_id, is_active, contact_operators(id, name, email)')
-          .in('master_contact_id', pageContactIds)
-          .eq('is_active', true),
-      ]);
+      const CHUNK_SIZE = 200;
+      for (let i = 0; i < pageContactIds.length; i += CHUNK_SIZE) {
+        const chunk = pageContactIds.slice(i, i + CHUNK_SIZE);
+        const [eventsRes, assignRes] = await Promise.all([
+          supabaseAdmin
+            .from('master_contact_events')
+            .select('id, master_contact_id, source, event_display_name, event_record_id, event_date, standard, occupation')
+            .in('master_contact_id', chunk)
+            .order('event_date', { ascending: false }),
+          supabaseAdmin
+            .from('master_contact_assignments')
+            .select('id, master_contact_id, status, operator_id, is_active, contact_operators(id, name, email)')
+            .in('master_contact_id', chunk)
+            .eq('is_active', true),
+        ]);
 
-      pageEvents = (eventsRes.data as unknown as typeof pageEvents) || [];
-      pageAssignments = (assignRes.data as unknown as typeof pageAssignments) || [];
+        if (eventsRes.data) pageEvents.push(...(eventsRes.data as unknown as typeof pageEvents));
+        if (assignRes.data) pageAssignments.push(...(assignRes.data as unknown as typeof pageAssignments));
+      }
     }
 
     // Map page events and assignments

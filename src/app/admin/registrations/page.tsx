@@ -530,51 +530,64 @@ export default function RegistrationsPage() {
 
       const servicesJoin = 'services ( id, name, is_active ),';
 
-      let query = supabase
-        .from(regTable)
-        .select(`
-          *,
-          volunteer_slots (
-            id,
-            slot_time,
-            display_order
-          ),
-          ${skillsJoinTable} (
-            skill_id,
-            skills (
-              id,
-              name
-            )
-          ),
-          ${servicesJoin}
-          ${prasadamJoinTable} (
-            id,
-            prasadam_type
-          ),
-          ${assignmentsJoinTable} (
-            id,
-            operator_id,
-            status,
-            assigned_at,
-            called_at,
-            is_active,
-            contact_operators (
-              id,
-              name,
-              email,
-              phone,
-              operator_type
-            )
-          )
-        `)
-        .order('created_at', { ascending: false });
+      // Fetch all matching registrations in 1000-record batches to bypass Supabase default limit
+      const pageSize = 1000;
+      let from = 0;
+      const allRawData: unknown[] = [];
 
-      if (!sourceConfig.isKrishnashtami) {
-        query = query.eq('festival_event_id', selectedEventId);
+      while (true) {
+        let batchQuery = supabase
+          .from(regTable)
+          .select(`
+            *,
+            volunteer_slots (
+              id,
+              slot_time,
+              display_order
+            ),
+            ${skillsJoinTable} (
+              skill_id,
+              skills (
+                id,
+                name
+              )
+            ),
+            ${servicesJoin}
+            ${prasadamJoinTable} (
+              id,
+              prasadam_type
+            ),
+            ${assignmentsJoinTable} (
+              id,
+              operator_id,
+              status,
+              assigned_at,
+              called_at,
+              is_active,
+              contact_operators (
+                id,
+                name,
+                email,
+                phone,
+                operator_type
+              )
+            )
+          `)
+          .order('created_at', { ascending: false });
+
+        if (!sourceConfig.isKrishnashtami) {
+          batchQuery = batchQuery.eq('festival_event_id', selectedEventId);
+        }
+
+        const { data: batch, error: batchErr } = await batchQuery.range(from, from + pageSize - 1);
+        if (batchErr) throw batchErr;
+        if (!batch || batch.length === 0) break;
+        allRawData.push(...batch);
+        if (batch.length < pageSize) break;
+        from += pageSize;
       }
 
-      const { data, error } = await query;
-      if (error) throw error;
+      const data = allRawData;
 
       interface DBRegistration {
         krishnashtami_registration_skills?: { skills: { id: string; name: string } | null }[] | null;

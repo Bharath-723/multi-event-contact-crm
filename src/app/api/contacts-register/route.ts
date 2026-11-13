@@ -56,25 +56,36 @@ export async function GET(request: NextRequest) {
     const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
     const limit = isExport ? 100000 : Math.max(1, Math.min(200, parseInt(url.searchParams.get('limit') || '20', 10)));
 
-    // 1. Fetch overall counts for statistics cards
-    const { data: allRows, error: statsErr } = await supabaseAdmin
-      .from('contacts_register')
-      .select('id, gender, current_stay, interested_online_workshop');
+    // 1. Fetch overall counts for statistics cards (batched to avoid 1,000-record truncation)
+    const statsPageSize = 1000;
+    let statsFrom = 0;
+    const allList: Array<{ id: string; gender: string | null; current_stay: string | null; interested_online_workshop: boolean | null }> = [];
 
-    if (statsErr) {
-      if (statsErr.code === '42P01') {
-        return NextResponse.json(
-          {
-            error:
-              'contacts_register table not found. Please apply the migration first.',
-          },
-          { status: 503 }
-        );
+    while (true) {
+      const { data: batchData, error: statsErr } = await supabaseAdmin
+        .from('contacts_register')
+        .select('id, gender, current_stay, interested_online_workshop')
+        .range(statsFrom, statsFrom + statsPageSize - 1);
+
+      if (statsErr) {
+        if (statsErr.code === '42P01') {
+          return NextResponse.json(
+            {
+              error:
+                'contacts_register table not found. Please apply the migration first.',
+            },
+            { status: 503 }
+          );
+        }
+        return NextResponse.json({ error: statsErr.message }, { status: 500 });
       }
-      return NextResponse.json({ error: statsErr.message }, { status: 500 });
+
+      if (!batchData || batchData.length === 0) break;
+      allList.push(...batchData);
+      if (batchData.length < statsPageSize) break;
+      statsFrom += statsPageSize;
     }
 
-    const allList = allRows || [];
     const stats = {
       total_registrations: allList.length,
       male_contacts: allList.filter((r) => r.gender === 'Male').length,
@@ -83,47 +94,78 @@ export async function GET(request: NextRequest) {
       workshop_interested: allList.filter((r) => r.interested_online_workshop === true).length,
     };
 
-    // 2. Query filtered dataset
-    let query = supabaseAdmin
-      .from('contacts_register')
-      .select('*', { count: 'exact' })
-      .order('created_at', { ascending: false });
+    // 2. Build filtered Query helper
+    const buildFilteredQuery = () => {
+      let q = supabaseAdmin
+        .from('contacts_register')
+        .select('*', { count: 'exact' });
 
-    if (gender) {
-      query = query.eq('gender', gender);
-    }
-    if (currentStay) {
-      query = query.eq('current_stay', currentStay);
-    }
-    if (workshopInterest === 'Yes') {
-      query = query.eq('interested_online_workshop', true);
-    } else if (workshopInterest === 'No') {
-      query = query.eq('interested_online_workshop', false);
-    }
-    if (dateStr) {
-      const startDate = `${dateStr}T00:00:00.000Z`;
-      const endDate = `${dateStr}T23:59:59.999Z`;
-      query = query.gte('created_at', startDate).lte('created_at', endDate);
-    }
-    if (search) {
-      const cleanSearch = search.replace(/\D/g, '');
-      if (cleanSearch.length >= 3) {
-        query = query.or(`full_name.ilike.%${search}%,college_name.ilike.%${search}%,area_of_stay.ilike.%${search}%,phone.ilike.%${cleanSearch}%`);
-      } else {
-        query = query.or(`full_name.ilike.%${search}%,college_name.ilike.%${search}%,area_of_stay.ilike.%${search}%`);
+      if (gender) {
+        q = q.eq('gender', gender);
       }
-    }
+      if (currentStay) {
+        q = q.eq('current_stay', currentStay);
+      }
+      if (workshopInterest === 'Yes') {
+        q = q.eq('interested_online_workshop', true);
+      } else if (workshopInterest === 'No') {
+        q = q.eq('interested_online_workshop', false);
+      }
+      if (dateStr) {
+        const startDate = `${dateStr}T00:00:00.000Z`;
+        const endDate = `${dateStr}T23:59:59.999Z`;
+        q = q.gte('created_at', startDate).lte('created_at', endDate);
+      }
+      if (search) {
+        const cleanSearch = search.replace(/\D/g, '');
+        if (cleanSearch.length >= 3) {
+          q = q.or(`full_name.ilike.%${search}%,college_name.ilike.%${search}%,area_of_stay.ilike.%${search}%,phone.ilike.%${cleanSearch}%`);
+        } else {
+          q = q.or(`full_name.ilike.%${search}%,college_name.ilike.%${search}%,area_of_stay.ilike.%${search}%`);
+        }
+      }
+      return q;
+    };
 
-    if (!isExport) {
+    let registrations: Array<Record<string, unknown>> = [];
+    let totalFiltered = 0;
+
+    if (isExport) {
+      // Loop in 1000-record batches to retrieve the COMPLETE dataset from Supabase without 1,000-row cap
+      const pageSize = 1000;
+      let fromIdx = 0;
+      while (true) {
+        const { data: bData, count: bCount, error: bErr } = await buildFilteredQuery()
+          .order('created_at', { ascending: false })
+          .range(fromIdx, fromIdx + pageSize - 1);
+
+        if (bErr) {
+          return NextResponse.json({ error: bErr.message }, { status: 500 });
+        }
+
+        if (bCount !== null && bCount !== undefined && totalFiltered === 0) {
+          totalFiltered = bCount;
+        }
+
+        if (!bData || bData.length === 0) break;
+        registrations.push(...(bData as Array<Record<string, unknown>>));
+        if (bData.length < pageSize) break;
+        fromIdx += pageSize;
+      }
+      if (totalFiltered === 0) totalFiltered = registrations.length;
+    } else {
       const from = (page - 1) * limit;
       const to = from + limit - 1;
-      query = query.range(from, to);
-    }
+      const { data: sData, count: sCount, error: sErr } = await buildFilteredQuery()
+        .order('created_at', { ascending: false })
+        .range(from, to);
 
-    const { data: registrations, count: totalFiltered, error: queryErr } = await query;
+      if (sErr) {
+        return NextResponse.json({ error: sErr.message }, { status: 500 });
+      }
 
-    if (queryErr) {
-      return NextResponse.json({ error: queryErr.message }, { status: 500 });
+      registrations = (sData || []) as Array<Record<string, unknown>>;
+      totalFiltered = sCount ?? registrations.length;
     }
 
     return NextResponse.json({
