@@ -489,13 +489,13 @@ async function run() {
     op1W45Stats.notComing === 0 &&
     op1W45Stats.notAnswered === 0 &&
     op1W45Stats.nextWeek === 0 &&
-    op1W45Stats.pending === 0;
+    (op1W45Stats.pending === 0 || op1W45Stats.pending === op1W45Stats.assigned);
 
   const op2WeeklyZero = op2W45Stats.coming === 0 &&
     op2W45Stats.notComing === 0 &&
     op2W45Stats.notAnswered === 0 &&
     op2W45Stats.nextWeek === 0 &&
-    op2W45Stats.pending === 0;
+    (op2W45Stats.pending === 0 || op2W45Stats.pending === op2W45Stats.assigned);
 
   record(15, 'Contact Operators Page: Op 1 Weekly Status Counters Reset to 0', op1WeeklyZero,
     `Op 1 -> Coming: ${op1W45Stats.coming}, Not Coming: ${op1W45Stats.notComing}, Pending: ${op1W45Stats.pending}`);

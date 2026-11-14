@@ -45,3 +45,10 @@ next-env.d.ts
 # scratch & temporary files
 scratch/
 supabase/.temp/
+scripts/check-active-res.js
+scripts/inspect-qr-data.ts
+scripts/test-bundle.js
+scripts/test-columns.js
+scripts/test-db-query.js
+scripts/test-my-route.js
+scripts/test-stats.js

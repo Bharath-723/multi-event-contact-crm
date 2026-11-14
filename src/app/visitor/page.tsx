@@ -5,12 +5,13 @@ import { supabase } from '@/lib/supabase';
 import {
   ShieldCheck, Smartphone, CheckCircle2, UserCheck, X,
   AlertCircle, Loader2, RefreshCw, ExternalLink, UserX,
-  History, Clock, Search, Users, Check
+  History, Clock, Search, Users, Check, QrCode
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { getApprovalSuccessMessage, getLevelFromClassesAttended } from '@/lib/level-mapping';
 import { normalizePhone } from '@/lib/phone-utils';
+import QRModal from '@/components/qr-modal';
 
 interface LookedUpContact {
   id: string;
@@ -50,6 +51,7 @@ export default function VisitorCheckInPage() {
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [contactResult, setContactResult] = useState<LookedUpContact | null>(null);
   const [notFoundState, setNotFoundState] = useState<{ notFound: boolean; registerUrl: string } | null>(null);
+  const [qrModalOpen, setQrModalOpen] = useState(false);
 
   // Approval state
   const [approving, setApproving] = useState(false);
@@ -278,7 +280,24 @@ export default function VisitorCheckInPage() {
         setApprovalSuccess(getApprovalSuccessMessage(newClassesAttended));
       }
 
-      // Refresh live log feed
+      // Optimistically update live log feed immediately
+      setLogs((prev) => [
+        {
+          id: data.checkin_id || `temp-${Date.now()}`,
+          master_contact_id: contactResult.id,
+          name: contactResult.name,
+          phone: contactResult.phone,
+          gender: contactResult.gender,
+          checked_in_at: data.checked_in_at || new Date().toISOString(),
+          admin_email: data.admin_email || 'You',
+          classes_attended: newClassesAttended,
+          level_label: newLevelInfo.displayLabel,
+          badge_class: newLevelInfo.badgeClass,
+        },
+        ...prev.filter((l) => l.phone !== contactResult.phone && l.master_contact_id !== contactResult.id),
+      ]);
+
+      // Refresh live log feed in background
       fetchLiveLogs();
     } catch (err) {
       console.error('[Approve Check-in Exception]:', err);
@@ -319,14 +338,24 @@ export default function VisitorCheckInPage() {
           </div>
         </div>
 
-        <button
-          onClick={fetchLiveLogs}
-          disabled={loadingLogs}
-          className="self-start md:self-auto px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-purple-500/30 text-slate-300 hover:text-white transition-all text-xs font-semibold flex items-center gap-2 cursor-pointer shadow-sm active:scale-95 disabled:opacity-50"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loadingLogs ? 'animate-spin text-purple-400' : ''}`} />
-          Sync Logs
-        </button>
+        <div className="flex items-center gap-2 self-start md:self-auto flex-wrap">
+          <button
+            onClick={() => setQrModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-purple-950/60 border border-purple-500/30 hover:border-purple-400/50 text-purple-300 hover:text-white transition-all text-xs font-semibold flex items-center gap-2 cursor-pointer shadow-sm active:scale-95"
+            title="Display Registration QR Code for Visitors"
+          >
+            <QrCode className="w-3.5 h-3.5 text-purple-400" />
+            Registration QR
+          </button>
+          <button
+            onClick={fetchLiveLogs}
+            disabled={loadingLogs}
+            className="px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-purple-500/30 text-slate-300 hover:text-white transition-all text-xs font-semibold flex items-center gap-2 cursor-pointer shadow-sm active:scale-95 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loadingLogs ? 'animate-spin text-purple-400' : ''}`} />
+            Sync Logs
+          </button>
+        </div>
       </div>
 
       {/* ── MAIN WORKFLOW GRID ──────────────────────────────────────────────── */}
@@ -510,7 +539,7 @@ export default function VisitorCheckInPage() {
                     No matching Master Contact exists for mobile number <strong className="text-slate-200">+91 {phoneNumber}</strong>. Please register the contact first.
                   </p>
                 </div>
-                <div className="pt-1">
+                <div className="pt-1 flex flex-wrap items-center justify-center gap-2.5">
                   <Link
                     href="/contacts-register"
                     target="_blank"
@@ -519,6 +548,14 @@ export default function VisitorCheckInPage() {
                     <span>Open Contacts Register Form</span>
                     <ExternalLink className="w-3.5 h-3.5" />
                   </Link>
+                  <button
+                    type="button"
+                    onClick={() => setQrModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-900 border border-amber-500/30 hover:border-amber-500/60 text-amber-300 hover:text-white font-bold text-xs shadow-md transition-all cursor-pointer active:scale-95"
+                  >
+                    <QrCode className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Scan QR to Register</span>
+                  </button>
                 </div>
               </motion.div>
             )}
@@ -610,26 +647,44 @@ export default function VisitorCheckInPage() {
 
                 {/* Actions */}
                 <div className="pt-2">
-                  <button
-                    onClick={handleApproveCheckIn}
-                    disabled={approving}
-                    className="w-full py-4 rounded-xl bg-gradient-to-r from-emerald-600 via-green-600 to-teal-600 hover:from-emerald-500 hover:via-green-500 hover:to-teal-500 text-white font-black text-sm uppercase tracking-wider shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2 active:scale-98 transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    {approving ? (
-                      <>
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                        <span>Processing Atomic Approval...</span>
-                      </>
-                    ) : (
-                      <>
-                        <UserCheck className="w-5 h-5" />
-                        <span>Approve Check-In</span>
-                      </>
-                    )}
-                  </button>
-                  <p className="text-[11px] text-center text-slate-500 mt-2">
-                    Clicking will atomically record this week&apos;s check-in and increment Classes Attended by 1.
-                  </p>
+                  {contactResult.is_approved_this_week ? (
+                    <div className="space-y-2">
+                      <div className="w-full py-4 rounded-xl bg-emerald-950/70 border border-emerald-500/50 text-emerald-300 font-black text-sm uppercase tracking-wider shadow-lg shadow-emerald-950/40 flex items-center justify-center gap-2.5 cursor-default select-none transition-all">
+                        <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                        <span>ALREADY APPROVED</span>
+                      </div>
+                      <p className="text-[11px] text-center text-emerald-400 font-medium">
+                        ✓ Approved for this Saturday Meetup
+                        {contactResult.approved_by_email ? ` by ${contactResult.approved_by_email}` : ''}
+                        {contactResult.checked_in_at
+                          ? ` at ${new Date(contactResult.checked_in_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}`
+                          : ''}
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        onClick={handleApproveCheckIn}
+                        disabled={approving}
+                        className="w-full py-4 rounded-xl bg-gradient-to-r from-emerald-600 via-green-600 to-teal-600 hover:from-emerald-500 hover:via-green-500 hover:to-teal-500 text-white font-black text-sm uppercase tracking-wider shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2 active:scale-98 transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        {approving ? (
+                          <>
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            <span>Processing Atomic Approval...</span>
+                          </>
+                        ) : (
+                          <>
+                            <UserCheck className="w-5 h-5" />
+                            <span>Approve Check-In</span>
+                          </>
+                        )}
+                      </button>
+                      <p className="text-[11px] text-center text-slate-500 mt-2">
+                        Clicking will atomically record this week&apos;s check-in and increment Classes Attended by 1.
+                      </p>
+                    </>
+                  )}
                 </div>
 
                 {/* Feedback Alerts */}
@@ -726,6 +781,15 @@ export default function VisitorCheckInPage() {
           </div>
         </div>
       </div>
+
+      {/* ── VISITOR REGISTRATION QR MODAL ───────────────────────── */}
+      <QRModal
+        isOpen={qrModalOpen}
+        onClose={() => setQrModalOpen(false)}
+        overrideUrl="/contacts-register"
+        title="Visitor Registration QR Code"
+        subtitle="Saturday Meetup Visitor Check-In Center"
+      />
     </div>
   );
 }

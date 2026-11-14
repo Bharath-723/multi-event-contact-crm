@@ -7,7 +7,8 @@ import {
   Phone, Search, Loader2, Clock,
   Users, MessageSquare, Save, X, RefreshCw,
   ChevronLeft, ChevronRight, MessageCircle,
-  CheckCircle2, XCircle, Sparkles, GraduationCap, GitBranch, Laptop, Star, MapPin
+  CheckCircle2, XCircle, Sparkles, GraduationCap, GitBranch, Laptop, Star, MapPin,
+  Calendar
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { FeedbackContact } from '@/lib/types';
@@ -67,6 +68,7 @@ interface Stats {
   total_not_coming: number;
   total_not_answered: number;
   total_next_week: number;
+  total_pending?: number;
   total_not_in_hyderabad?: number;
 }
 
@@ -133,15 +135,233 @@ function NotesModal({
   );
 }
 
+// ─── Attendance History Modal ────────────────────────────────────────────────
+interface AttendanceHistoryItem {
+  id: string;
+  date: string;
+  meetup_date_str?: string;
+  meetup_label: string;
+  event_name: string;
+  status: string;
+  weekly_period?: string;
+  admin_email?: string | null;
+}
+
+function AttendanceHistoryModal({
+  contact,
+  onClose,
+}: {
+  contact: {
+    id?: string;
+    name: string;
+    phone: string;
+    classes_attended: number;
+  };
+  onClose: () => void;
+}) {
+  const [loading, setLoading] = useState(true);
+  const [records, setRecords] = useState<AttendanceHistoryItem[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [totalClasses, setTotalClasses] = useState<number>(contact.classes_attended ?? 0);
+
+  // Close on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  const fetchHistory = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      if (contact.id) params.set('contact_id', contact.id);
+      if (contact.phone) params.set('phone', contact.phone);
+
+      const res = await fetch(`/api/operator/attendance-history?${params.toString()}`);
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || `Failed to fetch history (HTTP ${res.status})`);
+      }
+      const data = await res.json();
+      setRecords(data.records || []);
+      if (typeof data.contact?.classes_attended === 'number') {
+        setTotalClasses(data.contact.classes_attended);
+      }
+    } catch (err: unknown) {
+      console.error('Failed to load attendance history:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load attendance history');
+    } finally {
+      setLoading(false);
+    }
+  }, [contact.id, contact.phone]);
+
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+        onClick={(e) => e.stopPropagation()}
+        className="glass-card rounded-2xl p-5 sm:p-6 w-full max-w-lg border border-purple-500/30 bg-[#0d091e]/95 text-slate-100 shadow-2xl space-y-4 max-h-[85vh] flex flex-col"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="attendance-modal-title"
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 border-b border-purple-500/20 pb-4">
+          <div className="space-y-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-purple-950/80 border border-purple-500/40 flex items-center justify-center shrink-0">
+                <GraduationCap className="w-4 h-4 text-purple-400" />
+              </div>
+              <div className="min-w-0">
+                <h3 id="attendance-modal-title" className="font-bold text-base text-slate-100 truncate">
+                  {contact.name}
+                </h3>
+                {contact.phone && (
+                  <p className="text-[11px] text-slate-400 font-mono">
+                    +91 {sanitizePhone(contact.phone)}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="px-2.5 py-1 rounded-lg bg-purple-950/80 border border-purple-500/40 text-purple-300 text-xs font-semibold whitespace-nowrap">
+              Classes Attended: <span className="font-bold text-amber-300">{totalClasses}</span>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors cursor-pointer"
+              aria-label="Close attendance history"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Content Body */}
+        <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+          {loading ? (
+            <div className="py-12 text-center text-slate-400 space-y-2">
+              <Loader2 className="w-6 h-6 animate-spin mx-auto text-purple-400" />
+              <p className="text-xs">Loading attendance history...</p>
+            </div>
+          ) : error ? (
+            <div className="py-8 text-center space-y-3">
+              <XCircle className="w-8 h-8 text-rose-400 mx-auto" />
+              <p className="text-xs text-rose-300">{error}</p>
+              <button
+                onClick={fetchHistory}
+                className="px-3 py-1.5 rounded-lg bg-purple-950/60 border border-purple-500/40 text-purple-300 hover:text-purple-100 text-xs font-semibold cursor-pointer"
+              >
+                Retry
+              </button>
+            </div>
+          ) : records.length === 0 ? (
+            <div className="py-10 text-center space-y-2.5">
+              <div className="w-12 h-12 rounded-2xl bg-purple-950/40 border border-purple-500/20 flex items-center justify-center mx-auto text-purple-400">
+                <Calendar className="w-6 h-6" />
+              </div>
+              <h4 className="font-bold text-sm text-slate-200">No classes attended yet</h4>
+              <p className="text-xs text-slate-400 max-w-xs mx-auto">
+                This contact has not checked in to any Saturday Meetup classes yet.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 flex justify-between px-1">
+                <span>Class / Meetup Attendance</span>
+                <span>{records.length} {records.length === 1 ? 'Record' : 'Records'}</span>
+              </div>
+              <div className="space-y-2">
+                {records.map((rec, idx) => {
+                  const checkinDate = rec.date ? new Date(rec.date) : null;
+                  const formattedDate = checkinDate && !isNaN(checkinDate.getTime())
+                    ? checkinDate.toLocaleDateString('en-IN', {
+                        timeZone: 'Asia/Kolkata',
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                      })
+                    : rec.meetup_label || 'Saturday Meetup';
+
+                  const formattedTime = checkinDate && !isNaN(checkinDate.getTime())
+                    ? checkinDate.toLocaleTimeString('en-IN', {
+                        timeZone: 'Asia/Kolkata',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: true,
+                      })
+                    : '';
+
+                  return (
+                    <div
+                      key={rec.id || idx}
+                      className="flex items-center justify-between p-3 rounded-xl bg-slate-900/60 border border-purple-500/15 hover:border-purple-500/30 transition-all text-xs"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-7 h-7 rounded-lg bg-emerald-950/50 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0 font-bold text-[11px]">
+                          {records.length - idx}
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-100">{rec.event_name || 'Saturday Meetup'}</p>
+                          <p className="text-[11px] text-slate-400">
+                            {formattedDate} {formattedTime && `• ${formattedTime}`}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-950/60 border border-emerald-500/30 text-emerald-300 font-bold text-[11px]">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                        {rec.status || 'Attended'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-purple-500/20 pt-3 flex items-center justify-between">
+          <p className="text-[11px] text-slate-500">
+            Read-only • Verified via Visitor Check-In
+          </p>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl bg-slate-900 border border-slate-700/60 hover:bg-slate-800 text-slate-200 text-xs font-semibold cursor-pointer transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 // ─── Contact Card ─────────────────────────────────────────────────────────────
 function ContactCard({
   assignment,
   onStatusChange,
   onNotes,
+  onOpenAttendance,
 }: {
   assignment: GenericAssignmentData;
   onStatusChange: (id: string, status: AllowedStatus) => Promise<void>;
   onNotes: (id: string, current: string) => void;
+  onOpenAttendance: (contact: { id?: string; name: string; phone: string; classes_attended: number }) => void;
 }) {
   const contact = (
     assignment.master_contacts ||
@@ -167,6 +387,10 @@ function ContactCard({
   const fullName = String(contact.name ?? contact.full_name ?? '—');
   const rawPhone = String(contact.phone ?? '');
   const cleanPhone = sanitizePhone(rawPhone);
+  const contactId = String(contact.id || (assignment as unknown as Record<string, unknown>).master_contact_id || '');
+  const classesAttended = typeof contact.classes_attended === 'number'
+    ? contact.classes_attended
+    : (parseInt(String((contact as unknown as Record<string, unknown>).classes_attended ?? 0), 10) || 0);
   const college = String(contact.company_college || contact.college_name || '—');
   const branch = String(contact.occupation || contact.branch || '');
   const gender = String(contact.gender || '');
@@ -185,11 +409,28 @@ function ContactCard({
       animate={{ opacity: 1, y: 0 }}
       className="glass-card rounded-xl p-4 space-y-3"
     >
-      {/* Header: Name + Status Badge */}
+      {/* Header: Name + Classes Attended + Status Badge */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-bold text-slate-100 text-sm leading-snug truncate">{fullName}</span>
+            <span className="text-slate-600 font-normal select-none hidden sm:inline">|</span>
+            <button
+              type="button"
+              onClick={() => onOpenAttendance({
+                id: contactId,
+                name: fullName,
+                phone: rawPhone,
+                classes_attended: classesAttended,
+              })}
+              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-purple-950/70 hover:bg-purple-900/90 border border-purple-500/40 hover:border-purple-400/70 text-purple-200 hover:text-white text-xs font-semibold cursor-pointer transition-all duration-150 shadow-sm active:scale-95 group shrink-0"
+              title="Click to view attendance history"
+              aria-label={`View attendance history for ${fullName}: ${classesAttended} classes attended`}
+            >
+              <GraduationCap className="w-3.5 h-3.5 text-purple-400 group-hover:text-purple-300 shrink-0" />
+              <span>Classes Attended:</span>
+              <span className="font-bold text-amber-300 group-hover:text-amber-200 ml-0.5">{classesAttended}</span>
+            </button>
             {isOnlineWorkshop && (
               <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-950/60 border border-indigo-500/30 text-indigo-300 shrink-0">
                 <Laptop className="w-3 h-3 text-indigo-400" /> Online Workshop
@@ -329,8 +570,10 @@ function OperatorPortalContent() {
     total_not_coming: 0,
     total_not_answered: 0,
     total_next_week: 0,
+    total_pending: 0,
   });
   const [loadingData, setLoadingData] = useState(false);
+  const [errorData, setErrorData] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const toast = (msg: string) => {
@@ -348,6 +591,15 @@ function OperatorPortalContent() {
     open: false,
     assignmentId: '',
     notes: '',
+  });
+
+  // Attendance History Modal State
+  const [attendanceModal, setAttendanceModal] = useState<{
+    open: boolean;
+    contact: { id?: string; name: string; phone: string; classes_attended: number } | null;
+  }>({
+    open: false,
+    contact: null,
   });
 
   // 1. Fetch Current Operator Profile
@@ -384,17 +636,20 @@ function OperatorPortalContent() {
 
       if (res.ok && json.assignments) {
         setAssignments(json.assignments as GenericAssignmentData[]);
+        setErrorData(null);
         if (json.stats) {
           setStats(json.stats);
         }
       } else {
+        setErrorData(json.error || `Failed to load assignments (HTTP ${res.status})`);
         setAssignments([]);
-        setStats({ total_assigned: 0, total_coming: 0, total_not_coming: 0, total_not_answered: 0, total_next_week: 0 });
+        setStats({ total_assigned: 0, total_coming: 0, total_not_coming: 0, total_not_answered: 0, total_next_week: 0, total_pending: 0 });
       }
     } catch (err) {
       console.error('Failed to fetch operator assignments:', err);
+      setErrorData(err instanceof Error ? err.message : 'Network error while loading assignments');
       setAssignments([]);
-      setStats({ total_assigned: 0, total_coming: 0, total_not_coming: 0, total_not_answered: 0, total_next_week: 0 });
+      setStats({ total_assigned: 0, total_coming: 0, total_not_coming: 0, total_not_answered: 0, total_next_week: 0, total_pending: 0 });
     } finally {
       if (!isBackground) setLoadingData(false);
     }
@@ -611,8 +866,8 @@ function OperatorPortalContent() {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 pt-4 space-y-4">
-        {/* --- Metric Overview Cards (ASSIGNED, COMING, NOT COMING, NOT ANSWERED, NEXT WEEK) --- */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+        {/* --- Metric Overview Cards (ASSIGNED, COMING, NOT COMING, NOT ANSWERED, NEXT WEEK, PENDING) --- */}
+        <div className="grid grid-cols-2 sm:grid-cols-6 gap-2.5">
           <div className="glass-card rounded-xl p-3 border-blue-500/20 text-center">
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Assigned</p>
             <p className="text-xl font-extrabold text-blue-400 mt-0.5">{stats.total_assigned}</p>
@@ -629,9 +884,15 @@ function OperatorPortalContent() {
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Not Answered</p>
             <p className="text-xl font-extrabold text-amber-400 mt-0.5">{stats.total_not_answered}</p>
           </div>
-          <div className="glass-card rounded-xl p-3 border-purple-500/20 text-center col-span-2 sm:col-span-1">
+          <div className="glass-card rounded-xl p-3 border-purple-500/20 text-center">
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Next Week</p>
             <p className="text-xl font-extrabold text-purple-400 mt-0.5">{stats.total_next_week}</p>
+          </div>
+          <div className="glass-card rounded-xl p-3 border-slate-700/40 text-center">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Pending</p>
+            <p className="text-xl font-extrabold text-slate-300 mt-0.5">
+              {stats.total_pending ?? Math.max(0, stats.total_assigned - (stats.total_coming + stats.total_not_coming + stats.total_not_answered + stats.total_next_week))}
+            </p>
           </div>
         </div>
 
@@ -653,6 +914,16 @@ function OperatorPortalContent() {
             <Loader2 className="w-6 h-6 animate-spin mx-auto text-purple-400" />
             <p className="text-xs font-medium">Loading assigned contacts for {sourceTitle}...</p>
           </div>
+        ) : errorData ? (
+          <div className="glass-card rounded-2xl p-6 border border-rose-500/30 bg-rose-950/20 text-center space-y-3">
+            <p className="text-sm font-semibold text-rose-300">{errorData}</p>
+            <button
+              onClick={() => loadAssignments(false)}
+              className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all cursor-pointer shadow-md"
+            >
+              Retry Loading
+            </button>
+          </div>
         ) : paginatedList.length === 0 ? (
           <div className="glass-card rounded-2xl p-8 text-center space-y-3">
             <Sparkles className="w-8 h-8 text-purple-400 mx-auto" />
@@ -669,6 +940,7 @@ function OperatorPortalContent() {
                 assignment={assignment}
                 onStatusChange={handleStatusChange}
                 onNotes={(id, current) => setNotesModal({ open: true, assignmentId: id, notes: current })}
+                onOpenAttendance={(contact) => setAttendanceModal({ open: true, contact })}
               />
             ))}
           </div>
@@ -705,6 +977,14 @@ function OperatorPortalContent() {
           currentNotes={notesModal.notes}
           onSave={handleSaveNotes}
           onClose={() => setNotesModal({ open: false, assignmentId: '', notes: '' })}
+        />
+      )}
+
+      {/* --- Attendance History Modal --- */}
+      {attendanceModal.open && attendanceModal.contact && (
+        <AttendanceHistoryModal
+          contact={attendanceModal.contact}
+          onClose={() => setAttendanceModal({ open: false, contact: null })}
         />
       )}
 

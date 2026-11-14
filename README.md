@@ -1,427 +1,469 @@
-# HKM CRM-Based Contact Management & Event Operations Platform
+# MECM – Multi-Event CRM Platform
 
 [![Next.js](https://img.shields.io/badge/Next.js-16.2.9-black?style=flat&logo=next.js)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19.2.4-61DAFB?style=flat&logo=react)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6?style=flat&logo=typescript)](https://www.typescriptlang.org/)
-[![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?style=flat&logo=supabase)](https://supabase.com/)
+[![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL%2015+-3ECF8E?style=flat&logo=supabase)](https://supabase.com/)
 [![Tailwind CSS](https://img.shields.io/badge/TailwindCSS-v4.0-38B2AC?style=flat&logo=tailwind-css)](https://tailwindcss.com/)
+[![Production Status](https://img.shields.io/badge/Deployment-Live%20on%20Vercel-success)](https://mecm.vercel.app)
 
-An enterprise-grade, multi-event CRM and operations management platform built for Hare Krishna Movement (HKM) festivals, registrations, volunteer coordination, and attendee follow-ups.
+**MECM** (Multi-Event CRM Platform) is an enterprise-grade event management, attendee lifecycle tracking, volunteer coordination, and calling operations platform. It aggregates high-volume public event registrations, normalizes and deduplicates master contacts, manages caller assignments with capacity controls, tracks weekly Saturday Meetup attendance and class histories, and delivers real-time operational analytics for large-scale cultural and community gatherings.
 
-This document serves as the complete, beginner-friendly setup, execution, database architecture, and deployment guide for client teams and developers.
+* **Production URL:** [https://mecm.vercel.app](https://mecm.vercel.app)
+* **Target Audience:** Administrators, Calling Operators, Event Volunteers, and Public Attendees.
 
 ---
 
 ## Table of Contents
 
-1. [Project Overview](#1-project-overview)
-2. [Major Features](#2-major-features)
-3. [Technology Stack](#3-technology-stack)
-4. [Prerequisites](#4-prerequisites)
-5. [Download & Clone Project](#5-download--clone-project)
-6. [Install Dependencies](#6-install-dependencies)
-7. [Configure Environment Variables](#7-configure-environment-variables)
-8. [Set Up Supabase Database](#8-set-up-supabase-database)
-9. [Run Application Locally](#9-run-application-locally)
-10. [First-Time Admin Setup](#10-first-time-admin-setup)
-11. [Application Routes Directory](#11-application-routes-directory)
-12. [Database Architecture & Schema](#12-database-architecture--schema)
-13. [Contact Assignment Workflow](#13-contact-assignment-workflow)
-14. [Testing & Production Build](#14-testing--production-build)
-15. [Troubleshooting Guide](#15-troubleshooting-guide)
-16. [Security & Compliance Notes](#16-security--compliance-notes)
-17. [Limitations & Known Dependencies](#17-limitations--known-dependencies)
+1. [Project Overview](#project-overview)
+2. [Key Features](#key-features)
+3. [Technology Stack](#technology-stack)
+4. [Architecture & Workflow](#architecture--workflow)
+5. [Directory Structure](#directory-structure)
+6. [Installation & Local Setup](#installation--local-setup)
+7. [Environment Variables](#environment-variables)
+8. [Database Setup & Migrations](#database-setup--migrations)
+9. [Application Routes](#application-routes)
+10. [Production Build & Deployment](#production-build--deployment)
+11. [Testing & Verification](#testing--verification)
+12. [Security & Access Control](#security--access-control)
+13. [Screenshots](#screenshots)
+14. [Contributing & License](#contributing--license)
 
 ---
 
-## 1. Project Overview
+## Project Overview
 
-The **HKM CRM-Based Contact Management & Event Operations Platform** bridges public event registration portals with a centralized operational engine. It handles high-volume registration drives (e.g., *Rathayatra*, *Sri Krishnashtami*, and specialized *Contacts Register* drives), aggregates registrant records into unified **Master Contacts**, assigns contacts to volunteer **Operators** for follow-ups, captures feedback, manages on-site visitor check-ins, and renders real-time analytics.
+Organizations hosting recurring community festivals and weekly youth sessions frequently struggle with fragmented attendee data, overlapping spreadsheets, lack of caller assignment accountability, and disconnect between reception desks and calling teams.
 
-### Registration Websites vs. Centralized CRM
+**MECM** solves these challenges by centralizing all event interactions into a single source of truth:
 
-* **Public Registration Pages:** Modern, high-conversion landing pages designed for public attendees with offline draft persistence, instant phone validation, and location autocomplete.
-* **Centralized CRM System:** Back-office administrative tools providing real-time data tables, multi-festival switching, automated capacity-based assignment, call tracking, and status analytics.
+* **Centralized Master Contacts:** Deduplicates entries across diverse festivals (*Rathayatra*, *Sri Krishnashtami*, *College Contact Drives*) using normalized 10-digit Indian phone numbers.
+* **Controlled Calling Pipeline:** Assigns contacts to active volunteer operators with strict capacity limits (e.g., maximum 40 calls per operator), organizational policy filters (such as female contact safety exclusions), and calling status progression.
+* **Saturday Meetup & Class Attendance Tracking:** Connects walk-in visitor check-ins directly with calling lists, maintaining total verified class attendance counts and chronological session history.
+* **Weekly Automated Rollover:** Automatically archives previous Saturday Meetup statistics and resets weekly calling counters every Friday at 00:00 IST while permanently preserving contact assignments and attendance milestones.
+* **Comprehensive Analytics & Reporting:** Real-time dashboards with unlimited, batched CSV export and printable PDF reports across all administrative modules.
 
 ---
 
-## 2. Major Features
+## Key Features
 
-| Feature Module | Description | Primary Route / Location |
+### 1. Multi-Event & Registration Management
+* **Festival Portals:** Dedicated public landing and registration interfaces for major festivals (Rathayatra, Sri Krishnashtami, and Special Contact Drives).
+* **Instant Validation & Persistence:** Client-side draft saving (`localStorage`), duplicate mobile number checks, and Geoapify address autocomplete.
+* **Registration Passes & QR Codes:** Instant confirmation screen generating dynamic QR codes encoding secure verification URLs for reception check-in.
+
+### 2. Master Contact Directory (`/admin/master_dashboard`)
+* **Unified Identity:** Canonical Master Contact records tracking full profile data, area of stay, college/occupation, chanting rounds, and student levels (`Level 1`, `Level 2`, `Level 3`).
+* **Cross-Event History:** Tracks every event an individual has participated in over time.
+* **Bulk & Manual Assignment:** Assign single or multiple contacts to operators with real-time capacity validation.
+
+### 3. Operator Management & Calling Operations (`/admin/operators`)
+* **Operator Roster:** Manage volunteer operators, active status toggles, language capabilities, and maximum assignment caps.
+* **Fail-Closed Protection:** Ensures female contacts cannot be assigned to operators, enforcing organization policy across auto and manual assignment pipelines.
+* **Realtime Assignment Synchronization:** Instant status updates via Supabase Realtime channels.
+
+### 4. Operator Portal (`/operator/portal`)
+* **Secure Authentication:** Independent JWT cookie authentication powered by `bcryptjs` and HTTP-only session cookies.
+* **Streamlined Calling UI:** Mobile-first, responsive dark interface with single-tap direct Phone dialer (`tel:`) and pre-formatted WhatsApp chat links.
+* **Authoritative Status Tracking:** Record immediate responses:
+  * `Assigned` (Initial state)
+  * `Coming` (Confirmed attendee)
+  * `Not Coming`
+  * `Not Answered`
+  * `Next Week` (Call back next cycle)
+* **Class Attendance View & History Modal:** Displays verified `Classes Attended: X` beside each contact name; clicking opens an interactive history modal detailing session dates, meetup titles, and approving admin.
+
+### 5. Saturday Meetup Dashboard (`/admin/saturday-meetup`)
+* **Synchronized Visitor Metrics:** Live counters reconciling approved visitor check-ins with calling lists.
+* **Weekly Rollover Engine:** Resets weekly call counters (`Coming`, `Not Coming`, `Not Answered`, `Next Week`, `Pending`) every Friday at 00:00 IST without resetting assignments or lifetime class attendance.
+* **Historical Meetup Archive:** Permanent archive of previous Saturday attendance records for trend analysis.
+
+### 6. Visitor Check-In System (`/visitor`)
+* **Reception Desk Portal:** Fast walk-in registration and badge scanning at event premises.
+* **Master Contact Auto-Linking:** Automatically connects new check-in records to existing Master Contacts by phone number and increments verified class attendance.
+
+### 7. Feedback Dashboard (`/admin/feedback_dashboard`)
+* **Student Feedback Analytics:** Real-time metrics for hundreds of post-event feedback submissions.
+* **Dynamic Multi-Filtering:** Real-time calculation of Satisfaction Rates, Online Workshop Conversions, Ratings breakdown (Excellent/Good/Not Applicable), and Accommodation breakdown (With Parents vs. In Hostel).
+* **Secure Operator Assignment Controls:** Manual assignment workflow without accidental bulk auto-assignments.
+
+### 8. Enterprise Reporting & Unlimited Export
+* **No 1,000-Record Ceiling:** Custom batched retrieval loops bypass standard Supabase query limits.
+* **Export CSV:** Full UTF-8 BOM encoding with standard escaping and timestamps.
+* **Print / Export PDF:** Multi-page print layout with repeated table headers and executive metric cards.
+
+---
+
+## Technology Stack
+
+| Layer | Technology | Details |
 | :--- | :--- | :--- |
-| **Rathayatra Registration** | Public multi-step registration form for Rathayatra festival attendees with transport, stay, and workshop preferences. | `/` |
-| **Krishnashtami Registration** | Public registration portal tailored for Sri Krishnashtami festival. | `/krishnashtami-complete` |
-| **Contacts Register Drive** | Specialized quick contact collection portal with instant draft saving and QR modal generation. | `/contacts-register` |
-| **Master Contacts Dashboard** | Deduplicated, central directory aggregating attendee history across all festivals with phone normalization (`+91XXXXXXXXXX`). | `/admin/master_dashboard` |
-| **Event Registrations Admin** | Searchable, filterable admin tables for festival-specific registrations with bulk manual assignment and CSV export. | `/admin/registrations` |
-| **Contacts Register Admin** | Dedicated management dashboard for public contact drive registrations with status filtering and export capabilities. | `/admin/contacts-register` |
-| **Operator Management** | Admin module for managing calling team members, setting language skills, active status, max call caps, and role types. | `/admin/operators` |
-| **Operator Call Portal** | Dedicated portal for volunteers to review assigned contacts, make calls, log follow-up statuses, and record notes. | `/operator/portal` |
-| **Auto-Assignment Engine** | Atomic SQL Stored Procedure (`rpc_auto_assign_contacts`) matching unassigned contacts to active operators by language and capacity caps. | Backend API `/api/assignments/auto` |
-| **Feedback Management** | Post-event attendee feedback submission portal and administrative analysis suite. | `/feedback` & `/admin/feedback_dashboard` |
-| **Visitor Check-In System** | On-site reception portal for logging walk-in visitors, assignees, and occupancy metrics. | `/visitor` & `/operator/visitor` |
-| **Services Management** | Service booking and volunteer slot management interface for festival logistics. | `/admin/services` |
+| **Framework** | Next.js 16 (App Router) | High-performance React framework with Server & Client components |
+| **UI Library** | React 19 | Latest React architecture with concurrent features |
+| **Language** | TypeScript 5 | End-to-end type safety across components, APIs, and database schemas |
+| **Styling** | Tailwind CSS v4 | Modern styling engine with PostCSS, Lucide Icons, and Next Themes |
+| **Database & BaaS** | Supabase (PostgreSQL 15+) | Cloud PostgreSQL with Row Level Security (RLS) & Realtime Pub/Sub |
+| **Server Operations**| Node.js / `pg` | PostgreSQL client for administrative migrations and direct queries |
+| **Testing Engine** | `@electric-sql/pglite` | In-memory PostgreSQL 16 WASM engine for headless isolation tests |
+| **Auth & Security** | JWT & bcryptjs | Cookie-based session management for operators; Supabase Auth for admins |
+| **Form Management** | React Hook Form & Zod v4 | Declarative schema validation and sanitized payload handling |
+| **Data Viz** | Recharts | Interactive SVG chart components for metric dashboards |
+| **Motion & Confetti**| Framer Motion & Canvas Confetti | Smooth UI micro-interactions and celebration banners |
+| **QR Code Engine** | `qrcode` | Dynamic client and server QR generation for passes and URL routing |
 
 ---
 
-## 3. Technology Stack
+## Architecture & Workflow
 
-* **Framework:** Next.js 16 (App Router)
-* **Frontend Library:** React 19
-* **Language:** TypeScript 5
-* **Styling Engine:** TailwindCSS v4 with Next Themes (Dark/Light mode support)
-* **Database & BaaS:** Supabase (PostgreSQL 15+, Row Level Security, Realtime Pub/Sub)
-* **Form & Validation:** React Hook Form + Zod v4 validation schemas
-* **Data Visualization:** Recharts for admin dashboard graphs & statistics
-* **Animations & Micro-interactions:** Framer Motion & canvas-confetti
-* **State & Query Management:** TanStack React Query v5
-* **Authentication:** Custom JWT-based Operator Session Management & HTTP-only cookies (`jsonwebtoken`, `bcryptjs`)
-* **QR Code Generation:** `qrcode` library
+### Data Architecture Overview
 
----
+```mermaid
+flowchart TD
+    subgraph Public["Public Portals"]
+        Rathayatra["Rathayatra Form (/)"]
+        Krishnashtami["Krishnashtami (/krishnashtami-complete)"]
+        ContactsDrive["Contact Drive (/contacts-register)"]
+        Feedback["Feedback (/feedback)"]
+        VisitorWalkin["Visitor Check-in (/visitor)"]
+    end
 
-## 4. Prerequisites
+    subgraph Master["Master Directory Layer"]
+        MC["master_contacts (Unique 10-Digit Phone)"]
+        MCE["master_contact_events (Event Participation)"]
+        FC["feedback_contacts (Survey Responses)"]
+        VC["visitor_checkins (Reception Visits)"]
+    end
 
-Before installing the application locally, ensure your system has the following software installed:
+    subgraph Operations["Calling & Operations Engine"]
+        CO["contact_operators (Volunteers & Admins)"]
+        MCA["master_contact_assignments (Active Calls)"]
+        FCA["feedback_contact_assignments"]
+    end
 
-1. **Node.js:** v18.18.0 or v20.x or higher ([Download Node.js](https://nodejs.org/))
-2. **npm:** v9.x or higher (Included with Node.js)
-3. **Git:** latest version ([Download Git](https://git-scm.com/))
-4. **Supabase Account:** Free or Pro account on [Supabase.com](https://supabase.com)
+    subgraph Dashboards["Administrative & Operator Views"]
+        AdminMaster["Master Dashboard (/admin/master_dashboard)"]
+        AdminSaturday["Saturday Meetup (/admin/saturday-meetup)"]
+        AdminFeedback["Feedback Dashboard (/admin/feedback_dashboard)"]
+        OpPortal["Operator Portal (/operator/portal)"]
+    end
 
-### Verify Installation Commands
+    Public -->|Deduplicate & Normalize| MC
+    Public -->|Log Responses| FC
+    Public -->|Log Check-in| VC
+    MC --> MCE
+    MC --> MCA
+    CO --> MCA
+    FC --> FCA
+    CO --> FCA
+    MCA --> OpPortal
+    VC -->|Increment Attendance| MC
+    MC --> AdminMaster
+    MCA --> AdminSaturday
+    VC --> AdminSaturday
+    FC --> AdminFeedback
+```
 
-Open your terminal or command prompt and run:
+### Assignment & Calling Lifecycle
 
-```bash
-node --version
-# Expected output: v18.x.x or v20.x.x+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Attendee as Public Registrant
+    participant Web as Next.js Form API
+    participant DB as Supabase PostgreSQL
+    actor Admin as Event Administrator
+    actor Operator as Volunteer Caller
 
-npm --version
-# Expected output: 9.x.x or 10.x.x+
-
-git --version
-# Expected output: git version 2.x.x
+    Attendee->>Web: Submits Registration Form
+    Web->>DB: Normalizes Phone (+91...) & Upserts master_contacts
+    Admin->>DB: Triggers Assignment (Capacity-Capped & Policy-Enforced)
+    DB->>DB: Records Active Assignment in master_contact_assignments
+    DB-->>Operator: Supabase Realtime pushes new assignment
+    Operator->>Web: Opens /operator/portal
+    Web->>DB: Fetches Assigned Contacts & Verified Class Counts
+    Operator->>Attendee: Calls or WhatsApps Attendee
+    Operator->>Web: Logs Calling Status (Coming / Not Coming / Next Week)
+    Web->>DB: Updates status and timestamp (weekly period scoped)
+    Attendee->>Web: Attends Saturday Meetup & Scans QR
+    Web->>DB: Approves Check-in & Increments classes_attended
+    Note over DB,Web: Realtime sync updates Saturday Meetup Visitor Count
 ```
 
 ---
 
-## 5. Download & Clone Project
+## Directory Structure
 
-Open VS Code or your terminal and execute:
-
-```bash
-# Clone repository from GitHub
-git clone https://github.com/Bharath-723/HKM.git
-
-# Navigate into project directory
-cd HKM
-```
-
----
-
-## 6. Install Dependencies
-
-Install all node modules using `npm ci` (Clean Install based on `package-lock.json`):
-
-```bash
-npm ci
-```
-
-> **Note:** Installation typically takes 1-3 minutes depending on your internet connection speed.
-
----
-
-## 7. Configure Environment Variables
-
-The application requires specific environment variables to communicate with Supabase and execute server-side API routes safely.
-
-### 1. Create `.env.local` File
-
-#### Windows PowerShell:
-```powershell
-Copy-Item .env.example .env.local
-```
-
-#### macOS / Linux Terminal:
-```bash
-cp .env.example .env.local
-```
-
-### 2. Required Environment Variables Reference
-
-Open `.env.local` in your text editor and fill in your Supabase credentials:
-
-| Variable Name | Description & Usage | Exposure Level | Required? |
-| :--- | :--- | :--- | :--- |
-| `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase Project API URL (e.g. `https://xyz.supabase.co`) | **Public** (Browser & Server) | **Yes** |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public Anonymous API Key for client queries | **Public** (Browser & Server) | **Yes** |
-| `SUPABASE_SERVICE_ROLE_KEY` | Secret Service Role Key for Admin API routes & scripts | **SECRET** (Server-Side Only) | **Yes** |
-| `OPERATOR_JWT_SECRET` | Secret key for signing Operator Portal session cookies | **SECRET** (Server-Side Only) | **Recommended** |
-| `NEXT_PUBLIC_APP_URL` | Base website domain used for QR Code links (default: `http://localhost:3000`) | **Public** | Optional |
-| `NEXT_PUBLIC_KRISHNASHTAMI_WHATSAPP_URL` | WhatsApp community group invite URL for registrant success pages | **Public** | Optional |
-| `GEOAPIFY_API_KEY` | Key for address geocoding autocomplete on registration forms | **SECRET** | Optional |
-
-> ⚠️ **CRITICAL SECURITY RULE:** `SUPABASE_SERVICE_ROLE_KEY` grants full access bypassing Row Level Security. **NEVER** commit `.env.local` to Git or share your service key publicly.
-
----
-
-## 8. Set Up Supabase Database
-
-Follow these steps to configure a fresh Supabase database for development or production:
-
-### Step 1: Create a Supabase Project
-1. Log in to [Supabase Dashboard](https://supabase.com/dashboard).
-2. Click **New Project**, select your organization, project name (e.g., `hkm-crm-dev`), and set a secure Database Password.
-3. Choose your closest region and click **Create New Project**.
-
-### Step 2: Retrieve API Keys
-1. Go to **Project Settings** -> **API**.
-2. Copy **Project URL** -> paste into `NEXT_PUBLIC_SUPABASE_URL` in `.env.local`.
-3. Copy **`anon` `public` key** -> paste into `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.local`.
-4. Copy **`service_role` `secret` key** -> paste into `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`.
-
-### Step 3: Run Database Migrations
-Database schema migrations are located in `supabase/migrations/` and must be applied in strict chronological order.
-
-1. Open **SQL Editor** in your Supabase Dashboard.
-2. Run each `.sql` file in `supabase/migrations/` sequentially:
-
-| Order | Migration File Name | Description |
-| :---: | :--- | :--- |
-| 1 | `20260626000000_init_schema.sql` | Core `rathayatra_registrations` table, RLS policies, and triggers |
-| 2 | `20260630000000_add_occupation.sql` | Adds occupation tracking fields |
-| 3 | `20260709000000_add_transportation.sql` | Adds transport and stay preference fields |
-| 4 | `20260709100000_add_contact_operators.sql` | Adds `contact_operators` and `operator_assignments` tables |
-| 5 | `20260709200000_enable_realtime_assignments.sql` | Enables Supabase Realtime publication on assignments |
-| 6 | `20260709300000_allow_null_operator.sql` | Adjusts nullability for unassigned records |
-| 7 | `20260710000000_auto_assignment_rpc.sql` | Initial SQL function for auto-assigning contacts |
-| 8 | `20260710100000_auto_assignment_rpc_max_contacts.sql` | Capacity-capped auto assignment RPC |
-| 9 | `20260710200000_phase3b_status_workflow.sql` | Call statuses, notes, and call attempt timestamps |
-| 10 | `20260710300000_phase4_visitor_visits.sql` | On-site `visitor_visits` tracking schema |
-| 11 | `20260718000000_service_management.sql` | Service booking and volunteer slot management |
-| 12 | `20260718100000_update_rpc_exclude_not_coming.sql` | Excludes 'Not Coming' contacts from operator queues |
-| 13 | `20260718200000_update_rpc_and_stats_not_coming.sql` | Updates status workflow analytics |
-| 14 | `20260718300000_exclude_not_coming_from_assigned.sql` | Unassigns inactive contacts |
-| 15 | `20260718400000_add_operator_role_types.sql` | Adds role types (`admin`, `caller`, `volunteer`) to operators |
-| 16 | `20260807000000_feedback_contacts.sql` | Post-event feedback table schema |
-| 17 | `20260808000000_feedback_assignment_reset.sql` | Feedback assignment resets |
-| 18 | `20260813000000_multi_festival_schema.sql` | Multi-festival routing and schema abstractions |
-| 19 | `20260813100000_add_registration_prasadam.sql` | Prasadam coupon and token tracking |
-| 20 | `20260814000000_krishnashtami_dedicated_tables.sql` | `krishnashtami_registrations` & dedicated assignment schema |
-| 21 | `20260814100000_enforce_active_assignment_uniqueness.sql` | Partial unique indexes preventing double operator assignments |
-| 22 | `20260814110000_fix_contact_operators_fk_cascade.sql` | Cascade constraints cleanup |
-| 23 | `20260815120000_atomic_capacity_assign_rpc.sql` | Race-condition safe atomic assignment RPC |
-| 24 | `20260815140000_fix_status_check_constraints.sql` | Check constraints for valid operator call statuses |
-| 25 | `20260820000000_add_standard_to_krishnashtami.sql` | Student standard/grade preferences |
-| 26 | `20260822000000_add_next_week_and_not_answered_status.sql` | 'Call Next Week' and 'Not Answered' workflow statuses |
-| 27 | `20260830000000_add_service_id_to_krishnashtami.sql` | Service ID relation for Krishnashtami |
-| 28 | `20260903000000_master_contacts_schema.sql` | Unified deduplicated `master_contacts` & `master_contact_events` |
-| 29 | `20261003000000_contacts_register_schema.sql` | Public drive `contacts_register` and dedicated assignment schema |
-
----
-
-## 9. Run Application Locally
-
-Start the Next.js development server:
-
-```bash
-npm run dev
-```
-
-The console will output:
 ```text
-  ▲ Next.js 16.2.9
-  - Local:        http://localhost:3000
-  - Environments: .env.local
-
- ✓ Starting...
- ✓ Ready in 2.1s
+rathayatra/
+├── docs/                           # Architectural guides & product requirements
+├── public/                         # Static assets (favicons, manifest, icons, sw.js)
+├── scripts/                        # Database migration, verification & testing scripts
+│   ├── build-sw.js                 # Service worker compilation script
+│   ├── test-operator-class-attendance.ts  # Attendance view verification
+│   ├── test-weekly-counter-reset.ts# Weekly rollover test suite (PGlite)
+│   ├── test-unlimited-export-print.ts     # Export limit regression test
+│   └── run-sql-migration.ts        # Supabase SQL migration runner
+├── src/
+│   ├── app/                        # Next.js App Router
+│   │   ├── admin/                  # Protected administrative dashboards
+│   │   │   ├── contacts-register/  # Contact drive management
+│   │   │   ├── dashboard/          # General analytics overview
+│   │   │   ├── feedback_dashboard/ # Student feedback analysis & export
+│   │   │   ├── master_dashboard/   # Master contacts central directory
+│   │   │   ├── operators/          # Operator capacity & roster management
+│   │   │   ├── registrations/      # Event registrations table
+│   │   │   ├── saturday-meetup/    # Saturday meetup live attendance & history
+│   │   │   └── services/           # Service & volunteer slots management
+│   │   ├── api/                    # Server-side API endpoints
+│   │   │   ├── assignments/        # Assignment engine & status updates
+│   │   │   ├── feedback/           # Feedback submission & batched reporting
+│   │   │   ├── operator/           # Operator attendance history endpoint
+│   │   │   ├── operators/          # Operator authentication & weekly resets
+│   │   │   ├── saturday-meetup/    # Saturday meetup stats & historical archive
+│   │   │   └── visitor/            # Check-in, approval & attendance logs
+│   │   ├── contacts-register/      # Public contact drive form
+│   │   ├── feedback/               # Public attendee feedback form
+│   │   ├── krishnashtami-complete/ # Krishnashtami registration portal
+│   │   ├── operator/               # Operator authentication & /operator/portal
+│   │   ├── qr/                     # Dynamic QR generation & print hub
+│   │   ├── rathayatra-complete/    # Rathayatra registration portal
+│   │   ├── visitor/                # Public/Reception walk-in check-in form
+│   │   ├── layout.tsx              # Root HTML & provider setup
+│   │   └── page.tsx                # Responsive MECM landing page
+│   ├── components/                 # Reusable UI & layout components
+│   │   ├── landing/                # Modern MECM landing page components
+│   │   ├── AdminShell.tsx          # Common admin navigation sidebar & header
+│   │   ├── qr-modal.tsx            # Printable QR modal with download options
+│   │   └── providers.tsx           # React Query & Theme providers
+│   └── lib/                        # Core utilities, business logic & DB clients
+│       ├── master-contacts.ts      # Phone normalization & master upsert logic
+│       ├── operator-auth.ts        # JWT & bcrypt operator authentication
+│       ├── qr-url-resolver.ts      # Canonical QR destination URL resolver
+│       ├── status-normalizer.ts    # Weekly calling status aggregator
+│       ├── supabase-admin.ts       # Service-role Supabase client (Server-only)
+│       ├── supabase.ts             # Anon public Supabase client (Browser)
+│       ├── types.ts                # TypeScript domain models & interfaces
+│       └── weekly-period.ts        # Friday 00:00 IST calculation helpers
+├── supabase/
+│   └── migrations/                 # Chronological SQL migrations (00 to 44)
+├── .env.example                    # Environment variable template
+├── package.json                    # Project dependencies & scripts
+└── tsconfig.json                   # TypeScript configuration
 ```
-
-Open your web browser and navigate to: **`http://localhost:3000`**
 
 ---
 
-## 10. First-Time Admin Setup
+## Installation & Local Setup
 
-To access the administrative dashboards (`/admin/dashboard`, `/admin/master_dashboard`, `/admin/operators`, etc.), you need an active Operator record with `admin` role.
+### Prerequisites
 
-### Step-by-Step Operator Creation
+* **Node.js:** `v20.x` or higher recommended (compatible with Node `v18.18.0+`)
+* **npm:** `v9.x` or `v10.x`
+* **Git:** Installed and configured
+* **Supabase Account:** Access to a Supabase project with PostgreSQL 15+
 
-1. Go to your **Supabase Dashboard** -> **SQL Editor**.
-2. Run the following query to insert your first admin operator:
+### Step-by-Step Installation
 
-```sql
-INSERT INTO contact_operators (
-  name,
-  phone,
-  email,
-  languages,
-  role,
-  active,
-  max_contacts
-) VALUES (
-  'System Admin',
-  '9999999999',
-  'admin@hkm.org',
-  ARRAY['English', 'Telugu', 'Hindi'],
-  'admin',
-  true,
-  1000
-);
-```
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/Bharath-723/HKM.git
+   cd HKM
+   ```
 
-3. Navigate to **`http://localhost:3000/operator`**.
-4. Enter `9999999999` to log into the Operator/Admin Session.
+2. **Install project dependencies:**
+   ```bash
+   npm install
+   ```
+
+3. **Configure environment variables:**
+   ```bash
+   # Windows PowerShell
+   Copy-Item .env.example .env.local
+
+   # macOS / Linux
+   cp .env.example .env.local
+   ```
+
+4. **Fill in `.env.local`:**
+   Open `.env.local` and provide your Supabase project API keys (see [Environment Variables](#environment-variables)).
+
+5. **Start the local development server:**
+   ```bash
+   npm run dev
+   ```
+
+6. **Open the application:**
+   Navigate to [http://localhost:3000](http://localhost:3000) in your browser.
 
 ---
 
-## 11. Application Routes Directory
+## Environment Variables
+
+All supported environment variables are detailed below. Ensure sensitive keys are never committed or exposed on public clients.
+
+| Variable Name | Required? | Location / Scope | Description |
+| :--- | :---: | :--- | :--- |
+| `NEXT_PUBLIC_SUPABASE_URL` | **Yes** | Public (Client & Server) | Base URL for your Supabase project (e.g., `https://xyz.supabase.co`). |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | **Yes** | Public (Client & Server) | Supabase anonymous public key used for client queries subject to RLS. |
+| `SUPABASE_SERVICE_ROLE_KEY` | **Yes** | **SECRET** (Server-only) | Service role key used by administrative API routes and scripts to bypass RLS. |
+| `OPERATOR_JWT_SECRET` | **Yes** | **SECRET** (Server-only) | Secret phrase used to sign and verify operator JWT session cookies. |
+| `NEXT_PUBLIC_APP_URL` | Optional | Public (Client & Server) | Production root domain (e.g., `https://mecm.vercel.app`) used to build QR destinations. |
+| `NEXT_PUBLIC_KRISHNASHTAMI_WHATSAPP_URL` | Optional | Public (Client) | WhatsApp group invite URL displayed on festival registration success pages. |
+| `GEOAPIFY_API_KEY` | Optional | **SECRET** (Server-only) | Key for address autocomplete lookup in public forms. |
+
+> [!CAUTION]
+> **Security Notice**: Never paste `SUPABASE_SERVICE_ROLE_KEY` into browser client code or commit `.env.local` to source control.
+
+---
+
+## Database Setup & Migrations
+
+The database is built on PostgreSQL with Supabase extensions. Migrations reside in `supabase/migrations/` and track the evolution of schemas, triggers, and stored procedures.
+
+### Key Database Tables
+
+| Table | Purpose |
+| :--- | :--- |
+| `master_contacts` | Canonical identity table for unique individuals (indexed by normalized phone). Stores level and lifetime `classes_attended`. |
+| `master_contact_events` | Relational join table mapping attendees to events with specific ticket, prasadam, and accommodation choices. |
+| `master_contact_assignments`| Calling assignments linking operators to master contacts, tracking call status and weekly period. |
+| `master_contact_checkins` | Check-in audit log for Saturday Meetups with timestamp and approving admin. |
+| `contact_operators` | Operator roster storing active status, role (`caller` vs. `admin`), languages, and assignment caps. |
+| `visitor_checkins` | Reception desk walk-in records, status tracking, and visitor notes. |
+| `feedback_contacts` | Attendee survey submissions, ratings, and workshop interest. |
+| `feedback_contact_assignments` | Assignment records for operator follow-ups on feedback submissions. |
+| `admins` | Administrative users authorized to manage assignments, system settings, and exports. |
+
+### Applying Migrations
+
+> [!IMPORTANT]
+> Always inspect migration files before executing them. Migrations should be executed in strict numerical sequence.
+
+1. Open your **Supabase Dashboard** -> **SQL Editor**.
+2. Review migration files in `supabase/migrations/` starting from `20260626000000_init_schema.sql` through `20261114100000_visitor_count_sync_and_indexes.sql`.
+3. Apply migrations sequentially or utilize your preferred Supabase CLI workflow:
+   ```bash
+   npx supabase db push
+   ```
+
+---
+
+## Application Routes
 
 ### Public Pages
-* `/` — Rathayatra Festival Public Registration Form
-* `/krishnashtami-complete` — Sri Krishnashtami Festival Registration Portal
-* `/contacts-register` — Contacts Register Public Drive Form
-* `/feedback` — Attendee Feedback Portal
-* `/visitor` — Walk-in Visitor Check-in Form
-* `/success` — Registration Confirmation & QR Code Pass Page
+* **`/`** — Responsive MECM Landing Page & Overview
+* **`/rathayatra-complete`** — Rathayatra Festival Public Registration Portal
+* **`/krishnashtami-complete`** — Sri Krishnashtami Festival Public Registration Portal
+* **`/contacts-register`** — Specialized Contact Drive Collection Form
+* **`/visitor`** — Public / Walk-in Reception Visitor Check-in Form
+* **`/feedback`** — Attendee Feedback & Experience Form
+* **`/qr`** — Public & Administrative QR Code Resolution Hub
+* **`/success`** — Registration Confirmation & Pass Display
 
-### Operator & Calling Pages
-* `/operator` — Operator Login Screen
-* `/operator/portal` — Dedicated Operator Call Queue & Follow-up Interface
-* `/operator/visitor` — On-site Reception & Visitor Desk
+### Operator Portal
+* **`/operator`** — Operator Secure Login Portal
+* **`/operator/portal`** — Calling Workspace (Direct Dialing, WhatsApp, Status Logging, Notes & Attendance History)
+* **`/operator/visitor`** — On-site Operator Reception Desk
 
-### Admin Dashboards (Protected)
-* `/admin/dashboard` — General Festival Analytics Overview
-* `/admin/master_dashboard` — Central Master Contacts Directory & Cross-Event History
-* `/admin/registrations` — Rathayatra & Krishnashtami Registration Records & Manual Assignment
-* `/admin/contacts-register` — Dedicated Public Drive Contacts Management
-* `/admin/operators` — Volunteer Operator Management & Capacity Controls
-* `/admin/feedback_dashboard` — Feedback Metrics & Rating Distribution
-* `/admin/services` — Services & Volunteer Slot Management
-
----
-
-## 12. Database Architecture & Schema
-
-The platform employs a two-tier database strategy: **Source Registrations** and **Master Directory**.
-
-```text
-[Rathayatra Form]    [Krishnashtami Form]    [Contacts Drive]
-        │                     │                     │
-        ▼                     ▼                     ▼
- rathayatra_reg        krishnashtami_reg      contacts_register
-        │                     │                     │
-        └─────────────────────┼─────────────────────┘
-                              │ (Deduplication Trigger / API)
-                              ▼
-                     master_contacts (Unique Normalized Phone +91...)
-                              │
-                     master_contact_events (Event Participation History)
-                              │
-                     operator_assignments (Active Caller Assignment)
-```
-
-### Core Entity Relationships
-
-* **`master_contacts`:** The single source of truth for all individuals. Unique by normalized 10-digit phone number. Stores primary contact metadata (`name`, `phone`, `whatsapp`, `email`, `area`, `city`).
-* **`master_contact_events`:** Links a master contact to specific events with event-specific preferences (prasadam tickets, transport choice, accommodation, attendance status).
-* **`contact_operators`:** Stores call center volunteers and administrators with max contact limits, assigned language arrays, and active toggles.
-* **`operator_assignments`:** Holds active or historic links between an operator and a registration record with call status tracking (`Pending`, `Connected`, `Busy`, `Not Answered`, `Call Next Week`, `Converted`, `Not Interested`, `Not Coming`).
+### Administrative Dashboards
+* **`/admin/dashboard`** — Executive Platform Analytics
+* **`/admin/master_dashboard`** — Central Master Contact Directory & Deduplicated Records
+* **`/admin/operators`** — Caller Allocation, Capacity Management & Weekly Counters
+* **`/admin/saturday-meetup`** — Saturday Meetup Attendance, Approvals & Historical Archive
+* **`/admin/feedback_dashboard`** — Student Feedback Metrics, Ratings & Unlimited Export
+* **`/admin/registrations`** — Festival Registrations Data Table & Assignment Controls
+* **`/admin/contacts-register`** — Contact Drive Registrations & Calling Pipeline
+* **`/admin/services`** — Volunteer Services & Slot Scheduling
 
 ---
 
-## 13. Contact Assignment Workflow
+## Production Build & Deployment
 
-```text
-               1. REGISTRATION
-      Public attendee completes registration
-                        │
-                        ▼
-            2. MASTER DEDUPLICATION
-     Phone normalized & linked to Master Directory
-                        │
-                        ▼
-            3. AUTO / MANUAL ASSIGNMENT
-  Admin triggers assignment or RPC auto-assigns based on:
-     • Matching Language Skills
-     • Operator Active Status = TRUE
-     • Current Load < max_contacts Limit
-                        │
-                        ▼
-             4. OPERATOR CALL QUEUE
-    Record appears instantly in Operator Portal
-                        │
-                        ▼
-              5. CALL & FEEDBACK LOG
-    Operator logs call status, notes & next action
-                        │
-                        ▼
-              6. CENTRAL REPORTING
-    Dashboard reflects updated metrics & conversion rates
-```
-
----
-
-## 14. Testing & Production Build
-
-### 1. Run TypeScript Type Checker
-Verify that all source code compiles cleanly without type errors:
-
-```bash
-npx tsc --noEmit
-```
-
-### 2. Execute Production Build
-Validate that Next.js static and server rendering builds successfully:
+### Build Script
+The project includes an automatic service-worker compilation step before running the Next.js production build:
 
 ```bash
 npm run build
 ```
 
----
+This triggers:
+1. `node scripts/build-sw.js` (Generates offline Service Worker in `public/sw.js`)
+2. `cross-env NODE_OPTIONS=--max-old-space-size=4096 next build` (Compiles optimized production bundle with memory headroom)
 
-## 15. Troubleshooting Guide
+### Vercel Deployment
 
-### Issue 1: `TypeError: fetch failed` or Supabase Connection Error
-* **Cause:** Incorrect or missing `NEXT_PUBLIC_SUPABASE_URL` or `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.local`.
-* **Fix:** Verify that `.env.local` exists in the root directory and contains active keys from your Supabase dashboard. Restart `npm run dev` after updating `.env.local`.
+The project is pre-configured for continuous deployment via [Vercel](https://vercel.com):
 
-### Issue 2: `permission denied for table ...` (RLS Error)
-* **Cause:** Supabase Row Level Security policy is blocking anon queries or table migration missed an RLS grant policy.
-* **Fix:** Ensure all migrations in `supabase/migrations/` were executed in order. Admin API routes require `SUPABASE_SERVICE_ROLE_KEY`.
+1. **Connect Repository:** Link your GitHub repository in the Vercel Dashboard.
+2. **Framework Preset:** Select `Next.js`.
+3. **Environment Variables:** Add all required variables (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `OPERATOR_JWT_SECRET`, `NEXT_PUBLIC_APP_URL`).
+4. **Deploy:** Push changes to the `main` branch to trigger automated production deployment.
 
-### Issue 3: Port 3000 is Already in Use
-* **Cause:** Another instance of Next.js or a web application is running on port 3000.
-* **Fix:** Kill the existing node process or run dev on another port:
-  ```bash
-  npx kill-port 3000
-  # Or start on port 3001:
-  npx next dev -p 3001
-  ```
-
-### Issue 4: QR Codes Render Incorrect Domain
-* **Cause:** `NEXT_PUBLIC_APP_URL` is omitted or set to localhost in production environment.
-* **Fix:** Set `NEXT_PUBLIC_APP_URL=https://your-production-domain.com` in your production deployment environment settings.
+* **Live Production Instance:** [https://mecm.vercel.app](https://mecm.vercel.app)
 
 ---
 
-## 16. Security & Compliance Notes
+## Testing & Verification
 
-1. **Environment Protection:** `.env.local` and private credentials are excluded via `.gitignore`. Never force stage or commit credentials.
-2. **Service Role Key Security:** The `SUPABASE_SERVICE_ROLE_KEY` bypasses database RLS. Use it strictly inside server-side Next.js API routes (`src/app/api/`) or administrative CLI scripts.
-3. **Data Privacy:** Exported contact CSVs and database dumps contain personal attendee information. Handle attendee data responsibly according to privacy regulations.
-4. **Least Privilege Database Roles:** Ensure anon public users are restricted to inserting registrations and viewing public options via RLS policies.
+The repository includes a comprehensive suite of automated verification scripts located in `scripts/`:
+
+```bash
+# 1. Verify TypeScript Compilation (0 errors)
+npx tsc --noEmit --incremental false
+
+# 2. Run ESLint Code Quality Checks
+npm run lint
+
+# 3. Test Weekly Counter Reset & Visitor History Engine (Isolated in-memory Postgres)
+npx tsx scripts/test-weekly-counter-reset.ts
+
+# 4. Test Operator Class Attendance & Identity Matching
+npx tsx scripts/test-operator-class-attendance.ts
+
+# 5. Verify Unlimited Export & Print Functionality
+npx tsx scripts/test-unlimited-export-print.ts
+```
 
 ---
 
-## 17. Limitations & Known Dependencies
+## Security & Access Control
 
-* **SMS / WhatsApp Gateway:** Automatic SMS notifications require integration with an external gateway provider (e.g., Twilio or WhatsApp Business API). Currently, WhatsApp invite buttons use direct `https://chat.whatsapp.com/` links.
-* **Address Autocomplete:** Geocoding suggestions depend on `GEOAPIFY_API_KEY`. If omitted, manual address input remains fully functional.
-* **Offline Draft Storage:** Registration form drafts are persisted in the user's browser `localStorage`. Clearing browser data will erase unsaved form drafts prior to submission.
+* **Multi-Tier Role Separation:**
+  * **Public Users:** Restricted by PostgreSQL Row Level Security (RLS) to `INSERT` only on designated public tables.
+  * **Operators:** Authenticated via standalone HTTP-only JWT cookies (`operator-session`) verified against active records in `contact_operators`. Operators can only read and mutate their own assigned contacts.
+  * **Administrators:** Authenticated via Supabase Auth and verified against the `admins` table. Only admins can trigger batch assignments, reassign callers, or download complete data exports.
+* **Fail-Closed Gender Protection:** Database and API constraints strictly exclude female contacts from caller queues, ensuring complete adherence to organizational safety policies.
+* **Input Sanitization:** All incoming requests are validated against strict Zod schemas before touching database layers.
 
 ---
 
-*HKM CRM & Event Operations Platform Documentation — Prepared for Client Setup & Deployment.*
+## Screenshots
+
+| View | Description |
+| :--- | :--- |
+| **Landing Page** | High-conversion responsive landing page with dark theme, festival navigation, and organization partners. |
+| **Operator Portal** | Caller queue with direct Phone/WhatsApp triggers, status selection, and **Classes Attended** history. |
+| **Saturday Meetup** | Real-time visitor arrival counter, pending calls reconciliation, and weekly historical meetups. |
+| **Master Dashboard** | Deduplicated database of attendees across all campaigns with chanting rounds and assignment states. |
+| **Feedback Dashboard** | Analytics cards, satisfaction ratings, stay distribution, and unlimited CSV / PDF export. |
+
+*(Place screenshots in `docs/screenshots/` and update references as needed).*
+
+---
+
+## Contributing & License
+
+### Contributing
+1. Fork the repository and create a feature branch (`git checkout -b feature/amazing-feature`).
+2. Run TypeScript (`npx tsc --noEmit --incremental false`) and lint checks (`npm run lint`).
+3. Commit your changes with clear messages (`git commit -m 'feat: add amazing feature'`).
+4. Push to your branch and open a Pull Request.
+
+### License
+This project is proprietary and maintained for Hare Krishna Movement (HKM) and MECM event operations. All rights reserved. For licensing inquiries, contact the development and administrative teams.
+
+---
+
+*MECM Platform Documentation — Updated November 2026.*

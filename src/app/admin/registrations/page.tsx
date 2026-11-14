@@ -425,7 +425,7 @@ function AssignContactModal({
 
 export default function RegistrationsPage() {
   const queryClient = useQueryClient();
-  const { selectedEventId } = useFestival();
+  const { selectedEventId, selectedFestival } = useFestival();
   const sourceConfig = getRegistrationSource(selectedEventId);
   const [qrOpen, setQrOpen] = useState(false);
 
@@ -1909,7 +1909,11 @@ export default function RegistrationsPage() {
       </div>
 
       {/* --- QR CODE CONFIGURATION MODAL --- */}
-      <QRModal isOpen={qrOpen} onClose={() => setQrOpen(false)} />
+      <QRModal
+        isOpen={qrOpen}
+        onClose={() => setQrOpen(false)}
+        title={selectedFestival?.festival_name ? `${selectedFestival.festival_name} Registration QR Code` : 'Event Registration QR Code'}
+      />
 
       {/* --- CRUD MODAL: VIEW DETAILS --- */}
       <AnimatePresence>

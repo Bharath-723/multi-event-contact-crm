@@ -95,8 +95,10 @@ export function computeOperatorStats(
         else if (bucket === 'notInHyderabad') notInHyderabad++;
         else if (bucket === 'notAnswered') notAnswered++;
         else pending++;
+      } else {
+        // Active assigned contact pending operator response for the current weekly period
+        pending++;
       }
-      // If assignment was not updated in this period, it starts at 0 for all weekly status counters
     } else {
       // Cumulative / unpartitioned mode
       const bucket = normalizeAssignmentStatus(a.status);
@@ -111,8 +113,8 @@ export function computeOperatorStats(
 
   const assigned = activeList.length;
 
-  // Invariant verification check for unpartitioned mode
-  if (!targetPeriod && assigned !== coming + notComing + notAnswered + nextWeek + notInHyderabad + pending) {
+  // Invariant verification check: assigned must reconcile with status sum
+  if (assigned !== coming + notComing + notAnswered + nextWeek + notInHyderabad + pending) {
     console.error('[ASSIGNMENT COUNT INVARIANT VIOLATION]', {
       assigned,
       coming,

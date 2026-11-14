@@ -84,22 +84,14 @@ export async function archiveAndGetVisitorHistory(currentPeriod?: string): Promi
       if (!existErr && existingHistory) {
         const archivedPeriods = new Set(((existingHistory as Array<{ weekly_period: string }>) || []).map((h) => h.weekly_period));
 
-        // Fetch active assignments to accurately partition assigned attendees vs walk-in visitors
-        const { data: activeAssignments } = await supabaseAdmin
-          .from('master_contact_assignments')
-          .select('master_contact_id')
-          .eq('is_active', true);
-
-        const assignedContactIds = new Set(
-          ((activeAssignments as Array<{ master_contact_id: string }>) || []).map((a) => a.master_contact_id)
-        );
-
         // Insert unarchived periods
         for (const [period, rows] of checkinsByPeriod.entries()) {
           if (archivedPeriods.has(period)) continue;
 
-          const totalAttendance = rows.length;
-          const totalVisitors = rows.filter((r) => !assignedContactIds.has(r.master_contact_id)).length;
+          // Unique verified attendees for this meetup
+          const uniquePhones = new Set(rows.map((r) => r.phone).filter(Boolean));
+          const totalAttendance = uniquePhones.size > 0 ? uniquePhones.size : rows.length;
+          const totalVisitors = totalAttendance;
           const { dateStr, label } = getSaturdayMeetupDate(period);
 
           await supabaseAdmin

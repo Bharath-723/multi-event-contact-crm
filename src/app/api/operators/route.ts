@@ -5,7 +5,6 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { hashPassword } from '@/lib/operator-auth';
-import { normalizeSource } from '@/lib/source-resolver';
 import { computeOperatorStats, formatOperatorDisplayName } from '@/lib/status-normalizer';
 import { getCurrentWeeklyPeriod } from '@/lib/weekly-period';
 
@@ -38,40 +37,20 @@ export async function GET(req: NextRequest) {
   const source = 'master_dashboard';
   const assignTable = 'master_contact_assignments';
 
-  // 1. Fetch all operators (with graceful backward compatibility for pre-migration databases)
-  let { data: operators, error } = await supabaseAdmin
-    .from('contact_operators')
-    .select('id, name, email, phone, is_active, operator_type, capacity, last_login_at, created_at, updated_at')
-    .order('created_at', { ascending: false });
-
-  // If column 'capacity' does not exist yet (error 42703), fall back to querying without it
-  if (error && (error.code === '42703' || error.message?.includes('capacity'))) {
-    const fallback = await supabaseAdmin
-      .from('contact_operators')
-      .select('id, name, email, phone, is_active, operator_type, last_login_at, created_at, updated_at')
-      .order('created_at', { ascending: false });
-    operators = fallback.data as typeof operators;
-    error = fallback.error;
-  }
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  // 2. Fetch active contact assignments from source-specific assignment table
-  // Includes status_weekly_period and updated_at for weekly counter calculation
+  // Concurrently fetch operators and active contact assignments in parallel
   const currentWeeklyPeriod = getCurrentWeeklyPeriod();
 
-  let { data: assignments, error: assignErr } = await supabaseAdmin
-    .from(assignTable)
-    .select('id, operator_id, status, status_weekly_period, updated_at')
-    .eq('is_active', true);
-
-  // Backward compatibility fallback if status_weekly_period column does not exist yet (code 42703)
-  if (assignErr && (assignErr.code === '42703' || assignErr.message?.includes('status_weekly_period'))) {
-    const fallback = await supabaseAdmin
-      .from(assignTable)
-      .select('id, operator_id, status, updated_at')
-      .eq('is_active', true);
-    assignments = fallback.data as typeof assignments;
+  interface RawOperator {
+    id: string;
+    name: string;
+    email: string;
+    phone: string | null;
+    is_active: boolean;
+    operator_type: string;
+    capacity?: number | null;
+    last_login_at?: string | null;
+    created_at: string;
+    updated_at: string;
   }
 
   type AssignmentRow = {
@@ -82,15 +61,53 @@ export async function GET(req: NextRequest) {
     updated_at?: string | null;
   };
 
+  const operatorsPromise = (async () => {
+    const res = await supabaseAdmin
+      .from('contact_operators')
+      .select('id, name, email, phone, is_active, operator_type, capacity, last_login_at, created_at, updated_at')
+      .order('created_at', { ascending: false });
+
+    if (res.error && (res.error.code === '42703' || res.error.message?.includes('capacity'))) {
+      const fallback = await supabaseAdmin
+        .from('contact_operators')
+        .select('id, name, email, phone, is_active, operator_type, last_login_at, created_at, updated_at')
+        .order('created_at', { ascending: false });
+      return { data: (fallback.data as unknown as RawOperator[]) || [], error: fallback.error };
+    }
+    return { data: (res.data as unknown as RawOperator[]) || [], error: res.error };
+  })();
+
+  const assignmentsPromise = (async () => {
+    const res = await supabaseAdmin
+      .from(assignTable)
+      .select('id, operator_id, status, status_weekly_period, updated_at')
+      .eq('is_active', true);
+
+    if (res.error && (res.error.code === '42703' || res.error.message?.includes('status_weekly_period'))) {
+      const fallback = await supabaseAdmin
+        .from(assignTable)
+        .select('id, operator_id, status, updated_at')
+        .eq('is_active', true);
+      return { data: (fallback.data as unknown as AssignmentRow[]) || [], error: fallback.error };
+    }
+    return { data: (res.data as unknown as AssignmentRow[]) || [], error: res.error };
+  })();
+
+  const [opRes, assignRes] = await Promise.all([operatorsPromise, assignmentsPromise]);
+
+  if (opRes.error) return NextResponse.json({ error: opRes.error.message }, { status: 500 });
+  const operators: RawOperator[] = opRes.data ?? [];
+  const assignments: AssignmentRow[] = assignRes.data ?? [];
+
   const assignmentsByOp = new Map<string, Array<AssignmentRow>>();
-  ((assignments as unknown as AssignmentRow[]) || []).forEach((fa) => {
+  assignments.forEach((fa) => {
     if (!fa.operator_id) return;
     const list = assignmentsByOp.get(fa.operator_id) || [];
     list.push(fa);
     assignmentsByOp.set(fa.operator_id, list);
   });
 
-  const withStats = (operators ?? []).map((op) => {
+  const withStats = operators.map((op) => {
     const activeList = assignmentsByOp.get(op.id) || [];
     // Enforces weekly counter reset for status buckets while permanently preserving total assigned
     const stats = computeOperatorStats(activeList, { currentWeeklyPeriod });

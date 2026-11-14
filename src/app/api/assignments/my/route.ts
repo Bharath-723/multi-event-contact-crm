@@ -27,24 +27,43 @@ export async function GET(req: Request) {
   const statusFilter = (url.searchParams.get('status') ?? '').trim();
 
   if (source === 'master_dashboard') {
-    let q = supabaseAdmin
-      .from('master_contact_assignments')
-      .select(`
-        id, master_contact_id, operator_id, assigned_at,
-        status, comments, is_active, updated_at,
-        master_contacts!master_contact_id (*)
-      `)
-      .eq('operator_id', session.operatorId)
-      .eq('is_active', true);
+    const currentWeeklyPeriod = getCurrentWeeklyPeriod();
 
-    if (statusFilter && statusFilter !== 'ALL') {
-      q = q.eq('status', statusFilter);
+    // Fetch all active assignments for this operator with complete batch pagination
+    const pageSize = 1000;
+    let fromIdx = 0;
+    const rawList: Record<string, unknown>[] = [];
+
+    while (true) {
+      let q = supabaseAdmin
+        .from('master_contact_assignments')
+        .select(`
+          id, master_contact_id, operator_id, assigned_at,
+          status, comments, is_active, updated_at,
+          master_contacts!master_contact_id (*)
+        `)
+        .eq('operator_id', session.operatorId)
+        .eq('is_active', true);
+
+      if (statusFilter && statusFilter !== 'ALL') {
+        q = q.eq('status', statusFilter);
+      }
+
+      const { data, error } = await q
+        .order('assigned_at', { ascending: false })
+        .range(fromIdx, fromIdx + pageSize - 1);
+
+      if (error) {
+        console.error('[/api/assignments/my Query Error]:', error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+
+      if (!data || data.length === 0) break;
+      rawList.push(...(data as unknown as Record<string, unknown>[]));
+      if (data.length < pageSize) break;
+      fromIdx += pageSize;
     }
 
-    const { data, error } = await q.order('assigned_at', { ascending: false });
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-    const rawList = (data as unknown as Record<string, unknown>[]) ?? [];
     const normalizedAssignments = rawList.map((row) => {
       const mc = (row.master_contacts as Record<string, unknown> | null) || {};
       const contactObj = {
@@ -57,6 +76,9 @@ export async function GET(req: Request) {
         occupation: mc.occupation || '',
         area_of_stay: mc.area_of_stay || '',
         current_stay: mc.area_of_stay || '',
+        classes_attended: typeof mc.classes_attended === 'number'
+          ? mc.classes_attended
+          : (parseInt(String(mc.classes_attended ?? 0), 10) || 0),
       };
 
       return {
@@ -69,14 +91,25 @@ export async function GET(req: Request) {
       };
     });
 
-    const currentWeeklyPeriod = getCurrentWeeklyPeriod();
-    const { data: activeAssignments } = await supabaseAdmin
-      .from('master_contact_assignments')
-      .select('id, status, is_active, status_weekly_period, updated_at')
-      .eq('operator_id', session.operatorId)
-      .eq('is_active', true);
+    // Authoritative stats calculation across all active assignments for this operator
+    let activeAssignments: Array<{ id: string; status?: string | null; is_active?: boolean; updated_at?: string | null }> = [];
+    if (!statusFilter || statusFilter === 'ALL') {
+      activeAssignments = rawList as unknown as typeof activeAssignments;
+    } else {
+      const { data: allActive, error: statErr } = await supabaseAdmin
+        .from('master_contact_assignments')
+        .select('id, status, is_active, updated_at')
+        .eq('operator_id', session.operatorId)
+        .eq('is_active', true);
 
-    const statsObj = computeOperatorStats(activeAssignments ?? [], { currentWeeklyPeriod });
+      if (!statErr && allActive) {
+        activeAssignments = allActive;
+      } else {
+        activeAssignments = rawList as unknown as typeof activeAssignments;
+      }
+    }
+
+    const statsObj = computeOperatorStats(activeAssignments, { currentWeeklyPeriod });
 
     return NextResponse.json({
       assignments: normalizedAssignments,
@@ -86,6 +119,7 @@ export async function GET(req: Request) {
         total_not_coming: statsObj.notComing,
         total_not_answered: statsObj.notAnswered,
         total_next_week: statsObj.nextWeek,
+        total_pending: statsObj.pending,
         total_not_in_hyderabad: statsObj.notInHyderabad,
         total_not_connected: statsObj.notAnswered,
       },

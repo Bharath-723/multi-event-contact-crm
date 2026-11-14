@@ -6,8 +6,9 @@ import {
   CalendarCheck, PhoneCall, UserCheck, Users,
   Search, Download, Printer, RefreshCw, Loader2,
   AlertCircle, Clock, CheckCircle2, History, X,
-  ChevronRight, Calendar
+  Calendar, QrCode
 } from 'lucide-react';
+import QRModal from '@/components/qr-modal';
 
 interface SaturdayVisitorHistoryItem {
   id: string;
@@ -58,6 +59,7 @@ export default function SaturdayMeetupPage() {
   const [weeklyPeriodLabel, setWeeklyPeriodLabel] = useState<string>('');
   const [visitorHistory, setVisitorHistory] = useState<SaturdayVisitorHistoryItem[]>([]);
   const [showVisitorHistory, setShowVisitorHistory] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -66,8 +68,8 @@ export default function SaturdayMeetupPage() {
   const [selectedType, setSelectedType] = useState('ALL');
 
   // 1. Fetch meet-up data
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchData = useCallback(async (isBackground = false) => {
+    if (!isBackground) setLoading(true);
     setError(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -95,15 +97,45 @@ export default function SaturdayMeetupPage() {
       setVisitorHistory(data.visitor_history || []);
     } catch (err: unknown) {
       console.error('[Saturday Meet-up] Fetch error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load meet-up data');
+      if (!isBackground) setError(err instanceof Error ? err.message : 'Failed to load meet-up data');
     } finally {
-      setLoading(false);
+      if (!isBackground) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchData();
+
+    // Supabase Realtime subscription for instant synchronization across check-ins, calling statuses, and operators
+    const channel = supabase
+      .channel('saturday_meetup_realtime_sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'master_contact_checkins' },
+        () => {
+          fetchData(true);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'master_contact_assignments' },
+        () => {
+          fetchData(true);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'contact_operators' },
+        () => {
+          fetchData(true);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [fetchData]);
 
   // 2. Filter attendance rows
@@ -255,9 +287,17 @@ export default function SaturdayMeetupPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 self-start md:self-auto">
+        <div className="flex items-center gap-2.5 self-start md:self-auto flex-wrap">
           <button
-            onClick={fetchData}
+            onClick={() => setQrOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-purple-950/60 border border-purple-500/30 hover:border-purple-400/50 text-purple-300 hover:text-white transition-all text-xs font-semibold flex items-center gap-2 cursor-pointer shadow-sm active:scale-95"
+            title="Configure Visitor Registration QR Code"
+          >
+            <QrCode className="w-3.5 h-3.5 text-purple-400" />
+            Registration QR
+          </button>
+          <button
+            onClick={() => fetchData()}
             disabled={loading}
             className="px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-purple-500/30 text-slate-300 hover:text-white transition-all text-xs font-semibold flex items-center gap-2 cursor-pointer shadow-sm active:scale-95 disabled:opacity-50"
           >
@@ -381,10 +421,10 @@ export default function SaturdayMeetupPage() {
             ) : (
               <span className="text-3xl font-black text-purple-300">{metrics.visitors}</span>
             )}
-            <span className="text-[11px] text-slate-500 font-medium">approved walk-ins</span>
+            <span className="text-[11px] text-slate-500 font-medium">approved visitors</span>
           </div>
           <p className="text-[10px] text-slate-400 mt-2 flex items-center justify-between">
-            <span>Approved walk-ins this week</span>
+            <span>Approved check-ins this week</span>
             <span className="text-purple-400 underline underline-offset-2 font-medium opacity-90 group-hover:opacity-100">
               View History
             </span>
@@ -698,6 +738,15 @@ export default function SaturdayMeetupPage() {
           </div>
         </div>
       )}
+
+      {/* ── VISITOR REGISTRATION QR MODAL ───────────────────────── */}
+      <QRModal
+        isOpen={qrOpen}
+        onClose={() => setQrOpen(false)}
+        overrideUrl="/contacts-register"
+        title="Saturday Meetup Registration QR Code"
+        subtitle="Saturday Meetup Visitor Registration"
+      />
     </div>
   );
 }

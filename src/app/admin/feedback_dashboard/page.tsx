@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import {
   Users, UserCheck, Search, RefreshCw, Loader2,
   FileSpreadsheet, FileText, Star, Laptop, GraduationCap, GitBranch,
-  UserPlus, CheckCircle2, X, Sparkles, Home, AlertTriangle, TrendingUp, ThumbsUp, Info
+  UserPlus, CheckCircle2, X, Home, TrendingUp, ThumbsUp
 } from 'lucide-react';
 import { FeedbackContact, FeedbackContactAssignment, ContactOperator } from '@/lib/types';
 
@@ -25,23 +25,6 @@ interface FeedbackStats {
   total_online_work: number;
   total_with_parents: number;
   total_in_hostel: number;
-}
-
-interface FeedbackDryRunData {
-  totalUnassigned: number;
-  eligibleMale: number;
-  eligibleFemale: number;
-  activeOperatorsCount: number;
-  totalAvailableSlots: number;
-  willAssign: number;
-  capacityWarning: boolean;
-  operatorCapacities: {
-    id: string;
-    name: string;
-    assignedCount: number;
-    capacity: number;
-    remaining: number;
-  }[];
 }
 
 export default function AdminFeedbackDashboard() {
@@ -69,13 +52,6 @@ export default function AdminFeedbackDashboard() {
   const [assigningModal, setAssigningModal] = useState<{ open: boolean; contact?: FeedbackContact; currentAssignment?: FeedbackContactAssignment }>({ open: false });
   const [selectedOpId, setSelectedOpId] = useState('');
   const [assigningBtn, setAssigningBtn] = useState(false);
-
-  // Dry Run Modal State
-  const [dryRunModal, setDryRunModal] = useState<{ open: boolean; loading: boolean; dryRun?: FeedbackDryRunData }>({
-    open: false,
-    loading: false,
-  });
-  const [executingAutoAssign, setExecutingAutoAssign] = useState(false);
 
   // Filters State
   const [search, setSearch] = useState('');
@@ -256,50 +232,6 @@ export default function AdminFeedbackDashboard() {
     }
   };
 
-  // 6. Open Dry Run Preview Modal
-  const handleOpenDryRun = async () => {
-    setDryRunModal({ open: true, loading: true });
-    try {
-      const auth = await getAuthHeader();
-      const res = await fetch('/api/assignments/feedback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: auth },
-        body: JSON.stringify({ action: 'dry_run' }),
-      });
-      const data = await res.json();
-      if (res.ok && data.dryRun) {
-        setDryRunModal({ open: true, loading: false, dryRun: data.dryRun });
-      } else {
-        setDryRunModal({ open: false, loading: false });
-      }
-    } catch (err) {
-      console.error('Dry run failed:', err);
-      setDryRunModal({ open: false, loading: false });
-    }
-  };
-
-  // 7. Execute Auto Assignment
-  const handleExecuteAutoAssign = async () => {
-    setExecutingAutoAssign(true);
-    try {
-      const auth = await getAuthHeader();
-      const res = await fetch('/api/assignments/feedback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: auth },
-        body: JSON.stringify({ action: 'auto_assign_all' }),
-      });
-
-      if (res.ok) {
-        setDryRunModal({ open: false, loading: false });
-        loadAssignments();
-      }
-    } catch (err) {
-      console.error('Execute auto assign failed:', err);
-    } finally {
-      setExecutingAutoAssign(false);
-    }
-  };
-
   const handleSearchChange = (val: string) => {
     setSearch(val);
     setPage(1);
@@ -456,6 +388,13 @@ export default function AdminFeedbackDashboard() {
         `;
       }).join('');
 
+      const pdfSatisfactionRate = stats.total_responses > 0
+        ? Math.round(((stats.total_excellent + stats.total_good) / stats.total_responses) * 100)
+        : 0;
+      const pdfWorkshopConversion = stats.total_responses > 0
+        ? Math.round((stats.total_online_work / stats.total_responses) * 100)
+        : 0;
+
       printWindow.document.write(`
         <!DOCTYPE html>
         <html>
@@ -465,7 +404,11 @@ export default function AdminFeedbackDashboard() {
               @page { size: A4 landscape; margin: 12mm; }
               body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; margin: 0; padding: 16px; background: #fff; }
               h2 { text-align: center; color: #6b21a8; margin-top: 0; margin-bottom: 4px; font-size: 18px; }
-              p.sub { text-align: center; color: #64748b; font-size: 11px; margin-bottom: 16px; }
+              p.sub { text-align: center; color: #64748b; font-size: 11px; margin-bottom: 12px; }
+              .summary-cards { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 16px; }
+              .stat-box { border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px; text-align: center; background: #faf5ff; }
+              .stat-box .title { font-size: 9px; text-transform: uppercase; font-weight: 700; color: #64748b; margin-bottom: 2px; }
+              .stat-box .val { font-size: 14px; font-weight: 800; color: #581c87; }
               table { width: 100%; border-collapse: collapse; font-size: 10px; }
               thead { display: table-header-group; }
               tr { page-break-inside: avoid; }
@@ -477,6 +420,32 @@ export default function AdminFeedbackDashboard() {
           <body>
             <h2>Feedback Contacts Official Report</h2>
             <p class="sub">Total Matching Records: ${allMatchingContacts.length} • Generated on ${new Date().toLocaleString('en-IN')}</p>
+            <div class="summary-cards">
+              <div class="stat-box">
+                <div class="title">Total Responses</div>
+                <div class="val">${stats.total_responses}</div>
+              </div>
+              <div class="stat-box">
+                <div class="title">Male / Female</div>
+                <div class="val">${stats.total_male} / ${stats.total_female}</div>
+              </div>
+              <div class="stat-box">
+                <div class="title">Parents / Hostel</div>
+                <div class="val">${stats.total_with_parents} / ${stats.total_in_hostel}</div>
+              </div>
+              <div class="stat-box">
+                <div class="title">Ratings (Ex/Gd/NA)</div>
+                <div class="val">${stats.total_excellent}/${stats.total_good}/${stats.total_not_applicable}</div>
+              </div>
+              <div class="stat-box">
+                <div class="title">Satisfaction Rate</div>
+                <div class="val">${pdfSatisfactionRate}%</div>
+              </div>
+              <div class="stat-box">
+                <div class="title">Online Workshop</div>
+                <div class="val">${stats.total_online_work} (${pdfWorkshopConversion}%)</div>
+              </div>
+            </div>
             <table>
               <thead>
                 <tr>
@@ -543,13 +512,6 @@ export default function AdminFeedbackDashboard() {
               title="Refresh Data"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-purple-500 dark:text-purple-400' : ''}`} />
-            </button>
-            <button
-              onClick={handleOpenDryRun}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-extrabold shadow-md transition-all cursor-pointer"
-            >
-              <Sparkles className="w-4 h-4" />
-              Auto-Assign Pending
             </button>
             <button
               onClick={handleExportCSV}
@@ -918,108 +880,6 @@ export default function AdminFeedbackDashboard() {
         </div>
 
       </div>
-
-      {/* --- Dry Run Preview Modal --- */}
-      {dryRunModal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-          <div className="glass-card bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 w-full max-w-lg space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <h3 className="font-extrabold text-slate-100 dark:text-slate-100 text-base flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-purple-500 dark:text-purple-400" />
-                Feedback Auto Assign — Dry Run Preview
-              </h3>
-              <button
-                onClick={() => setDryRunModal({ open: false, loading: false })}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-white cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {dryRunModal.loading || !dryRunModal.dryRun ? (
-              <div className="py-12 text-center text-slate-400">
-                <Loader2 className="w-8 h-8 animate-spin mx-auto text-purple-500 dark:text-purple-400 mb-2" />
-                <p className="text-xs font-semibold">Calculating unassigned feedback contacts & operator capacity...</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {/* 6 Metric Boxes Grid */}
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
-                    <p className="text-xl font-extrabold text-purple-500 dark:text-purple-400">{dryRunModal.dryRun.totalUnassigned}</p>
-                    <p className="text-[10px] text-slate-400 dark:text-slate-400 font-semibold uppercase">Unassigned</p>
-                  </div>
-                  <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
-                    <p className="text-xl font-extrabold text-blue-500 dark:text-blue-400">{dryRunModal.dryRun.eligibleMale}</p>
-                    <p className="text-[10px] text-slate-400 dark:text-slate-400 font-semibold uppercase">Eligible (Male)</p>
-                  </div>
-                  <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
-                    <p className="text-xl font-extrabold text-pink-500 dark:text-pink-400">{dryRunModal.dryRun.eligibleFemale}</p>
-                    <p className="text-[10px] text-slate-400 dark:text-slate-400 font-semibold uppercase">Skipped (Female)</p>
-                  </div>
-                  <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
-                    <p className="text-xl font-extrabold text-indigo-500 dark:text-indigo-400">{dryRunModal.dryRun.activeOperatorsCount}</p>
-                    <p className="text-[10px] text-slate-400 dark:text-slate-400 font-semibold uppercase">Active Operators</p>
-                  </div>
-                  <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
-                    <p className="text-xl font-extrabold text-emerald-500 dark:text-emerald-400">{dryRunModal.dryRun.totalAvailableSlots}</p>
-                    <p className="text-[10px] text-slate-400 dark:text-slate-400 font-semibold uppercase">Available Slots</p>
-                  </div>
-                  <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
-                    <p className="text-xl font-extrabold text-amber-500 dark:text-amber-400">{dryRunModal.dryRun.willAssign}</p>
-                    <p className="text-[10px] text-slate-400 dark:text-slate-400 font-semibold uppercase">Will Be Assigned</p>
-                  </div>
-                </div>
-
-                {/* All Unassigned Contacts are Female Info Banner */}
-                {dryRunModal.dryRun.eligibleMale === 0 && dryRunModal.dryRun.eligibleFemale > 0 && (
-                  <div className="p-3 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-500/30 rounded-xl text-blue-800 dark:text-blue-300 text-xs flex gap-2">
-                    <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
-                    <span>All remaining unassigned feedback contacts ({dryRunModal.dryRun.eligibleFemale}) are Female. Female contacts are excluded from auto-assignment per organization policy. No new assignments will be created.</span>
-                  </div>
-                )}
-
-                {/* Capacity Warning */}
-                {dryRunModal.dryRun.capacityWarning && (
-                  <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-500/30 rounded-xl text-amber-800 dark:text-amber-300 text-xs flex gap-2">
-                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                    <span>Capacity Warning: Available slots ({dryRunModal.dryRun.totalAvailableSlots}) are fewer than eligible male contacts ({dryRunModal.dryRun.eligibleMale}). Some male contacts will remain unassigned.</span>
-                  </div>
-                )}
-
-                {/* Operator Capacities */}
-                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-400">Operator Workload & Capacity (40 max)</p>
-                  {dryRunModal.dryRun.operatorCapacities.map((op) => (
-                    <div key={op.id} className="flex items-center justify-between text-xs py-1.5 px-3 bg-slate-50 dark:bg-slate-950 rounded-lg border border-slate-200 dark:border-slate-800">
-                      <span className="font-semibold text-slate-100 dark:text-slate-100">{op.name}</span>
-                      <span className="font-mono text-purple-500 dark:text-purple-400 font-bold">{op.assignedCount} / {op.capacity}</span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Buttons */}
-                <div className="flex gap-2 pt-2">
-                  <button
-                    onClick={handleExecuteAutoAssign}
-                    disabled={executingAutoAssign || dryRunModal.dryRun.willAssign === 0}
-                    className="flex-1 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 shadow-md"
-                  >
-                    {executingAutoAssign ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                    Execute Auto Assignment ({dryRunModal.dryRun.willAssign} male contacts)
-                  </button>
-                  <button
-                    onClick={() => setDryRunModal({ open: false, loading: false })}
-                    className="px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 font-extrabold text-xs transition-all cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* --- Assign Modal --- */}
       {assigningModal.open && assigningModal.contact && (
