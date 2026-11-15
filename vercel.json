@@ -1,3 +1,8 @@
 {
-  "framework": "nextjs"
+  "crons": [
+    {
+      "path": "/api/cron/archive-visitor-history",
+      "schedule": "30 0 * * 0"
+    }
+  ]
 }

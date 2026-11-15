@@ -64,14 +64,20 @@ export default function VisitorCheckInPage() {
   const [loadingLogs, setLoadingLogs] = useState(true);
 
   const phoneInputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Helper for admin auth header
+  // Helper for auth headers (optional; visitor endpoints are public)
   const getAuthHeaders = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    return {
-      'Content-Type': 'application/json',
-      Authorization: session?.access_token ? `Bearer ${session.access_token}` : '',
-    };
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+      return headers;
+    } catch {
+      return { 'Content-Type': 'application/json' };
+    }
   }, []);
 
   // 1. Fetch Live Logs for current weekly period
@@ -116,10 +122,30 @@ export default function VisitorCheckInPage() {
     };
   }, [fetchLiveLogs]);
 
-  // 2. Debounced Phone Number Lookup (2-9 digits partial, 10 digits direct)
+  // 2. Optimized Phone Number Lookup: 0ms delay for 10 digits, 250ms debounce for partial search
   useEffect(() => {
     const digits = phoneNumber.replace(/\D/g, '');
-    if (digits.length < 2) return;
+
+    // Abort previous in-flight search request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+
+    if (digits.length < 2) {
+      setPartialResults([]);
+      setContactResult(null);
+      setNotFoundState(null);
+      setLookupError(null);
+      setLoadingLookup(false);
+      return;
+    }
+
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
+    // Instant trigger for 10 digits (0ms); debounce partial queries (250ms)
+    const delay = digits.length === 10 ? 0 : 250;
 
     const timer = setTimeout(async () => {
       setLoadingLookup(true);
@@ -129,7 +155,10 @@ export default function VisitorCheckInPage() {
 
       try {
         const headers = await getAuthHeaders();
-        const res = await fetch(`/api/visitor/lookup?phone=${encodeURIComponent(digits)}`, { headers });
+        const res = await fetch(`/api/visitor/lookup?phone=${encodeURIComponent(digits)}`, {
+          headers,
+          signal: abortController.signal,
+        });
         const contentType = res.headers.get('content-type') || '';
         const data = contentType.includes('application/json') ? await res.json() : null;
 
@@ -181,15 +210,23 @@ export default function VisitorCheckInPage() {
             });
           }
         }
-      } catch (err) {
+      } catch (err: unknown) {
+        if ((err as Error)?.name === 'AbortError') {
+          return; // Superseded by newer keystroke
+        }
         console.error('[Visitor Lookup Error]:', err);
         setLookupError('Network error while looking up phone number.');
       } finally {
-        setLoadingLookup(false);
+        if (!abortController.signal.aborted) {
+          setLoadingLookup(false);
+        }
       }
-    }, 250);
+    }, delay);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      abortController.abort();
+    };
   }, [phoneNumber, getAuthHeaders]);
 
   const handleSelectContact = (contact: LookedUpContact) => {
@@ -333,7 +370,7 @@ export default function VisitorCheckInPage() {
             <p className="text-xs text-slate-400 mt-0.5 flex flex-wrap items-center gap-2">
               <span>Active Weekly Period: <strong className="text-purple-400 font-semibold">{weeklyPeriodLabel || 'Current Week'}</strong></span>
               <span className="text-slate-600 hidden sm:inline">·</span>
-              <span className="text-slate-400">Next Friday Rollover: <strong className="text-slate-300">00:00 IST</strong></span>
+              <span className="text-slate-400">Next Weekly Reset: <strong className="text-slate-300">Sunday 06:00 AM IST</strong></span>
             </p>
           </div>
         </div>

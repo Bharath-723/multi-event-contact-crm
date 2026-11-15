@@ -167,3 +167,81 @@ export function getSaturdayMeetupDate(periodId?: string): { dateStr: string; lab
 
   return { dateStr, label, date: saturday };
 }
+
+/**
+ * Returns the exact Sunday 06:00:00 AM Asia/Kolkata Date threshold for the given weekly period.
+ * (The Sunday immediately following the period's start Friday).
+ * Start Friday 00:00 IST + 54 hours = Sunday 06:00:00 AM Asia/Kolkata.
+ * (In UTC: Friday 18:30 UTC + 54 hours = Sunday 00:30:00 UTC).
+ */
+export function getSundayArchiveThreshold(periodId?: string): Date {
+  const period = periodId || getCurrentWeeklyPeriod();
+  const startFriday = getWeeklyPeriodStartDate(period);
+  // Friday 00:00 IST + 54 hours = Sunday 06:00:00 AM IST
+  return new Date(startFriday.getTime() + 54 * 60 * 60 * 1000);
+}
+
+/**
+ * Checks whether Sunday 06:00:00 AM Asia/Kolkata has arrived for the given weekly period.
+ */
+export function isSundayArchiveTimeReached(periodId?: string, now: Date = new Date()): boolean {
+  const threshold = getSundayArchiveThreshold(periodId);
+  return now.getTime() >= threshold.getTime();
+}
+
+/**
+ * Returns the next weekly period identifier ('YYYY-MM-DD').
+ * Exactly 7 days after the given period's start Friday.
+ */
+export function getNextWeeklyPeriod(periodId?: string): string {
+  const period = periodId || getCurrentWeeklyPeriod();
+  const startFriday = getWeeklyPeriodStartDate(period);
+  const nextFriday = new Date(startFriday.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: APPLICATION_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  return formatter.format(nextFriday);
+}
+
+/**
+ * Returns the active weekly period identifier specifically for Visitor Check-In
+ * and Saturday Meetup Dashboard.
+ *
+ * Rollover: Every Sunday at 06:00:00 AM Asia/Kolkata (00:30 UTC).
+ * - From Sunday 06:00 AM through the following Sunday 05:59:59 AM:
+ *   The active visitor period targets the upcoming Saturday Meetup.
+ * - Every Sunday at 06:00:00 AM IST:
+ *   The previous Saturday Meetup is archived, and the active visitor period
+ *   advances to the next Saturday Meetup, resetting the active visitor counter
+ *   and list to 0 / empty without deleting permanent records.
+ */
+export function getCurrentVisitorWeeklyPeriod(date: Date = new Date()): string {
+  const callingPeriod = getCurrentWeeklyPeriod(date);
+  const isArchived = isSundayArchiveTimeReached(callingPeriod, date);
+  if (isArchived) {
+    return getNextWeeklyPeriod(callingPeriod);
+  }
+  return callingPeriod;
+}
+
+/**
+ * Calculates the next Sunday 06:00:00 AM Asia/Kolkata reset timestamp for visitor logs.
+ */
+export function getNextVisitorResetTimestamp(date: Date = new Date()): Date {
+  const activeVisitorPeriod = getCurrentVisitorWeeklyPeriod(date);
+  return getSundayArchiveThreshold(activeVisitorPeriod);
+}
+
+/**
+ * Formats a clear label for the active visitor cycle and upcoming Saturday Meetup.
+ * e.g., "Saturday Meetup: 21 Nov 2026"
+ */
+export function formatVisitorWeeklyPeriodLabel(periodId?: string): string {
+  const period = periodId || getCurrentVisitorWeeklyPeriod();
+  const meetup = getSaturdayMeetupDate(period);
+  return meetup.label;
+}

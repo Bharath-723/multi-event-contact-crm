@@ -6,14 +6,19 @@
  * visitor counts and attendance.
  *
  * Requirements:
- * 1. Store each Saturday Meetup's visitor count as a permanent historical record.
- * 2. Record contains Meetup date (Saturday) and total approved visitors.
- * 3. Idempotent: multiple executions never duplicate or overwrite previous Meetup history.
- * 4. Graceful handling if the table is pending migration.
+ * 1. Archive the previous Saturday Meetup's approved visitor count every Sunday at 06:00 AM IST.
+ * 2. Store each Saturday Meetup's visitor count as a permanent historical record.
+ * 3. Record contains Meetup date (Saturday) and total approved unique visitors.
+ * 4. Idempotent: multiple executions never duplicate or overwrite previous Meetup history.
+ * 5. Graceful handling if the table is pending migration.
  */
 
 import { supabaseAdmin } from './supabase-admin';
-import { getCurrentWeeklyPeriod, getSaturdayMeetupDate } from './weekly-period';
+import {
+  getCurrentWeeklyPeriod,
+  getSaturdayMeetupDate,
+  isSundayArchiveTimeReached,
+} from './weekly-period';
 
 export interface SaturdayVisitorHistoryItem {
   id: string;
@@ -44,11 +49,16 @@ function isSchemaObjectMissing(err: { code?: string; message?: string } | null |
 }
 
 /**
- * Idempotently archives unarchived past Saturday Meetup visitor counts,
+ * Idempotently archives unarchived past Saturday Meetup visitor counts
+ * (any Saturday Meetup whose Sunday 06:00 AM IST has passed),
  * then returns the complete list of historical records sorted by meetup_date DESC.
  */
 export async function archiveAndGetVisitorHistory(currentPeriod?: string): Promise<SaturdayVisitorHistoryItem[]> {
   const activePeriod = currentPeriod || getCurrentWeeklyPeriod();
+  const now = new Date();
+
+  // Temporary container for dynamically derived history when DB table is not yet migrated
+  const fallbackHistoryMap = new Map<string, SaturdayVisitorHistoryItem>();
 
   try {
     // 1. First attempt to call the database stored procedure if available
@@ -60,40 +70,61 @@ export async function archiveAndGetVisitorHistory(currentPeriod?: string): Promi
       console.warn('[visitor-history] RPC archive_saturday_meetup_visitor_history notice:', rpcErr.message);
     }
 
-    // 2. Fallback / Client-side reconciliation for past periods
-    const { data: pastCheckins, error: checkinErr } = await supabaseAdmin
+    // 2. Fetch check-in records to archive any completed Saturday Meetups
+    // (Periods whose Sunday 06:00 AM IST threshold has been reached)
+    const { data: allCheckins, error: checkinErr } = await supabaseAdmin
       .from('master_contact_checkins')
-      .select('weekly_period, master_contact_id, phone')
-      .lt('weekly_period', activePeriod);
+      .select('weekly_period, master_contact_id, phone');
 
-    if (!checkinErr && pastCheckins && pastCheckins.length > 0) {
-      // Group past check-ins by weekly_period
+    if (!checkinErr && allCheckins && allCheckins.length > 0) {
+      // Group check-ins by weekly_period
       const checkinsByPeriod = new Map<string, Array<{ weekly_period: string; master_contact_id: string; phone: string }>>();
-      for (const row of pastCheckins) {
+      for (const row of allCheckins) {
         if (!row.weekly_period) continue;
         const list = checkinsByPeriod.get(row.weekly_period) || [];
         list.push(row);
         checkinsByPeriod.set(row.weekly_period, list);
       }
 
-      // Check which periods are already archived
+      // Check which periods are already archived in the database
       const { data: existingHistory, error: existErr } = await supabaseAdmin
         .from('saturday_meetup_visitor_history')
         .select('weekly_period');
 
-      if (!existErr && existingHistory) {
-        const archivedPeriods = new Set(((existingHistory as Array<{ weekly_period: string }>) || []).map((h) => h.weekly_period));
+      const archivedPeriods = new Set(
+        (!existErr && existingHistory
+          ? (existingHistory as Array<{ weekly_period: string }>).map((h) => h.weekly_period)
+          : [])
+      );
 
-        // Insert unarchived periods
-        for (const [period, rows] of checkinsByPeriod.entries()) {
-          if (archivedPeriods.has(period)) continue;
+      // Iterate over each period and archive if Sunday 06:00 AM IST has arrived
+      for (const [period, rows] of checkinsByPeriod.entries()) {
+        const canArchive = isSundayArchiveTimeReached(period, now);
+        if (!canArchive) {
+          // Saturday Meetup has not yet concluded and reached Sunday 06:00 AM IST
+          continue;
+        }
 
-          // Unique verified attendees for this meetup
-          const uniquePhones = new Set(rows.map((r) => r.phone).filter(Boolean));
-          const totalAttendance = uniquePhones.size > 0 ? uniquePhones.size : rows.length;
-          const totalVisitors = totalAttendance;
-          const { dateStr, label } = getSaturdayMeetupDate(period);
+        // Deduplicate unique visitors by normalized phone & master contact ID
+        const uniquePhones = new Set(rows.map((r) => r.phone).filter(Boolean));
+        const totalVisitors = uniquePhones.size > 0 ? uniquePhones.size : rows.length;
+        const totalAttendance = rows.length;
+        const { dateStr, label } = getSaturdayMeetupDate(period);
 
+        const historyItem: SaturdayVisitorHistoryItem = {
+          id: `derived_${period}`,
+          weekly_period: period,
+          meetup_date: dateStr,
+          meetup_date_label: label,
+          total_visitors: totalVisitors,
+          total_attendance: totalAttendance,
+          archived_at: now.toISOString(),
+        };
+
+        fallbackHistoryMap.set(period, historyItem);
+
+        // If not already archived in DB and table exists, insert record
+        if (!archivedPeriods.has(period) && (!existErr || !isSchemaObjectMissing(existErr))) {
           await supabaseAdmin
             .from('saturday_meetup_visitor_history')
             .insert({
@@ -102,7 +133,7 @@ export async function archiveAndGetVisitorHistory(currentPeriod?: string): Promi
               meetup_date_label: label,
               total_visitors: totalVisitors,
               total_attendance: totalAttendance,
-              archived_at: new Date().toISOString(),
+              archived_at: now.toISOString(),
             });
         }
       }
@@ -121,20 +152,25 @@ export async function archiveAndGetVisitorHistory(currentPeriod?: string): Promi
       .select('id, weekly_period, meetup_date, meetup_date_label, total_visitors, total_attendance, archived_at')
       .order('meetup_date', { ascending: false });
 
-    if (histErr) {
-      if (!isSchemaObjectMissing(histErr)) {
-        console.warn('[visitor-history] Error querying history:', histErr.message);
-      }
-      return [];
+    if (!histErr && history && history.length > 0) {
+      return history as SaturdayVisitorHistoryItem[];
     }
 
-    return (history || []) as SaturdayVisitorHistoryItem[];
+    // If DB query returned error (e.g. table pending migration) or 0 rows, use fallback derived history
+    if (fallbackHistoryMap.size > 0) {
+      const fallbackList = Array.from(fallbackHistoryMap.values());
+      fallbackList.sort((a, b) => b.meetup_date.localeCompare(a.meetup_date));
+      return fallbackList;
+    }
+
+    return [];
   } catch (err: unknown) {
     const errorObj = err as { code?: string; message?: string } | undefined;
     if (!isSchemaObjectMissing(errorObj)) {
       console.warn('[visitor-history] Exception querying history:', err);
     }
-    return [];
+    const fallbackList = Array.from(fallbackHistoryMap.values());
+    fallbackList.sort((a, b) => b.meetup_date.localeCompare(a.meetup_date));
+    return fallbackList;
   }
 }
-

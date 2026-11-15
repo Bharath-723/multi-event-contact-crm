@@ -1,38 +1,52 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { getCurrentWeeklyPeriod, getNextResetTimestamp, formatWeeklyPeriodLabel } from '@/lib/weekly-period';
+import {
+  getCurrentVisitorWeeklyPeriod,
+  getNextVisitorResetTimestamp,
+  formatVisitorWeeklyPeriodLabel,
+} from '@/lib/weekly-period';
 import { getLevelFromClassesAttended } from '@/lib/level-mapping';
 
-// Require Admin Helper
-async function requireAdmin(req: Request): Promise<{ error: NextResponse | null }> {
-  const authHeader = req.headers.get('Authorization') || '';
-  const token = authHeader.replace('Bearer ', '');
-  if (!token) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
+// In-memory rate limiting map for checkin logs (IP -> { count, resetAt })
+const checkinsRateLimitMap = new Map<string, { count: number; resetAt: number }>();
 
-  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !user) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
+function checkRateLimit(ip: string, maxRequests = 60, windowMs = 60000): boolean {
+  const now = Date.now();
+  const entry = checkinsRateLimitMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    checkinsRateLimitMap.set(ip, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  if (entry.count >= maxRequests) {
+    return false;
+  }
+  entry.count++;
+  return true;
+}
 
-  const { data: adminRow } = await supabaseAdmin
-    .from('admins')
-    .select('id')
-    .eq('id', user.id)
-    .single();
-
-  if (!adminRow) return { error: NextResponse.json({ error: 'Forbidden: Not an admin' }, { status: 403 }) };
-
-  return { error: null };
+function getClientIp(req: Request): string {
+  const forwarded = req.headers.get('x-forwarded-for');
+  if (forwarded) return forwarded.split(',')[0].trim();
+  const realIp = req.headers.get('x-real-ip');
+  if (realIp) return realIp.trim();
+  return '127.0.0.1';
 }
 
 /**
  * GET /api/visitor/checkins
- * Fetches recent approved visitor check-ins for the active weekly period.
+ * Publicly accessible endpoint to fetch recent approved visitor check-ins for the active weekly period.
  */
 export async function GET(req: NextRequest) {
-  const { error: authError } = await requireAdmin(req);
-  if (authError) return authError;
+  const clientIp = getClientIp(req);
+  if (!checkRateLimit(clientIp, 60, 60000)) {
+    return NextResponse.json(
+      { error: 'Too many requests. Please wait a moment.' },
+      { status: 429 }
+    );
+  }
 
-  const currentPeriod = getCurrentWeeklyPeriod();
-  const nextReset = getNextResetTimestamp();
+  const currentPeriod = getCurrentVisitorWeeklyPeriod();
+  const nextReset = getNextVisitorResetTimestamp();
   const limit = Math.min(parseInt(req.nextUrl.searchParams.get('limit') || '50', 10), 200);
 
   // 1. Attempt high-speed direct join query first
@@ -78,7 +92,7 @@ export async function GET(req: NextRequest) {
         phone: c.phone,
         gender: mc.gender || '—',
         checked_in_at: c.checked_in_at,
-        admin_email: c.admin_email || 'Admin',
+        admin_email: c.admin_email || 'Public Reception Desk',
         classes_attended: classesAttended,
         level_label: levelInfo.displayLabel,
         badge_class: levelInfo.badgeClass,
@@ -126,7 +140,7 @@ export async function GET(req: NextRequest) {
         phone: c.phone,
         gender: meta.gender,
         checked_in_at: c.checked_in_at,
-        admin_email: c.admin_email || 'Admin',
+        admin_email: c.admin_email || 'Public Reception Desk',
         classes_attended: meta.classes_attended,
         level_label: levelInfo.displayLabel,
         badge_class: levelInfo.badgeClass,
@@ -137,7 +151,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     logs,
     weekly_period: currentPeriod,
-    weekly_period_label: formatWeeklyPeriodLabel(currentPeriod),
+    weekly_period_label: formatVisitorWeeklyPeriodLabel(currentPeriod),
     next_reset: nextReset.toISOString(),
     total_period_checkins: logs.length,
   });

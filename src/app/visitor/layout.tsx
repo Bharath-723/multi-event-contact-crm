@@ -4,7 +4,6 @@ import React from 'react';
 import { ShieldCheck } from 'lucide-react';
 import ThemeToggle from '@/components/theme-toggle';
 import { FestivalProvider } from '@/lib/contexts/FestivalContext';
-import FestivalSelector from '@/components/FestivalSelector';
 
 export default function VisitorLayout({
   children,
@@ -26,7 +25,7 @@ export default function VisitorLayout({
             </div>
             <div>
               <span className="font-extrabold text-sm tracking-tight text-slate-100 block">Visitor Check-In</span>
-              <span className="text-[10px] text-purple-400 font-semibold block -mt-0.5">HKM Admin Portal</span>
+              <span className="text-[10px] text-purple-400 font-semibold block -mt-0.5">MECM Reception & Visitor Desk</span>
             </div>
           </div>
 

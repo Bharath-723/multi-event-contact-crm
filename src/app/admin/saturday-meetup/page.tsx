@@ -666,7 +666,7 @@ export default function SaturdayMeetupPage() {
                   </div>
                   <h4 className="text-sm font-semibold text-slate-200">No Past Meetup Records Yet</h4>
                   <p className="text-xs text-slate-400 max-w-md mx-auto leading-relaxed">
-                    Visitor counts are permanently saved to history every Friday at 00:00 IST before weekly dashboard counters reset. Once the current week concludes, its final visitor totals will be archived here.
+                    Visitor counts are permanently saved to history every Sunday at 06:00 AM IST before the next cycle begins. Once a meetup concludes, its final visitor totals will be archived here.
                   </p>
                 </div>
               ) : (
@@ -685,9 +685,6 @@ export default function SaturdayMeetupPage() {
                           <Calendar className="w-4 h-4 text-purple-400" />
                           <span className="text-sm font-bold text-slate-100">
                             {item.meetup_date_label || item.meetup_date}
-                          </span>
-                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-slate-800 text-slate-300 border border-slate-700">
-                            {item.weekly_period}
                           </span>
                         </div>
                         {item.archived_at && (
@@ -709,11 +706,6 @@ export default function SaturdayMeetupPage() {
                             <span className="text-base font-black text-purple-200">{item.total_visitors}</span>
                             <span>Visitors</span>
                           </div>
-                          {item.total_attendance > 0 && (
-                            <p className="text-[10px] text-slate-400">
-                              {item.total_attendance} total attendees
-                            </p>
-                          )}
                         </div>
                       </div>
                     </div>

@@ -1,67 +1,91 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { normalizePhone } from '@/lib/master-contacts';
-import { getCurrentWeeklyPeriod, getNextResetTimestamp, formatWeeklyPeriodLabel } from '@/lib/weekly-period';
+import {
+  getCurrentVisitorWeeklyPeriod,
+  getNextVisitorResetTimestamp,
+  formatVisitorWeeklyPeriodLabel,
+} from '@/lib/weekly-period';
 import { getLevelFromClassesAttended } from '@/lib/level-mapping';
 
-// Require Admin Helper
-async function requireAdmin(req: Request): Promise<{ admin: { id: string; email: string } | null; error: NextResponse | null }> {
-  const authHeader = req.headers.get('Authorization') || '';
-  const token = authHeader.replace('Bearer ', '');
-  if (!token) return { admin: null, error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
+// In-memory rate limiting map for lookup (IP -> { count, resetAt })
+const lookupRateLimitMap = new Map<string, { count: number; resetAt: number }>();
 
-  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !user) return { admin: null, error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
+function checkRateLimit(ip: string, maxRequests = 120, windowMs = 60000): boolean {
+  const now = Date.now();
+  const entry = lookupRateLimitMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    lookupRateLimitMap.set(ip, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  if (entry.count >= maxRequests) {
+    return false;
+  }
+  entry.count++;
+  return true;
+}
 
-  const { data: adminRow } = await supabaseAdmin
-    .from('admins')
-    .select('id, email')
-    .eq('id', user.id)
-    .single();
-
-  if (!adminRow) return { admin: null, error: NextResponse.json({ error: 'Forbidden: Not an admin' }, { status: 403 }) };
-
-  return { admin: adminRow, error: null };
+function getClientIp(req: Request): string {
+  const forwarded = req.headers.get('x-forwarded-for');
+  if (forwarded) return forwarded.split(',')[0].trim();
+  const realIp = req.headers.get('x-real-ip');
+  if (realIp) return realIp.trim();
+  return '127.0.0.1';
 }
 
 /**
  * GET /api/visitor/lookup?phone=... or ?q=... or ?id=...
  *
- * Phone-number-first and partial digit search strictly from Master Contacts.
+ * Public-accessible phone-number-first and partial digit search strictly from Master Contacts.
  * Supports:
  * - Direct lookup by Master Contact ID (?id=...)
  * - Partial digit search (?q=... or ?phone=...) with 2–9 digits
  * - Canonical 10-digit Indian Mobile lookup (?phone=... or ?q=...)
+ * Optimized for 100-200ms latency with parallel execution and indexed lookups.
  */
 export async function GET(req: NextRequest) {
-  const { error: authError } = await requireAdmin(req);
-  if (authError) return authError;
+  // IP-based Rate Limiting to prevent automated scraping
+  const clientIp = getClientIp(req);
+  if (!checkRateLimit(clientIp, 120, 60000)) {
+    return NextResponse.json(
+      { error: 'Too many search requests. Please wait a moment.' },
+      { status: 429 }
+    );
+  }
 
-  const currentPeriod = getCurrentWeeklyPeriod();
-  const nextReset = getNextResetTimestamp();
-  const periodLabel = formatWeeklyPeriodLabel(currentPeriod);
+  const currentPeriod = getCurrentVisitorWeeklyPeriod();
+  const nextReset = getNextVisitorResetTimestamp();
+  const periodLabel = formatVisitorWeeklyPeriodLabel(currentPeriod);
 
   // 1. Direct Contact ID lookup branch (?id=...)
   const directId = req.nextUrl.searchParams.get('id');
   if (directId) {
-    const { data: contact, error: idErr } = await supabaseAdmin
-      .from('master_contacts')
-      .select('id, phone, name, age, gender, area_of_stay, company_college, level, classes_attended, chanting, created_at')
-      .eq('id', directId)
-      .maybeSingle();
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(directId)) {
+      return NextResponse.json({ error: 'Invalid contact ID format' }, { status: 400 });
+    }
 
-    if (idErr || !contact) {
+    // Parallelize contact query and checkin query for minimal latency
+    const [contactRes, checkinRes] = await Promise.all([
+      supabaseAdmin
+        .from('master_contacts')
+        .select('id, phone, name, age, gender, area_of_stay, company_college, level, classes_attended, chanting, created_at')
+        .eq('id', directId)
+        .maybeSingle(),
+      supabaseAdmin
+        .from('master_contact_checkins')
+        .select('id, weekly_period, checked_in_at, approved_by, admin_email')
+        .eq('weekly_period', currentPeriod)
+        .eq('master_contact_id', directId)
+        .maybeSingle(),
+    ]);
+
+    const contact = contactRes.data;
+    if (contactRes.error || !contact) {
       return NextResponse.json({ error: 'Master contact not found' }, { status: 404 });
     }
 
-    const normPhone = normalizePhone(contact.phone);
-    const { data: existingCheckin } = await supabaseAdmin
-      .from('master_contact_checkins')
-      .select('id, weekly_period, checked_in_at, approved_by, admin_email')
-      .eq('weekly_period', currentPeriod)
-      .or(`master_contact_id.eq.${contact.id}${normPhone ? `,phone.eq.${normPhone}` : ''}`)
-      .maybeSingle();
-
+    const existingCheckin = checkinRes.data;
     const classesAttended = typeof contact.classes_attended === 'number' ? contact.classes_attended : 0;
     const levelInfo = getLevelFromClassesAttended(classesAttended);
 
@@ -91,7 +115,7 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // 2. Extract and inspect phone search query
+  // 2. Extract and sanitize phone search query
   const rawQuery = req.nextUrl.searchParams.get('phone') ?? req.nextUrl.searchParams.get('q') ?? '';
   const digits = rawQuery.replace(/\D/g, '');
 
@@ -114,7 +138,7 @@ export async function GET(req: NextRequest) {
     level?: string | null;
     classes_attended?: number | null;
     chanting?: number | null;
-  }>) {
+  }>, preloadedCheckins?: Array<{ id: string; master_contact_id: string; phone: string; checked_in_at: string; admin_email: string | null }>) {
     if (!contactsList || contactsList.length === 0) return [];
 
     const contactIds = contactsList.map(c => c.id).filter(Boolean);
@@ -124,34 +148,37 @@ export async function GET(req: NextRequest) {
 
     const checkinsMap = new Map<string, { id: string; checked_in_at: string; admin_email: string | null }>();
 
-    if (contactIds.length > 0) {
+    let checkinRows = preloadedCheckins;
+    if (!checkinRows && contactIds.length > 0) {
       const orClauses: string[] = [`master_contact_id.in.(${contactIds.join(',')})`];
       if (contactPhones.length > 0) {
         orClauses.push(`phone.in.(${contactPhones.join(',')})`);
       }
 
-      const { data: checkinRows } = await supabaseAdmin
+      const { data } = await supabaseAdmin
         .from('master_contact_checkins')
         .select('id, master_contact_id, phone, checked_in_at, approved_by, admin_email')
         .eq('weekly_period', currentPeriod)
         .or(orClauses.join(','));
 
-      if (checkinRows) {
-        for (const row of checkinRows) {
-          if (row.master_contact_id) {
-            checkinsMap.set(row.master_contact_id, {
-              id: row.id,
-              checked_in_at: row.checked_in_at,
-              admin_email: row.admin_email,
-            });
-          }
-          if (row.phone) {
-            checkinsMap.set(`phone:${row.phone}`, {
-              id: row.id,
-              checked_in_at: row.checked_in_at,
-              admin_email: row.admin_email,
-            });
-          }
+      checkinRows = data || [];
+    }
+
+    if (checkinRows) {
+      for (const row of checkinRows) {
+        if (row.master_contact_id) {
+          checkinsMap.set(row.master_contact_id, {
+            id: row.id,
+            checked_in_at: row.checked_in_at,
+            admin_email: row.admin_email,
+          });
+        }
+        if (row.phone) {
+          checkinsMap.set(`phone:${row.phone}`, {
+            id: row.id,
+            checked_in_at: row.checked_in_at,
+            admin_email: row.admin_email,
+          });
         }
       }
     }
@@ -182,9 +209,8 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // ── BRANCH A: Partial Search (2 to 9 digits) ─────────────────────────────────
+  // ── BRANCH A: Partial Search (2 to 9 digits) ──────────────────────────────────
   if (digits.length < 10) {
-    // Generate candidate search patterns taking +91 country prefix and 0 trunk into account
     let stripped = digits;
     if (stripped.startsWith('91') && stripped.length > 2) {
       stripped = stripped.slice(2);
@@ -221,7 +247,7 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // ── BRANCH B: Complete 10-Digit Mobile Lookup ───────────────────────────────
+  // ── BRANCH B: Complete 10-Digit Mobile Lookup (Optimized Parallel Execution) ──
   const cleanPhone = normalizePhone(rawQuery);
 
   if (!cleanPhone || cleanPhone.length !== 10 || !/^[6-9]\d{9}$/.test(cleanPhone)) {
@@ -232,20 +258,31 @@ export async function GET(req: NextRequest) {
   }
 
   const phoneVariants = [cleanPhone, `+91${cleanPhone}`, `91${cleanPhone}`, `0${cleanPhone}`];
-  const { data: exactContacts, error: contactErr } = await supabaseAdmin
-    .from('master_contacts')
-    .select('id, phone, name, age, gender, area_of_stay, company_college, level, classes_attended, chanting, created_at')
-    .in('phone', phoneVariants)
-    .order('classes_attended', { ascending: false })
-    .order('created_at', { ascending: false });
 
-  if (contactErr) {
-    console.error('[GET /api/visitor/lookup - 10-Digit DB Error]:', contactErr);
+  // Execute Master Contact lookup AND Check-In status check concurrently
+  const [contactsRes, checkinsRes] = await Promise.all([
+    supabaseAdmin
+      .from('master_contacts')
+      .select('id, phone, name, age, gender, area_of_stay, company_college, level, classes_attended, chanting, created_at')
+      .in('phone', phoneVariants)
+      .order('classes_attended', { ascending: false })
+      .order('created_at', { ascending: false }),
+    supabaseAdmin
+      .from('master_contact_checkins')
+      .select('id, master_contact_id, phone, checked_in_at, approved_by, admin_email')
+      .eq('weekly_period', currentPeriod)
+      .eq('phone', cleanPhone),
+  ]);
+
+  if (contactsRes.error) {
+    console.error('[GET /api/visitor/lookup - 10-Digit DB Error]:', contactsRes.error);
     return NextResponse.json(
       { error: 'Database error searching master contact' },
       { status: 500 }
     );
   }
+
+  const exactContacts = contactsRes.data;
 
   // If no contact found for exact 10 digits, return required registration message
   if (!exactContacts || exactContacts.length === 0) {
@@ -261,7 +298,8 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const formatted = await formatAndAttachCheckins(exactContacts);
+  const preloadedCheckins = checkinsRes.data || [];
+  const formatted = await formatAndAttachCheckins(exactContacts, preloadedCheckins);
 
   return NextResponse.json({
     found: true,

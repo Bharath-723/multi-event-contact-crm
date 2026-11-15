@@ -2,7 +2,12 @@ import { NextResponse, NextRequest } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { normalizePhone } from '@/lib/master-contacts';
 import { normalizeAssignmentStatus, computeOperatorStats } from '@/lib/status-normalizer';
-import { getCurrentWeeklyPeriod, getNextResetTimestamp, formatWeeklyPeriodLabel } from '@/lib/weekly-period';
+import {
+  getCurrentWeeklyPeriod,
+  getCurrentVisitorWeeklyPeriod,
+  getNextVisitorResetTimestamp,
+  formatVisitorWeeklyPeriodLabel,
+} from '@/lib/weekly-period';
 import { getLevelFromClassesAttended } from '@/lib/level-mapping';
 import { archiveAndGetVisitorHistory } from '@/lib/visitor-history';
 
@@ -48,8 +53,9 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   const currentPeriod = getCurrentWeeklyPeriod();
-  const nextReset = getNextResetTimestamp();
-  const periodLabel = formatWeeklyPeriodLabel(currentPeriod);
+  const activeVisitorPeriod = getCurrentVisitorWeeklyPeriod();
+  const nextReset = getNextVisitorResetTimestamp();
+  const periodLabel = formatVisitorWeeklyPeriodLabel(activeVisitorPeriod);
 
   type CheckinRow = {
     id: string;
@@ -110,7 +116,7 @@ export async function GET(req: NextRequest) {
         const res = await supabaseAdmin
           .from('master_contact_checkins')
           .select('id, master_contact_id, phone, weekly_period, checked_in_at, approved_by, admin_email')
-          .eq('weekly_period', currentPeriod)
+          .eq('weekly_period', activeVisitorPeriod)
           .order('checked_in_at', { ascending: false })
           .range(fromIdx, fromIdx + pageSize - 1);
         if (res.error) throw res.error;
@@ -288,7 +294,7 @@ export async function GET(req: NextRequest) {
         total_attendance: visitorsCount,
       },
       attendance: attendanceList,
-      weekly_period: currentPeriod,
+      weekly_period: activeVisitorPeriod,
       weekly_period_label: periodLabel,
       next_reset: nextReset.toISOString(),
       visitor_history: visitorHistory,

@@ -1,11 +1,37 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getOperatorSessionFromRequest } from '@/lib/operator-auth';
+import { getCurrentVisitorWeeklyPeriod } from '@/lib/weekly-period';
+
+// In-memory rate limiting map for check-in approval (IP -> { count, resetAt })
+const approvalRateLimitMap = new Map<string, { count: number; resetAt: number }>();
+
+function checkRateLimit(ip: string, maxRequests = 40, windowMs = 60000): boolean {
+  const now = Date.now();
+  const entry = approvalRateLimitMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    approvalRateLimitMap.set(ip, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  if (entry.count >= maxRequests) {
+    return false;
+  }
+  entry.count++;
+  return true;
+}
+
+function getClientIp(req: Request): string {
+  const forwarded = req.headers.get('x-forwarded-for');
+  if (forwarded) return forwarded.split(',')[0].trim();
+  const realIp = req.headers.get('x-real-ip');
+  if (realIp) return realIp.trim();
+  return '127.0.0.1';
+}
 
 // Helper to authenticate Admin, Operator, or Public client
 async function authenticateUser(req: Request): Promise<{
   role: 'admin' | 'operator' | 'public';
-  id: string; // admin user.id, operator.id, or 'public'
+  id: string | null;
   name?: string;
 }> {
   const authHeader = req.headers.get('Authorization') || '';
@@ -30,10 +56,18 @@ async function authenticateUser(req: Request): Promise<{
   }
 
   // Return public role for public visitor page access
-  return { role: 'public', id: 'public', name: 'Public Check-In Center' };
+  return { role: 'public', id: null, name: 'Public Reception Desk' };
 }
 
 export async function POST(req: Request) {
+  const clientIp = getClientIp(req);
+  if (!checkRateLimit(clientIp, 40, 60000)) {
+    return NextResponse.json(
+      { error: 'Too many check-in approval requests. Please wait a moment.' },
+      { status: 429 }
+    );
+  }
+
   const auth = await authenticateUser(req);
 
   let body: {
@@ -49,28 +83,27 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  // ── Master Contacts Saturday Meet-up Approval Branch ───────────────────────
+  // ── Master Contacts Saturday Meet-up Approval Branch ────────────────────────
   const targetContactId = body.contact_id || body.master_contact_id;
   if (targetContactId) {
-    if (auth.role !== 'admin') {
-      return NextResponse.json(
-        { error: 'Forbidden: Administrator authorization required to approve visitor check-in.' },
-        { status: 403 }
-      );
-    }
-
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(targetContactId)) {
       return NextResponse.json({ error: 'Invalid contact ID format' }, { status: 400 });
     }
+
+    const adminId = auth.role === 'admin' ? auth.id : null;
+    const adminEmail = auth.role === 'admin'
+      ? (auth.name || 'Admin')
+      : (auth.role === 'operator' ? (auth.name || 'Operator') : 'Public Reception Desk');
+    const activeVisitorPeriod = getCurrentVisitorWeeklyPeriod();
 
     try {
       const { data, error: rpcErr } = await supabaseAdmin.rpc(
         'approve_master_contact_checkin',
         {
           p_contact_id: targetContactId,
-          p_admin_id: auth.id,
-          p_admin_email: auth.name || 'Admin',
+          p_admin_id: adminId,
+          p_admin_email: adminEmail,
         }
       );
 
@@ -91,6 +124,15 @@ export async function POST(req: Request) {
         );
       }
 
+      // Synchronize weekly_period with the active visitor cycle if Sunday 06:00 AM IST has passed
+      if (data && data.checkin_id && data.weekly_period !== activeVisitorPeriod) {
+        await supabaseAdmin
+          .from('master_contact_checkins')
+          .update({ weekly_period: activeVisitorPeriod })
+          .eq('id', data.checkin_id);
+        data.weekly_period = activeVisitorPeriod;
+      }
+
       return NextResponse.json(data);
     } catch (err: unknown) {
       console.error('[approve_master_contact_checkin Exception]:', err);
@@ -101,7 +143,14 @@ export async function POST(req: Request) {
     }
   }
 
-  // ── Legacy Festival Registration Check-In Branch ──────────────────────────
+  // ── Legacy Festival Registration Check-In Branch (Requires Auth) ────────────
+  if (auth.role === 'public') {
+    return NextResponse.json(
+      { error: 'Authentication required for event-specific registration check-in' },
+      { status: 401 }
+    );
+  }
+
   const { registration_id, remarks = '', festival_event_id } = body;
 
   if (!registration_id) {
